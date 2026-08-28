@@ -5,13 +5,13 @@
 !> Inline harmonic analysis (conventional)
 module MOM_harmonic_analysis
 
-use MOM_time_manager,  only : time_type, real_to_time, time_type_to_real
+use MOM_time_manager,  only : time_type, real_to_time, time_to_real, time_minus_signed
 use MOM_time_manager,  only : set_date, get_date, increment_date
 use MOM_time_manager,  only : operator(+), operator(-), operator(<), operator(>), operator(>=)
 use MOM_grid,          only : ocean_grid_type
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_file_parser,   only : param_file_type, get_param
-use MOM_io,            only : file_exists, open_ASCII_file, READONLY_FILE, close_file
+use MOM_io,            only : file_exists, READONLY_FILE, close_file
 use MOM_io,            only : MOM_infra_file, vardesc, MOM_field
 use MOM_io,            only : var_desc, create_MOM_file, SINGLE_FILE, MOM_write_field
 use MOM_error_handler, only : MOM_mesg, MOM_error, NOTE
@@ -239,8 +239,8 @@ subroutine HA_init(Time, US, param_file, nc, CS)
     if (HA_start_time <= 0.0) HA_start_time = 0.0
   endif
 
-  CS%time_start = Time + real_to_time(US%T_to_s * HA_start_time)
-  CS%time_end = Time + real_to_time(US%T_to_s * HA_end_time)
+  CS%time_start = Time + real_to_time(HA_start_time, unscale=US%T_to_s)
+  CS%time_end = Time + real_to_time(HA_end_time, unscale=US%T_to_s)
 
   call get_date(Time, year, month, day, hour, minute, second)
   write(mesg,*) "MOM_harmonic_analysis: run segment starts on ", year, month, day, hour, minute, second
@@ -337,7 +337,7 @@ subroutine HA_accum(key, data, Time, G, CS)
   enddo
 
   nc  = CS%nc
-  now = CS%US%s_to_T * time_type_to_real(Time - CS%time_ref)
+  now = time_minus_signed(Time, CS%time_ref, scale=CS%US%s_to_T)
 
   !!! Additional processing at the initial accumulating step !!!
   if (ha1%old_time < 0.0) then
@@ -410,8 +410,9 @@ subroutine HA_accum(key, data, Time, G, CS)
   enddo ! c=1,nc
 
   !!! Compute harmonic constants and write output as Time approaches CS%time_end !!!
-  ! This guarantees that HA_write will be called before Time becomes larger than CS%time_end
-  if (time_type_to_real(CS%time_end - Time) <= dt) then
+  ! This guarantees that HA_write will be called before Time becomes larger than CS%time_end.
+  ! Result of subtracting time types is always >= 0, which is acceptable here.
+  if (time_to_real(CS%time_end - Time, scale=CS%US%s_to_T) <= dt) then
     call HA_write(ha1, Time, G, CS)
 
     write(mesg,*) "MOM_harmonic_analysis: harmonic analysis done, key = ", trim(ha1%key)

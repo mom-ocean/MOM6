@@ -24,7 +24,7 @@ use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_forcing_type, only : allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_safe_alloc, only : safe_alloc_ptr
-use MOM_time_manager, only : time_type, operator(+), operator(/), time_type_to_real
+use MOM_time_manager, only : time_type, operator(+), operator(/), time_to_real
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs, surface
 use MOM_verticalGrid, only : verticalGrid_type
@@ -228,7 +228,7 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
                  default=6.88, units="degrees")
   call get_param(param_file, mdl, "IDL_HURR_INFLOW_DANGLE_TR_SPEED", CS%P1_speed, &
                  "The translation speed dependence of the angle difference between the "//&
-                 "translation direction and the inflow direction"//&
+                 "translation direction and the inflow direction "//&
                  "for the parametric idealized hurricane.", &
                  default=-9.60, units="degrees s m-1", scale=US%L_T_to_m_s)
 
@@ -310,7 +310,7 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
-                 "properties, or with BOUSSINSEQ false to convert some "//&
+                 "properties, or with BOUSSINESQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R, do_not_log=.true.)
   call get_param(param_file, mdl, "GUST_CONST", CS%gustiness, &
@@ -373,9 +373,9 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   endif
 
   !> Compute storm center location
-  XC = CS%Hurr_cen_X0 + (time_type_to_real(day)*US%s_to_T * CS%hurr_translation_spd * &
+  XC = CS%Hurr_cen_X0 + (time_to_real(day, scale=US%s_to_T) * CS%hurr_translation_spd * &
        cos(CS%hurr_translation_dir))
-  YC = CS%Hurr_cen_Y0 + (time_type_to_real(day)*US%s_to_T * CS%hurr_translation_spd * &
+  YC = CS%Hurr_cen_Y0 + (time_to_real(day, scale=US%s_to_T) * CS%hurr_translation_spd * &
        sin(CS%hurr_translation_dir))
 
   if (CS%BR_Bench) then

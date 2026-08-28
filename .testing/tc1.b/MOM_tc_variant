@@ -1,3 +1,7 @@
-#override SPLIT=False
-#override USE_RK2=True
-#override UNSPLIT_DT_VISC_BUG = True      !   [Boolean] default = False
+#override SPLIT = False
+#override USE_RK2 = True
+#override UNSPLIT_DT_VISC_BUG = False     !   [Boolean] default = False
+
+! There may be a problem with one of these settings.
+! #override EQN_OF_STATE = "ROQUET_SPV"     ! default = "WRIGHT_FULL"
+! #override BOUSSINESQ = FALSE

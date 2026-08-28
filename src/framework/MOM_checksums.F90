@@ -2194,7 +2194,7 @@ end subroutine chksum_v_3d
 
 !> chksum1d does a checksum of a 1-dimensional array.
 subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs, logunit)
-  real, dimension(:), intent(in) :: array   !< The array to be summed (index starts at 1) [abitrary].
+  real, dimension(:), intent(in) :: array   !< The array to be summed (index starts at 1) in arbitrary units [A].
   character(len=*),   intent(in) :: mesg    !< An identifying message.
   integer, optional,  intent(in) :: start_i !< The starting index for the sum (default 1)
   integer, optional,  intent(in) :: end_i   !< The ending index for the sum (default all)
@@ -2203,8 +2203,8 @@ subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs, logunit)
   integer, optional,  intent(in) :: logunit !< IO unit for checksum logging
 
   integer :: is, ie, i, bc, sum1, sum_bc, ioUnit
-  real :: sum  ! The global sum of the array [arbitrary]
-  real, allocatable :: sum_here(:) ! The sum on each PE [arbitrary]
+  real :: sum  ! The global sum of the array [A]
+  real, allocatable :: sum_here(:) ! The sum on each PE [A]
   logical :: compare
   integer :: pe_num   ! pe number of the data
   integer :: nPEs     ! Total number of processsors
@@ -2255,12 +2255,12 @@ end subroutine chksum1d
 !> chksum2d does a checksum of all data in a 2-d array.
 subroutine chksum2d(array, mesg, logunit)
 
-  real, dimension(:,:), intent(in) :: array !< The array to be checksummed [arbitrary]
+  real, dimension(:,:), intent(in) :: array !< The array to be checksummed in arbitrary units [A]
   character(len=*),     intent(in) :: mesg  !< An identifying message
   integer,    optional, intent(in) :: logunit !< IO unit for checksum logging
 
   integer :: xs, xe, ys, ye, i, j, sum1, bc, iounit
-  real :: sum  ! The global sum of the array [arbitrary]
+  real :: sum  ! The global sum of the array [A]
 
   iounit = error_unit ; if (present(logunit)) iounit = logunit
 
@@ -2286,12 +2286,12 @@ end subroutine chksum2d
 !> chksum3d does a checksum of all data in a 2-d array.
 subroutine chksum3d(array, mesg, logunit)
 
-  real, dimension(:,:,:), intent(in) :: array !< The array to be checksummed [arbitrary]
+  real, dimension(:,:,:), intent(in) :: array !< The array to be checksummed in arbitrary units [A]
   character(len=*),       intent(in) :: mesg  !< An identifying message
   integer,      optional, intent(in) :: logunit !< IO unit for checksum logging
 
   integer :: xs, xe, ys, ye, zs, ze, i, j, k, bc, sum1, iounit
-  real :: sum  ! The global sum of the array [arbitrary]
+  real :: sum  ! The global sum of the array [A]
 
   iounit = error_unit ; if (present(logunit)) iounit = logunit
 
@@ -2317,7 +2317,7 @@ end subroutine chksum3d
 
 !> This function returns .true. if x is a NaN, and .false. otherwise.
 function is_NaN_0d(x)
-  real, intent(in) :: x !< The value to be checked for NaNs [arbitrary]
+  real, intent(in) :: x !< The value to be checked for NaNs in arbitrary units [A]
   logical :: is_NaN_0d
 
  !is_NaN_0d = (((x < 0.0) .and. (x >= 0.0)) .or. &
@@ -2333,7 +2333,7 @@ end function is_NaN_0d
 
 !> Returns .true. if any element of x is a NaN, and .false. otherwise.
 function is_NaN_1d(x, skip_mpp)
-  real, dimension(:), intent(in) :: x !< The array to be checked for NaNs [arbitrary]
+  real, dimension(:), intent(in) :: x !< The array to be checked for NaNs in arbitrary units [A]
   logical,  optional, intent(in) :: skip_mpp  !< If true, only check this array only
                                               !! on the local PE (default false).
   logical :: is_NaN_1d
@@ -2356,7 +2356,7 @@ end function is_NaN_1d
 
 !> Returns .true. if any element of x is a NaN, and .false. otherwise.
 function is_NaN_2d(x)
-  real, dimension(:,:), intent(in) :: x !< The array to be checked for NaNs [arbitrary]
+  real, dimension(:,:), intent(in) :: x !< The array to be checked for NaNs in arbitrary units [A]
   logical :: is_NaN_2d
 
   integer :: i, j, n
@@ -2373,7 +2373,7 @@ end function is_NaN_2d
 
 !> Returns .true. if any element of x is a NaN, and .false. otherwise.
 function is_NaN_3d(x)
-  real, dimension(:,:,:), intent(in) :: x !< The array to be checked for NaNs [arbitrary]
+  real, dimension(:,:,:), intent(in) :: x !< The array to be checked for NaNs in arbitrary units [A]
   logical :: is_NaN_3d
 
   integer :: i, j, k, n
@@ -2456,7 +2456,7 @@ function field_checksum_real_2d(field, pelist, mask_val, turns, unscale) &
   integer(kind=int64) :: chksum                     !< checksum of array
 
   ! Local variables
-  real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units [arbitrary]
+  real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units [A ~> a]
   integer :: qturns ! The number of quarter turns through which to rotate field
   logical :: do_unscale ! If true, unscale the variable before it is checksummed
 
@@ -2496,7 +2496,7 @@ function field_checksum_real_3d(field, pelist, mask_val, turns, unscale) &
   integer(kind=int64) :: chksum                     !< checksum of array
 
   ! Local variables
-  real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units [arbitrary]
+  real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units [A ~> a]
   integer :: qturns ! The number of quarter turns through which to rotate field
   logical :: do_unscale ! If true, unscale the variable before it is checksummed
 
@@ -2536,7 +2536,7 @@ function field_checksum_real_4d(field, pelist, mask_val, turns, unscale) &
   integer(kind=int64) :: chksum                     !< checksum of array
 
   ! Local variables
-  real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units [arbitrary]
+  real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units [A ~> a]
   integer :: qturns ! The number of quarter turns through which to rotate field
   logical :: do_unscale ! If true, unscale the variable before it is checksummed
 
@@ -2643,9 +2643,9 @@ end subroutine chk_sum_msg2
 subroutine chk_sum_msg3(fmsg, aMean, aMin, aMax, mesg, iounit)
   character(len=*), intent(in) :: fmsg !< A checksum code-location specific preamble
   character(len=*), intent(in) :: mesg !< An identifying message supplied by top-level caller
-  real,             intent(in) :: aMean !< The mean value of the array [arbitrary]
-  real,             intent(in) :: aMin !< The minimum value of the array [arbitrary]
-  real,             intent(in) :: aMax !< The maximum value of the array [arbitrary]
+  real,             intent(in) :: aMean !< The mean value of the array in arbitrary units [A]
+  real,             intent(in) :: aMin !< The minimum value of the array [A]
+  real,             intent(in) :: aMax !< The maximum value of the array [A]
   integer,          intent(in) :: iounit !< Checksum logger IO unit
 
   ! NOTE: We add zero to aMin and aMax to remove any negative zeros.
@@ -2678,7 +2678,7 @@ end subroutine chksum_error
 !> Does a bitcount of a number by first casting to an integer and then using BTEST
 !! to check bit by bit
 integer function bitcount(x)
-  real, intent(in) :: x !< Number to be bitcount [arbitrary]
+  real, intent(in) :: x !< Number to be bitcount in arbitrary units [A]
 
   integer, parameter :: xk = kind(x)  !< Kind type of x
 

@@ -378,7 +378,7 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
 end subroutine diag_remap_update
 
 !> Remap diagnostic field to alternative vertical grid.
-subroutine diag_remap_do_remap(remap_cs, G, GV, US, h, staggered_in_x, staggered_in_y, &
+subroutine diag_remap_do_remap(remap_cs, G, GV, US, h, OBC_u, OBC_v, staggered_in_x, staggered_in_y, &
                                mask, field, remapped_field)
   type(diag_remap_ctrl),   intent(in)  :: remap_cs !< Diagnostic coordinate control structure
   type(ocean_grid_type),   intent(in)  :: G  !< Ocean grid structure
@@ -386,6 +386,14 @@ subroutine diag_remap_do_remap(remap_cs, G, GV, US, h, staggered_in_x, staggered
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(:,:,:),  intent(in)  :: h  !< The current thicknesses [H ~> m or kg m-2] or [Z ~> m],
                                              !! depending on the value of remap_CS%Z_based_coord
+  integer, dimension(:,:), intent(in)  :: OBC_u !< An array that indicates the presence and direction
+                                             !! of any open boundary conditions at u-points,
+                                             !! with a value of 0 for no OBC, 1 for an Eastern OBC
+                                             !! or -1 for a Western OBC
+  integer, dimension(:,:), intent(in)  :: OBC_v !< An array that indicates the presence and direction
+                                             !! of any open boundary conditions at v-points,
+                                             !! with a value of 0 for no OBC, 1 for a Northern OBC
+                                             !! or -1 for a Southern OBC
   logical,                 intent(in)  :: staggered_in_x !< True is the x-axis location is at u or q points
   logical,                 intent(in)  :: staggered_in_y !< True is the y-axis location is at v or q points
   real, dimension(:,:,:),  pointer     :: mask !< A mask for the field [nondim].
@@ -403,17 +411,17 @@ subroutine diag_remap_do_remap(remap_cs, G, GV, US, h, staggered_in_x, staggered
   jsdf = G%jsd ; if (staggered_in_y) Jsdf = G%JsdB
 
   if (associated(mask)) then
-    call do_remap(remap_cs, G, GV, US, isdf, jsdf, h, staggered_in_x, staggered_in_y, &
+    call do_remap(remap_cs, G, GV, US, isdf, jsdf, h, OBC_u, OBC_v, staggered_in_x, staggered_in_y, &
                   field, remapped_field, mask(:,:,1))
   else
-    call do_remap(remap_cs, G, GV, US, isdf, jsdf, h, staggered_in_x, staggered_in_y, &
+    call do_remap(remap_cs, G, GV, US, isdf, jsdf, h, OBC_u, OBC_v, staggered_in_x, staggered_in_y, &
                   field, remapped_field)
   endif
 
 end subroutine diag_remap_do_remap
 
 !> The internal routine to remap a diagnostic field to an alternative vertical grid.
-subroutine do_remap(remap_cs, G, GV, US, isdf, jsdf, h, staggered_in_x, staggered_in_y, &
+subroutine do_remap(remap_cs, G, GV, US, isdf, jsdf, h, OBC_u, OBC_v, staggered_in_x, staggered_in_y, &
                     field, remapped_field, mask)
   type(diag_remap_ctrl),   intent(in)  :: remap_cs !< Diagnostic coordinate control structure
   type(ocean_grid_type),   intent(in)  :: G  !< Ocean grid structure
@@ -424,6 +432,16 @@ subroutine do_remap(remap_cs, G, GV, US, isdf, jsdf, h, staggered_in_x, staggere
   real, dimension(G%isd:,G%jsd:,:), &
                            intent(in)  :: h  !< The current thicknesses [H ~> m or kg m-2] or [Z ~> m],
                                              !! depending on the value of remap_CS%Z_based_coord
+  integer, dimension(G%IsdB:,G%jsd:), &
+                           intent(in) :: OBC_u !< An array that indicates the presence and direction
+                                             !! of any open boundary conditions at u-points,
+                                             !! with a value of 0 for no OBC, 1 for an Eastern OBC
+                                             !! or -1 for a Western OBC
+  integer, dimension(G%isd:,G%JsdB:), &
+                           intent(in) :: OBC_v !< An array that indicates the presence and direction
+                                             !! of any open boundary conditions at v-points,
+                                             !! with a value of 0 for no OBC, 1 for a Northern OBC
+                                             !! or -1 for a Southern OBC
   logical,                 intent(in)  :: staggered_in_x !< True is the x-axis location is at u or q points
   logical,                 intent(in)  :: staggered_in_y !< True is the y-axis location is at v or q points
   real, dimension(isdf:,jsdf:,:), &
@@ -447,15 +465,31 @@ subroutine do_remap(remap_cs, G, GV, US, isdf, jsdf, h, staggered_in_x, staggere
     ! U-points
     if (present(mask)) then
       do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (mask(I,j) > 0.) then
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
+        if (OBC_u(I,j) == 0) then    ! This is not an OBC face.
+          h_src(:) = 0.5*(h(i,j,:) + h(i+1,j,:))
+          h_dest(:) = 0.5*(remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
+        elseif (OBC_u(I,j) < 0) then ! This is a western OBC face.
+          h_src(:) = h(i+1,j,:)
+          h_dest(:) = remap_cs%h(i+1,j,:)
+        else    ! (OBC_u(I,j) > 0)   ! This is a eastern OBC face.
+          h_src(:) = h(i,j,:)
+          h_dest(:) = remap_cs%h(i,j,:)
+        endif
         call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(I,j,:), &
                               nz_dest, h_dest(:), remapped_field(I,j,:))
       endif ; enddo ; enddo
     else
       do j=G%jsc,G%jec ; do I=G%IscB,G%IecB
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
+        if (OBC_u(I,j) == 0) then    ! This is not an OBC face.
+          h_src(:) = 0.5*(h(i,j,:) + h(i+1,j,:))
+          h_dest(:) = 0.5*(remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
+        elseif (OBC_u(I,j) < 0) then ! This is a western OBC face.
+          h_src(:) = h(i+1,j,:)
+          h_dest(:) = remap_cs%h(i+1,j,:)
+        else    ! (OBC_u(I,j) > 0)   ! This is a eastern OBC face.
+          h_src(:) = h(i,j,:)
+          h_dest(:) = remap_cs%h(i,j,:)
+        endif
         call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(I,j,:), &
                               nz_dest, h_dest(:), remapped_field(I,j,:))
       enddo ; enddo
@@ -464,15 +498,31 @@ subroutine do_remap(remap_cs, G, GV, US, isdf, jsdf, h, staggered_in_x, staggere
     ! V-points
     if (present(mask)) then
       do J=G%jscB,G%jecB ; do i=G%isc,G%iec ; if (mask(i,j) > 0.) then
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:))
+        if (OBC_v(i,J) == 0) then    ! This is not an OBC face.
+          h_src(:) = 0.5*(h(i,j,:) + h(i,j+1,:))
+          h_dest(:) = 0.5*(remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:))
+        elseif (OBC_v(i,J) < 0) then ! This is a southern OBC face
+          h_src(:) = h(i,j+1,:)
+          h_dest(:) = remap_cs%h(i,j+1,:)
+        else    ! (OBC_v(i,J) > 0)   ! This is a northern OBC face
+          h_src(:) = h(i,j,:)
+          h_dest(:) = remap_cs%h(i,j,:)
+        endif
         call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(i,J,:), &
                               nz_dest, h_dest(:), remapped_field(i,J,:))
       endif ; enddo ; enddo
     else
       do J=G%jscB,G%jecB ; do i=G%isc,G%iec
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:))
+        if (OBC_v(i,J) == 0) then    ! This is not an OBC face.
+          h_src(:) = 0.5*(h(i,j,:) + h(i,j+1,:))
+          h_dest(:) = 0.5*(remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:))
+        elseif (OBC_v(i,J) < 0) then ! This is a southern OBC face
+          h_src(:) = h(i,j+1,:)
+          h_dest(:) = remap_cs%h(i,j+1,:)
+        else    ! (OBC_v(i,J) > 0)   ! This is a northern OBC face
+          h_src(:) = h(i,j,:)
+          h_dest(:) = remap_cs%h(i,j,:)
+        endif
         call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(i,J,:), &
                               nz_dest, h_dest(:), remapped_field(i,J,:))
       enddo ; enddo
@@ -543,12 +593,20 @@ subroutine diag_remap_calc_hmask(remap_cs, G, mask)
 end subroutine diag_remap_calc_hmask
 
 !> Vertically re-grid an already vertically-integrated diagnostic field to alternative vertical grid.
-subroutine vertically_reintegrate_diag_field(remap_cs, G, h, h_target, staggered_in_x, staggered_in_y, &
-                                             mask, field, reintegrated_field)
+subroutine vertically_reintegrate_diag_field(remap_cs, G, h, h_target, OBC_u, OBC_v, &
+                                             staggered_in_x, staggered_in_y, mask, field, reintegrated_field)
   type(diag_remap_ctrl),  intent(in)  :: remap_cs !< Diagnostic coordinate control structure
   type(ocean_grid_type),  intent(in)  :: G        !< Ocean grid structure
   real, dimension(:,:,:), intent(in)  :: h        !< The thicknesses of the source grid [H ~> m or kg m-2] or [Z ~> m]
   real, dimension(:,:,:), intent(in)  :: h_target !< The thicknesses of the target grid [H ~> m or kg m-2] or [Z ~> m]
+  integer, dimension(:,:), intent(in) :: OBC_u    !< An array that indicates the presence and direction
+                                                  !! of any open boundary conditions at u-points,
+                                                  !! with a value of 0 for no OBC, 1 for an Eastern OBC
+                                                  !! or -1 for a Western OBC
+  integer, dimension(:,:), intent(in) :: OBC_v    !< An array that indicates the presence and direction
+                                                  !! of any open boundary conditions at v-points,
+                                                  !! with a value of 0 for no OBC, 1 for a Northern OBC
+                                                  !! or -1 for a Southern OBC
   logical,                intent(in)  :: staggered_in_x !< True is the x-axis location is at u or q points
   logical,                intent(in)  :: staggered_in_y !< True is the y-axis location is at v or q points
   real, dimension(:,:,:), pointer     :: mask     !< A mask for the field [nondim].  Note that because this
@@ -567,19 +625,19 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, h_target, staggered
   jsdf = G%jsd ; if (staggered_in_y) Jsdf = G%JsdB
 
   if (associated(mask)) then
-    call vertically_reintegrate_field(remap_cs, G, isdf, jsdf, h, h_target, staggered_in_x, staggered_in_y, &
-                                      field, reintegrated_field, mask(:,:,1))
+    call vertically_reintegrate_field(remap_cs, G, isdf, jsdf, h, h_target, OBC_u, OBC_v, &
+                                      staggered_in_x, staggered_in_y, field, reintegrated_field, mask(:,:,1))
   else
-    call vertically_reintegrate_field(remap_cs, G, isdf, jsdf, h, h_target, staggered_in_x, staggered_in_y, &
-                                      field, reintegrated_field)
+    call vertically_reintegrate_field(remap_cs, G, isdf, jsdf, h, h_target, OBC_u, OBC_v, &
+                                      staggered_in_x, staggered_in_y, field, reintegrated_field)
   endif
 
 end subroutine vertically_reintegrate_diag_field
 
 !> The internal routine to vertically re-grid an already vertically-integrated diagnostic field to
 !! an alternative vertical grid.
-subroutine vertically_reintegrate_field(remap_cs, G, isdf, jsdf, h, h_target, staggered_in_x, staggered_in_y, &
-                                        field, reintegrated_field, mask)
+subroutine vertically_reintegrate_field(remap_cs, G, isdf, jsdf, h, h_target, OBC_u, OBC_v, &
+                                        staggered_in_x, staggered_in_y, field, reintegrated_field, mask)
   type(diag_remap_ctrl),  intent(in)  :: remap_cs !< Diagnostic coordinate control structure
   type(ocean_grid_type),  intent(in)  :: G        !< Ocean grid structure
   integer,                intent(in)  :: isdf     !< The starting i-index in memory for field
@@ -588,6 +646,16 @@ subroutine vertically_reintegrate_field(remap_cs, G, isdf, jsdf, h, h_target, st
                           intent(in)  :: h        !< The thicknesses of the source grid [H ~> m or kg m-2] or [Z ~> m]
   real, dimension(G%isd:,G%jsd:,:), &
                           intent(in)  :: h_target !< The thicknesses of the target grid [H ~> m or kg m-2] or [Z ~> m]
+  integer, dimension(G%IsdB:,G%jsd:),  &
+                           intent(in) :: OBC_u    !< An array that indicates the presence and direction
+                                                  !! of any open boundary conditions at u-points,
+                                                  !! with a value of 0 for no OBC, 1 for an Eastern OBC
+                                                  !! or -1 for a Western OBC
+  integer, dimension(G%isd:,G%JsdB:), &
+                           intent(in) :: OBC_v    !< An array that indicates the presence and direction
+                                                  !! of any open boundary conditions at v-points,
+                                                  !! with a value of 0 for no OBC, 1 for a Northern OBC
+                                                  !! or -1 for a Southern OBC
   logical,                intent(in)  :: staggered_in_x !< True is the x-axis location is at u or q points
   logical,                intent(in)  :: staggered_in_y !< True is the y-axis location is at v or q points
   real, dimension(isdf:,jsdf:,:), &
@@ -611,15 +679,31 @@ subroutine vertically_reintegrate_field(remap_cs, G, isdf, jsdf, h, h_target, st
     ! U-points
     if (present(mask)) then
       do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (mask(I,j) > 0.0) then
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * (h_target(i,j,:) + h_target(i+1,j,:))
+        if (OBC_u(I,j) == 0) then    ! This is not an OBC face.
+          h_src(:) = 0.5*(h(i,j,:) + h(i+1,j,:))
+          h_dest(:) = 0.5*(h_target(i,j,:) + h_target(i+1,j,:))
+        elseif (OBC_u(I,j) < 0) then ! This is a western OBC face
+          h_src(:) = h(i+1,j,:)
+          h_dest(:) = h_target(i+1,j,:)
+        else    ! (OBC_u(I,j) > 0)   ! This is an eastern OBC face
+          h_src(:) = h(i,j,:)
+          h_dest(:) = h_target(i,j,:)
+        endif
         call reintegrate_column(nz_src, h_src, field(I,j,:), &
                                 nz_dest, h_dest, reintegrated_field(I,j,:))
       endif ; enddo ; enddo
     else
       do j=G%jsc,G%jec ; do I=G%IscB,G%IecB
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * (h_target(i,j,:) + h_target(i+1,j,:))
+        if (OBC_u(I,j) == 0) then    ! This is not an OBC face.
+          h_src(:) = 0.5*(h(i,j,:) + h(i+1,j,:))
+          h_dest(:) = 0.5*(h_target(i,j,:) + h_target(i+1,j,:))
+        elseif (OBC_u(I,j) < 0) then ! This is a western OBC face
+          h_src(:) = h(i+1,j,:)
+          h_dest(:) = h_target(i+1,j,:)
+        else    ! (OBC_u(I,j) > 0)   ! This is an eastern OBC face
+          h_src(:) = h(i,j,:)
+          h_dest(:) = h_target(i,j,:)
+        endif
         call reintegrate_column(nz_src, h_src, field(I,j,:), &
                                 nz_dest, h_dest, reintegrated_field(I,j,:))
       enddo ; enddo
@@ -628,15 +712,31 @@ subroutine vertically_reintegrate_field(remap_cs, G, isdf, jsdf, h, h_target, st
     ! V-points
     if (present(mask)) then
       do J=G%jscB,G%jecB ; do i=G%isc,G%iec ; if (mask(i,J) > 0.0) then
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * (h_target(i,j,:) + h_target(i,j+1,:))
+        if (OBC_v(i,J) == 0) then    ! This is not an OBC face.
+          h_src(:) = 0.5*(h(i,j,:) + h(i,j+1,:))
+          h_dest(:) = 0.5*(h_target(i,j,:) + h_target(i,j+1,:))
+        elseif (OBC_v(i,J) < 0) then ! This is a southern OBC face
+          h_src(:) = h(i,j+1,:)
+          h_dest(:) = h_target(i,j+1,:)
+        else    ! (OBC_v(i,J) > 0)   ! This is a northern OBC face
+          h_src(:) = h(i,j,:)
+          h_dest(:) = h_target(i,j,:)
+        endif
         call reintegrate_column(nz_src, h_src, field(i,J,:), &
                                 nz_dest, h_dest, reintegrated_field(i,J,:))
       endif ; enddo ; enddo
     else
       do J=G%jscB,G%jecB ; do i=G%isc,G%iec
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * (h_target(i,j,:) + h_target(i,j+1,:))
+        if (OBC_v(i,J) == 0) then    ! This is not an OBC face.
+          h_src(:) = 0.5*(h(i,j,:) + h(i,j+1,:))
+          h_dest(:) = 0.5*(h_target(i,j,:) + h_target(i,j+1,:))
+        elseif (OBC_v(i,J) < 0) then ! This is a southern OBC face
+          h_src(:) = h(i,j+1,:)
+          h_dest(:) = h_target(i,j+1,:)
+        else    ! (OBC_v(i,J) > 0)   ! This is a northern OBC face
+          h_src(:) = h(i,j,:)
+          h_dest(:) = h_target(i,j,:)
+        endif
         call reintegrate_column(nz_src, h_src, field(i,J,:), &
                                 nz_dest, h_dest, reintegrated_field(i,J,:))
       enddo ; enddo
@@ -661,12 +761,20 @@ subroutine vertically_reintegrate_field(remap_cs, G, isdf, jsdf, h, h_target, st
 end subroutine vertically_reintegrate_field
 
 !> Vertically interpolate diagnostic field to alternative vertical grid.
-subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, staggered_in_y, &
+subroutine vertically_interpolate_diag_field(remap_cs, G, h, OBC_u, OBC_v, staggered_in_x, staggered_in_y, &
                                              mask, field, interpolated_field)
   type(diag_remap_ctrl),  intent(in) :: remap_cs !< Diagnostic coordinate control structure
   type(ocean_grid_type),  intent(in) :: G   !< Ocean grid structure
   real, dimension(:,:,:), intent(in) :: h   !< The current thicknesses [H ~> m or kg m-2] or [Z ~> m],
                                             !! depending on the value of remap_cs%Z_based_coord
+  integer, dimension(:,:), intent(in) :: OBC_u !< An array that indicates the presence and direction
+                                            !! of any open boundary conditions at u-points,
+                                            !! with a value of 0 for no OBC, 1 for an Eastern OBC
+                                            !! or -1 for a Western OBC
+  integer, dimension(:,:), intent(in) :: OBC_v !< An array that indicates the presence and direction
+                                            !! of any open boundary conditions at v-points,
+                                            !! with a value of 0 for no OBC, 1 for a Northern OBC
+                                            !! or -1 for a Southern OBC
   logical,                intent(in) :: staggered_in_x !< True is the x-axis location is at u or q points
   logical,                intent(in) :: staggered_in_y !< True is the y-axis location is at v or q points
   real, dimension(:,:,:), pointer    :: mask !< A mask for the field [nondim].  Note that because this
@@ -685,18 +793,18 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
   jsdf = G%jsd ; if (staggered_in_y) Jsdf = G%JsdB
 
   if (associated(mask)) then
-    call vertically_interpolate_field(remap_cs, G, isdf, jsdf, h, staggered_in_x, staggered_in_y, &
+    call vertically_interpolate_field(remap_cs, G, isdf, jsdf, h, OBC_u, OBC_v, staggered_in_x, staggered_in_y, &
                                       field, interpolated_field, mask(:,:,1))
   else
-    call vertically_interpolate_field(remap_cs, G, isdf, jsdf, h, staggered_in_x, staggered_in_y, &
+    call vertically_interpolate_field(remap_cs, G, isdf, jsdf, h, OBC_u, OBC_v, staggered_in_x, staggered_in_y, &
                                       field, interpolated_field)
   endif
 
 end subroutine vertically_interpolate_diag_field
 
 !> Internal routine to vertically interpolate a diagnostic field to an alternative vertical grid.
-subroutine vertically_interpolate_field(remap_cs, G, isdf, jsdf, h, staggered_in_x, staggered_in_y, &
-                                        field, interpolated_field, mask)
+subroutine vertically_interpolate_field(remap_cs, G, isdf, jsdf, h, OBC_u, OBC_v, &
+                                        staggered_in_x, staggered_in_y, field, interpolated_field, mask)
   type(diag_remap_ctrl),  intent(in)  :: remap_cs !< Diagnostic coordinate control structure
   type(ocean_grid_type),  intent(in)  :: G    !< Ocean grid structure
   integer,                intent(in)  :: isdf !< The starting i-index in memory for field
@@ -704,6 +812,16 @@ subroutine vertically_interpolate_field(remap_cs, G, isdf, jsdf, h, staggered_in
   real, dimension(G%isd:,G%jsd:,:), &
                           intent(in)  :: h    !< The current thicknesses [H ~> m or kg m-2] or [Z ~> m],
                                               !! depending on the value of remap_cs%Z_based_coord
+  integer, dimension(G%IsdB:,G%jsd:),  &
+                           intent(in) :: OBC_u !< An array that indicates the presence and direction
+                                             !! of any open boundary conditions at u-points,
+                                             !! with a value of 0 for no OBC, 1 for an Eastern OBC
+                                             !! or -1 for a Western OBC
+  integer, dimension(G%isd:,G%JsdB:), &
+                           intent(in) :: OBC_v !< An array that indicates the presence and direction
+                                             !! of any open boundary conditions at v-points,
+                                             !! with a value of 0 for no OBC, 1 for a Northern OBC
+                                             !! or -1 for a Southern OBC
   logical,                intent(in)  :: staggered_in_x !< True is the x-axis location is at u or q points
   logical,                intent(in)  :: staggered_in_y !< True is the y-axis location is at v or q points
   real, dimension(isdf:,jsdf:,:), &
@@ -728,15 +846,31 @@ subroutine vertically_interpolate_field(remap_cs, G, isdf, jsdf, h, staggered_in
     ! U-points
     if (present(mask)) then
       do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (mask(I,j) > 0.0) then
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
+        if (OBC_u(I,j) == 0) then    ! This is not an OBC face.
+          h_src(:) = 0.5*(h(i,j,:) + h(i+1,j,:))
+          h_dest(:) = 0.5*(remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
+        elseif (OBC_u(I,j) < 0) then ! This is a western OBC face.
+          h_src(:) = h(i+1,j,:)
+          h_dest(:) = remap_cs%h(i+1,j,:)
+        else    ! (OBC_u(I,j) > 0)   ! This is a eastern OBC face.
+          h_src(:) = h(i,j,:)
+          h_dest(:) = remap_cs%h(i,j,:)
+        endif
         call interpolate_column(nz_src, h_src, field(I,j,:), &
                                 nz_dest, h_dest, interpolated_field(I,j,:), .true.)
       endif ; enddo ; enddo
     else
       do j=G%jsc,G%jec ; do I=G%IscB,G%IecB
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
+        if (OBC_u(I,j) == 0) then    ! This is not an OBC face.
+          h_src(:) = 0.5*(h(i,j,:) + h(i+1,j,:))
+          h_dest(:) = 0.5*(remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
+        elseif (OBC_u(I,j) < 0) then ! This is a western OBC face.
+          h_src(:) = h(i+1,j,:)
+          h_dest(:) = remap_cs%h(i+1,j,:)
+        else    ! (OBC_u(I,j) > 0)   ! This is a eastern OBC face.
+          h_src(:) = h(i,j,:)
+          h_dest(:) = remap_cs%h(i,j,:)
+        endif
         call interpolate_column(nz_src, h_src, field(I,j,:), &
                                 nz_dest, h_dest, interpolated_field(I,j,:), .true.)
       enddo ; enddo
@@ -745,15 +879,31 @@ subroutine vertically_interpolate_field(remap_cs, G, isdf, jsdf, h, staggered_in
     ! V-points
     if (present(mask)) then
       do J=G%jscB,G%jecB ; do i=G%isc,G%iec ; if (mask(I,j) > 0.0) then
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:))
+        if (OBC_v(i,J) == 0) then    ! This is not an OBC face.
+          h_src(:) = 0.5*(h(i,j,:) + h(i,j+1,:))
+          h_dest(:) = 0.5*(remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:))
+        elseif (OBC_v(i,J) < 0) then ! This is a southern OBC face
+          h_src(:) = h(i,j+1,:)
+          h_dest(:) = remap_cs%h(i,j+1,:)
+        else    ! (OBC_v(i,J) > 0)   ! This is a northern OBC face
+          h_src(:) = h(i,j,:)
+          h_dest(:) = remap_cs%h(i,j,:)
+        endif
         call interpolate_column(nz_src, h_src, field(i,J,:), &
                                 nz_dest, h_dest, interpolated_field(i,J,:), .true.)
       endif ; enddo ; enddo
     else
       do J=G%jscB,G%jecB ; do i=G%isc,G%iec
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:))
+        if (OBC_v(i,J) == 0) then    ! This is not an OBC face.
+          h_src(:) = 0.5*(h(i,j,:) + h(i,j+1,:))
+          h_dest(:) = 0.5*(remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:))
+        elseif (OBC_v(i,J) < 0) then ! This is a southern OBC face
+          h_src(:) = h(i,j+1,:)
+          h_dest(:) = remap_cs%h(i,j+1,:)
+        else    ! (OBC_v(i,J) > 0)   ! This is a northern OBC face
+          h_src(:) = h(i,j,:)
+          h_dest(:) = remap_cs%h(i,j,:)
+        endif
         call interpolate_column(nz_src, h_src, field(i,J,:), &
                                 nz_dest, h_dest, interpolated_field(i,J,:), .true.)
       enddo ; enddo

@@ -22,7 +22,7 @@ use ESMF                  , only : operator(<), operator(/=), operator(+), opera
 use ESMF                  , only : operator(<=), operator(>), operator(==)
 use MOM_cap_methods       , only : ChkErr
 
-implicit none; private
+implicit none ; private
 
 public  :: AlarmInit  ! initialize an alarm
 

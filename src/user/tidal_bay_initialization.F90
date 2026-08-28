@@ -16,7 +16,7 @@ use MOM_open_boundary,  only : OBC_segment_type, register_OBC
 use MOM_open_boundary,  only : OBC_registry_type
 use MOM_unit_scaling,   only : unit_scale_type
 use MOM_verticalGrid,   only : verticalGrid_type
-use MOM_time_manager,   only : time_type, time_type_to_real
+use MOM_time_manager,   only : time_type, time_to_real
 
 implicit none ; private
 
@@ -97,7 +97,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
 
   if (.not.associated(OBC)) return
 
-  time_sec = US%s_to_T*time_type_to_real(Time)
+  time_sec = time_to_real(Time, scale=US%s_to_T)
   cff_eta = CS%tide_ssh_amp * sin(2.0*PI*time_sec / CS%tide_period)
 
   segment => OBC%segment(1)

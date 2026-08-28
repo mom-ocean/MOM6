@@ -226,8 +226,8 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h, nz_data, re
   endif
   write(mesg,'(i12)') CS%nstep_incupd
   if (is_root_pe()) &
-    call MOM_error(NOTE,"initialize_oda_incupd: Number of Timestep of inc. update:"//&
-                       trim(mesg))
+    call MOM_error(NOTE, "initialize_oda_incupd: Number of Timestep of inc. update: "//&
+                         trim(mesg))
 
   ! number of inc. update already done, CS%ncount, either from restart or set to 0.0
   if (query_initialized(CS%ncount, "oda_incupd_ncount", restart_CS) .and. &
@@ -238,15 +238,15 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h, nz_data, re
   endif
   write(mesg,'(f4.1)') CS%ncount
   if (is_root_pe()) &
-    call MOM_error(NOTE,"initialize_oda_incupd: Inc. update already done:"//&
-                       trim(mesg))
+    call MOM_error(NOTE, "initialize_oda_incupd: Inc. update already done: "//&
+                         trim(mesg))
 
   ! get the vertical grid (h_obs) of the increments
   CS%nz_data = nz_data
   allocate(CS%Ref_h%p(G%isd:G%ied,G%jsd:G%jed,CS%nz_data), source=0.0)
-  do j=G%jsc,G%jec; do i=G%isc,G%iec ; do k=1,CS%nz_data
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec ; do k=1,CS%nz_data
     CS%Ref_h%p(i,j,k) = data_h(i,j,k)
-  enddo;  enddo ; enddo
+  enddo ; enddo ; enddo
   !### Doing a halo update here on CS%Ref_h%p would avoid needing halo updates each timestep.
 
   ! Call the constructor for remapping control structure
@@ -474,7 +474,7 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
     enddo ; enddo
 
     ! remap v to h_obs to get increment
-    hv(:) = 0.0;
+    hv(:) = 0.0
     do j=jsB,jeB ; do i=is,ie
       if (G%mask2dCv(i,j) == 1) then
         ! get v-velocity
@@ -568,9 +568,8 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
   isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
   if (.not.associated(CS)) return
 
-  ! no assimilation after CS%step_incupd
+  ! no assimilation after CS%nstep_incupd
   if (CS%ncount >= CS%nstep_incupd) then
-    if (is_root_pe()) call MOM_error(NOTE,"ended updating fields with increments. ")
     return
   endif !ncount>CS%nstep_incupd
 

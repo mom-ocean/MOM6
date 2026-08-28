@@ -28,7 +28,7 @@ public PPM_hybgen, testing
 !! The source for the methods ultimately used by this class are:
 !! - init()                 -> recon1d_ppm_cw.init()
 !! - reconstruct()             *locally defined
-!! - average()              -> recon1d_ppm_cw.average()
+!! - average()                 *locally defined but calls recon1d_ppm_cw.average()
 !! - f()                    -> recon1d_ppm_cw.f()
 !! - dfdx()                 -> recon1d_ppm_cw.dfdx()
 !! - check_reconstruction()    *locally defined
@@ -42,6 +42,8 @@ type, extends (PPM_CW) :: PPM_hybgen
 contains
   !> Implementation of the PPM_hybgen reconstruction
   procedure :: reconstruct => reconstruct
+  !> Implementation of the PPM_hybgen average over an interval [A]
+  procedure :: average => average
   !> Implementation of check reconstruction for the PPM_hybgen reconstruction
   procedure :: check_reconstruction => check_reconstruction
   !> Implementation of unit tests for the PPM_hybgen reconstruction
@@ -51,211 +53,84 @@ end type PPM_hybgen
 
 contains
 
-!> Calculate a 1D PPM_hybgen reconstructions based on h(:) and u(:)
+!> Calculate a 1D PPM_hybgen reconstruction based on h(:) and u(:)
+!!
+!! First pass: hybgen_ppm_coefs() computes initial edge estimates with CW monotonicity.
+!! Second pass: applies OM4-era bound_edge_values() and check_discontinuous_edge_values(),
+!! then the standard CW PPM limiter (post-2018 expressions, answer_date=99991231).
+!! This reproduces bit-for-bit the behavior of the old-style PPM_HYBGEN scheme.
 subroutine reconstruct(this, h, u)
   class(PPM_hybgen), intent(inout) :: this !< This reconstruction
   real,              intent(in)    :: h(*) !< Grid spacing (thickness) [typically H]
   real,              intent(in)    :: u(*) !< Cell mean values [A]
   ! Local variables
-  real :: h0, h1, h2, h3 ! Cell thickness h(k-2), h(k-1), h(k), h(k+1) in K loop [H]
-  real :: h01_h112, h23_h122 ! Approximately 2/3 [nondim]
-  real :: h112, h122 ! Approximately 3 h [H]
-  real :: ddh ! Approximately 0 [nondim]
-  real :: I_h12, I_h01, I_h0123 ! Reciprocals of d12 and sum(h) [H-1]
-  real :: dul, dur ! Left and right cell PLM slopes [A]
-  real :: u0, u1, u2 ! Far left, left, and right cell values [A]
-  real :: edge ! Edge value between cell k-1 and k [A]
-  real :: u_min, u_max ! Minimum and maximum value across edge [A]
-  real :: a6 ! Colella and Woodward curvature [A]
-  real :: du, duc ! Difference between edges across cell [A]
-  real :: slp(this%n) ! PLM slope [A]
-  real :: sigma_l, sigma_c, sigma_r ! Left, central and right slope estimates as
-                                    ! differences across the cell [A]
-  real :: slope_x_h             ! retained PLM slope times  half grid step [A]
-  real :: edge_l, edge_r        ! Edge values (left and right) [A]
-  real :: expr1, expr2          ! Temporary expressions [A2]
-  real :: u0_avg                ! avg value at given edge [A]
-  integer :: k, n, km1, kp1
+  integer :: k, n
+  real :: ppoly_e(this%n, 2) ! PPM edge values [A]
+  real :: u_l, u_c, u_r      ! Left, center, right cell averages [A]
+  real :: edge_l, edge_r     ! Left and right edge values [A]
+  real :: expr1, expr2       ! Temporary expressions [A2]
 
   n = this%n
 
-  ! First populate the PLM reconstructions
-  slp(1) = 0.
+  ! First pass: compute initial edge estimates using the hybgen algorithm with CW monotonicity
+  call hybgen_ppm_coefs(u, h, ppoly_e, n, this%h_neglect)
+
+  ! Second pass: apply OM4-era PPM limiters (post-2018 answers via answer_date=99991231)
+  call bound_edge_values(n, h, u, ppoly_e, this%h_neglect, answer_date=99991231)
+  call check_discontinuous_edge_values(n, u, ppoly_e)
+
+  ! Apply the standard CW PPM limiter (Colella & Woodward, JCP 84) on interior cells
   do k = 2, n-1
-    h0 = max( this%h_neglect, h(k-1) )
-    h1 = max( this%h_neglect, h(k) )
-    h2 = max( this%h_neglect, h(k+1) )
-    dul = u(k) - u(k-1)
-    dur = u(k+1) - u(k)
-    h112 = ( 2.0 * h0 + h1 )
-    h122 = ( h1 + 2.0 * h2 )
-    I_h01 = 1. / ( h0 + h1 )
-    I_h12 = 1. / ( h1 + h2 )
-    h01_h112 = ( 2.0 * h0 + h1 ) / ( h0 + h1 ) ! When uniform -> 3/2
-    h23_h122 = ( 2.0 * h2 + h1 ) / ( h2 + h1 ) ! When uniform -> 3/2
-    if ( dul * dur > 0.) then
-      du = ( h1 / ( h1 + ( h0 + h2 ) ) ) * ( h112 * dur * I_h12 + h122 * dul * I_h01 )
-      slp(k) = sign( min( abs(2.0 * dul), abs(du), abs(2.0 * dur) ), du)
+    u_l = u(k-1) ; u_c = u(k) ; u_r = u(k+1)
+    edge_l = ppoly_e(k,1) ; edge_r = ppoly_e(k,2)
+    if ( (u_r - u_c)*(u_c - u_l) <= 0.0 ) then
+      edge_l = u_c ; edge_r = u_c
     else
-      slp(k) = 0.
-    endif
-  enddo
-  slp(n) = 0.
-
-  this%ul(1) = u(1) ! PCM
-  this%ur(1) = u(1) ! PCM
-  this%ul(2) = u(1) ! PCM
-  do K = 3, n-1 ! K=3 is interface between cells 2 and 3
-    h0 = max( this%h_neglect, h(k-2) )
-    h1 = max( this%h_neglect, h(k-1) )
-    h2 = max( this%h_neglect, h(k) )
-    h3 = max( this%h_neglect, h(k+1) )
-    h01_h112 = ( h0 + h1 ) / ( 2. * h1 + h2 )     ! When uniform -> 2/3
-    h23_h122 = ( h2 + h3 ) / ( h1 + 2. * h2 )     ! When uniform -> 2/3
-    ddh = h01_h112 - h23_h122                     ! When uniform -> 0
-    I_h12 = 1.0 / ( h1 + h2 )                     ! When uniform -> 1/(2h)
-    I_h0123 = 1.0 / ( ( h0 + h1 ) + ( h2 + h3 ) ) ! When uniform -> 1/(4h)
-    dul = slp(k-1)
-    dur = slp(k)
-    u1 = u(k-1)
-    u2 = u(k)
-    edge = I_h12 * ( h2 * u1 + h1 * u2 ) &                              ! 1/2 u1 + 1/2 u2
-         + I_h0123 * ( 2.0 * h1 * h2 * I_h12 * ( u2 - u1 ) * ddh &      ! 0
-                     + ( h2 * dul * h23_h122 - h1 * dur * h01_h112 ) )  ! 1/6 dul - 1/6 dur
-    this%ur(k-1) = edge
-    this%ul(k) = edge
-  enddo
-  this%ur(n-1) = u(n) ! PCM
-  this%ur(n) = u(n) ! PCM
-  this%ul(n) = u(n) ! PCM
-
-  do K = 2, n ! K=2 is interface between cells 1 and 2
-    u0 = u(k-1)
-    u1 = u(k)
-    u2 = u(k+1)
-    a6 = 3.0 * ( ( u1 - this%ul(k) ) + ( u1 - this%ur(k) ) )
-    a6 = 6.0 * u1 - 3.0 * ( this%ul(k) + this%ur(k) )
-    du = this%ur(k) - this%ul(k)
-    if ( ( u2 - u1 ) * ( u1 - u0 ) <- 0.0 ) then ! Large scale extrema
-      this%ul(k) = u1
-      this%ur(k) = u1
-    elseif ( du * a6 > du * du ) then ! Extrema on right
-      edge = 3.0 * u1 - 2.0 * this%ur(k) ! Subject to round off
-    ! u_min = min( u0, u1 )
-    ! u_max = max( u0, u1 )
-    ! edge = max( min( edge, u_max), u_min )
-      this%ul(k) = edge
-    elseif ( du * a6 < - du * du ) then ! Extrema on left
-      edge = 3.0 * u1 - 2.0 * this%ul(k) ! Subject to round off
-    ! u_min = min( u1, u2 )
-    ! u_max = max( u1, u2 )
-    ! edge = max( min( edge, u_max), u_min )
-      this%ur(k) = edge
-    endif
-  enddo
-
-  ! ### Note that the PPM_HYBGEM option calculated the CW PPM coefficients and then
-  ! invoked the OM4-era limiters afterwards, effectively doing the limiters twice.
-  ! This second pass does change answers!
-
-  ! Loop on cells to bound edge value
-  do k = 1, n
-
-    ! For the sake of bounding boundary edge values, the left neighbor of the left boundary cell
-    ! is assumed to be the same as the left boundary cell and the right neighbor of the right
-    ! boundary cell is assumed to be the same as the right boundary cell. This effectively makes
-    ! boundary cells look like extrema.
-    km1 = max(1,k-1) ; kp1 = min(k+1,N)
-
-    slope_x_h = 0.0
-    sigma_l = ( u(k) - u(km1) )
-    if ( (h(km1) + h(kp1)) + 2.0*h(k) > 0. ) then
-      sigma_c = ( u(kp1) - u(km1) ) * ( h(k) / ((h(km1) + h(kp1)) + 2.0*h(k)) )
-    else
-      sigma_c = 0.
-    endif
-    sigma_r = ( u(kp1) - u(k) )
-
-    ! The limiter is used in the local coordinate system to each cell, so for convenience store
-    ! the slope times a half grid spacing.  (See White and Adcroft JCP 2008 Eqs 19 and 20)
-    if ( (sigma_l * sigma_r) > 0.0 ) &
-      slope_x_h = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
-
-    ! Limit the edge values
-    if ( (u(km1)-this%ul(k)) * (this%ul(k)-u(k)) < 0.0 ) then
-      this%ul(k) = u(k) - sign( min( abs(slope_x_h), abs(this%ul(k)-u(k)) ), slope_x_h )
-    endif
-
-    if ( (u(kp1)-this%ur(k)) * (this%ur(k)-u(k)) < 0.0 ) then
-      this%ur(k) = u(k) + sign( min( abs(slope_x_h), abs(this%ur(k)-u(k)) ), slope_x_h )
-    endif
-
-    ! Finally bound by neighboring cell means in case of roundoff
-    this%ul(k) = max( min( this%ul(k), max(u(km1), u(k)) ), min(u(km1), u(k)) )
-    this%ur(k) = max( min( this%ur(k), max(u(kp1), u(k)) ), min(u(kp1), u(k)) )
-
-  enddo ! loop on interior edges
-
-  do k = 1, n-1
-    if ( (this%ul(k+1) - this%ur(k)) * (u(k+1) - u(k)) < 0.0 ) then
-      u0_avg = 0.5 * ( this%ur(k) + this%ul(k+1) )
-      u0_avg = max( min( u0_avg, max(u(k), u(k+1)) ), min(u(k), u(k+1)) )
-      this%ur(k) = u0_avg
-      this%ul(k+1) = u0_avg
-    endif
-  enddo ! end loop on interior edges
-
-  ! Loop on interior cells to apply the standard
-  ! PPM limiter (Colella & Woodward, JCP 84)
-  do k = 2, n-1
-
-    ! Get cell averages
-    u0 = u(k-1)
-    u1 = u(k)
-    u2 = u(k+1)
-
-    edge_l = this%ul(k)
-    edge_r = this%ur(k)
-
-    if ( (u2 - u1)*(u1 - u0) <= 0.0) then
-      ! Flatten extremum
-      edge_l = u1
-      edge_r = u1
-    else
-      expr1 = 3.0 * (edge_r - edge_l) * ( (u1 - edge_l) + (u1 - edge_r))
+      expr1 = 3.0 * (edge_r - edge_l) * ( (u_c - edge_l) + (u_c - edge_r) )
       expr2 = (edge_r - edge_l) * (edge_r - edge_l)
       if ( expr1 > expr2 ) then
-        ! Place extremum at right edge of cell by adjusting left edge value
-        edge_l = u1 + 2.0 * ( u1 - edge_r )
-        edge_l = max( min( edge_l, max(u0, u1) ), min(u0, u1) ) ! In case of round off
+        edge_l = u_c + 2.0 * ( u_c - edge_r )
+        edge_l = max( min( edge_l, max(u_l, u_c) ), min(u_l, u_c) )
       elseif ( expr1 < -expr2 ) then
-        ! Place extremum at left edge of cell by adjusting right edge value
-        edge_r = u1 + 2.0 * ( u1 - edge_l )
-        edge_r = max( min( edge_r, max(u2, u1) ), min(u2, u1) ) ! In case of round off
+        edge_r = u_c + 2.0 * ( u_c - edge_l )
+        edge_r = max( min( edge_r, max(u_r, u_c) ), min(u_r, u_c) )
       endif
     endif
-    ! This checks that the difference in edge values is representable
-    ! and avoids overshoot problems due to round off.
-    !### The 1.e-60 needs to have units of [A], so this dimensionally inconsistent.
-    if ( abs( edge_r - edge_l )<max(1.e-60,epsilon(u1)*abs(u1)) ) then
-      edge_l = u1
-      edge_r = u1
+    !### The 1.e-60 needs to have units of [A], so this is dimensionally inconsistent.
+    if ( abs( edge_r - edge_l ) < max(1.e-60, epsilon(u_c)*abs(u_c)) ) then
+      edge_l = u_c ; edge_r = u_c
     endif
+    ppoly_e(k,1) = edge_l ; ppoly_e(k,2) = edge_r
+  enddo
+  ! Boundary cells are PCM
+  ppoly_e(1,:) = u(1) ; ppoly_e(n,:) = u(n)
 
-    this%ul(k) = edge_l
-    this%ur(k) = edge_r
-
-  enddo ! end loop on interior cells
-
-
-  ! After the limiter, are ur and ul bounded???? -AJA
-
-  ! Store mean
   do k = 1, n
+    this%ul(k) = ppoly_e(k, 1)
+    this%ur(k) = ppoly_e(k, 2)
     this%u_mean(k) = u(k)
   enddo
 
 end subroutine reconstruct
+
+!> Average between xa and xb for cell k of a PPM_hybgen reconstruction [A]
+!!
+!! Calls the parent PPM_CW average and then clamps the result to [min(ul,ur), max(ul,ur)].
+!! This replicates the force_bounds_in_subcell behavior of the equivalent old-style PPM_HYBGEN
+!! scheme.
+real function average(this, k, xa, xb)
+  class(PPM_hybgen), intent(in) :: this !< This reconstruction
+  integer,           intent(in) :: k    !< Cell number
+  real,              intent(in) :: xa   !< Start of averaging interval on element (0 to 1)
+  real,              intent(in) :: xb   !< End of averaging interval on element (0 to 1)
+  real :: u_lo, u_hi ! Bounds on the sub-cell average given by the edge values [A]
+
+  average = this%PPM_CW%average(k, xa, xb)
+  u_lo = min(this%ul(k), this%ur(k))
+  u_hi = max(this%ul(k), this%ur(k))
+  average = max(u_lo, min(u_hi, average))
+
+end function average
 
 !> Checks the PPM_hybgen reconstruction for consistency
 logical function check_reconstruction(this, h, u)
@@ -401,5 +276,178 @@ end function unit_tests
 
 !> \namespace recon1d_ppm_hybgen
 !!
+
+! ============================================================================
+! Private subroutines copied from phased-out modules to avoid dependencies.
+! These reproduce bit-for-bit the results of the original functions they replace.
+! ============================================================================
+
+!> Set up edge values for PPM reconstruction using the hybgen (HYCOM) algorithm.
+!!
+!! Copied from MOM_hybgen_remap.hybgen_ppm_coefs().
+!! Original code by Tim Campbell (MSU, 2002) and Alan Wallcraft (NRL, 2007).
+subroutine hybgen_ppm_coefs(s, h_src, edges, nk, thin, PCM_lay)
+  integer, intent(in)  :: nk        !< The number of input layers
+  real,    intent(in)  :: s(nk)     !< The input scalar fields [A]
+  real,    intent(in)  :: h_src(nk) !< The input grid layer thicknesses [H ~> m or kg m-2]
+  real,    intent(out) :: edges(nk,2) !< The PPM interpolation edge values [A]
+  real,    intent(in)  :: thin      !< A negligible layer thickness [H ~> m or kg m-2]
+  logical, optional, intent(in)  :: PCM_lay(nk) !< If true for a layer, use PCM remapping
+
+  real :: dp(nk) ! Input grid layer thicknesses, but with a minimum thickness given by thin [H ~> m or kg m-2]
+  logical :: PCM_layer(nk) ! True for layers that should use PCM remapping
+  real :: da        ! Difference between the unlimited scalar edge value estimates [A]
+  real :: a6        ! Scalar field differences that are proportional to the curvature [A]
+  real :: slk, srk  ! Differences between adjacent cell averages of scalars [A]
+  real :: sck       ! Scalar differences across a cell [A]
+  real :: as(nk)    ! Scalar field difference across each cell [A]
+  real :: al(nk), ar(nk)   ! Scalar field at the left and right edges of a cell [A]
+  real :: h112(nk+1), h122(nk+1)  ! Combinations of thicknesses [H ~> m or kg m-2]
+  real :: I_h12(nk+1) ! Inverses of combinations of thicknesses [H-1 ~> m-1 or m2 kg-1]
+  real :: h2_h123(nk)  ! A ratio of a layer thickness to the sum of 3 adjacent thicknesses [nondim]
+  real :: I_h0123(nk)     ! Inverse of the sum of 4 adjacent thicknesses [H-1 ~> m-1 or m2 kg-1]
+  real :: h01_h112(nk+1) ! A ratio of sums of adjacent thicknesses [nondim]
+  real :: h23_h122(nk+1) ! A ratio of sums of adjacent thicknesses [nondim]
+  integer :: k
+
+  do k=1,nk ; dp(k) = max(h_src(k), thin) ; enddo
+
+  if (present(PCM_lay)) then
+    do k=1,nk ; PCM_layer(k) = (PCM_lay(k) .or. dp(k) <= thin) ; enddo
+  else
+    do k=1,nk ; PCM_layer(k) = (dp(k) <= thin) ; enddo
+  endif
+
+  do k=2,nk
+    h112(K) = 2.*dp(k-1) + dp(k)
+    h122(K) = dp(k-1) + 2.*dp(k)
+    I_h12(K) = 1.0 / (dp(k-1) + dp(k))
+  enddo
+  do k=2,nk-1
+    h2_h123(k) = dp(k) / (dp(k) + (dp(k-1)+dp(k+1)))
+  enddo
+  do K=3,nk-1
+    I_h0123(K) = 1.0 / ((dp(k-2) + dp(k-1)) + (dp(k) + dp(k+1)))
+    h01_h112(K) = (dp(k-2) + dp(k-1)) / (2.0*dp(k-1) + dp(k))
+    h23_h122(K) = (dp(k) + dp(k+1))   / (dp(k-1) + 2.0*dp(k))
+  enddo
+
+    as(1) = 0.
+    do k=2,nk-1
+      if (PCM_layer(k)) then
+        as(k) = 0.0
+      else
+        slk = s(k)-s(k-1)
+        srk = s(k+1)-s(k)
+        if (slk*srk > 0.) then
+          sck = h2_h123(k)*( h112(K)*srk*I_h12(K+1) + h122(K+1)*slk*I_h12(K) )
+          as(k) = sign(min(abs(2.0*slk), abs(sck), abs(2.0*srk)), sck)
+        else
+          as(k) = 0.
+        endif
+      endif
+    enddo
+    as(nk) = 0.
+    al(1) = s(1)
+    ar(1) = s(1)
+    al(2) = s(1)
+    do K=3,nk-1
+      al(k) = (dp(k)*s(k-1) + dp(k-1)*s(k)) * I_h12(K) &
+            + I_h0123(K)*( 2.*dp(k)*dp(k-1)*I_h12(K)*(s(k)-s(k-1)) * &
+                           ( h01_h112(K) - h23_h122(K) ) &
+                    + (dp(k)*as(k-1)*h23_h122(K) - dp(k-1)*as(k)*h01_h112(K)) )
+      ar(k-1) = al(k)
+    enddo
+    ar(nk-1) = s(nk)
+    al(nk)  = s(nk)
+    ar(nk)  = s(nk)
+    do k=2,nk-1
+      if ((PCM_layer(k)) .or. ((s(k+1)-s(k))*(s(k)-s(k-1)) <= 0.)) then
+        al(k) = s(k)
+        ar(k) = s(k)
+      else
+        da = ar(k)-al(k)
+        a6 = 6.0*s(k) - 3.0*(al(k)+ar(k))
+        if (da*a6 > da*da) then
+          al(k) = 3.0*s(k) - 2.0*ar(k)
+        elseif (da*a6 < -da*da) then
+          ar(k) = 3.0*s(k) - 2.0*al(k)
+        endif
+      endif
+    enddo
+    do k=1,nk
+      edges(k,1) = al(k)
+      edges(k,2) = ar(k)
+    enddo
+
+end subroutine hybgen_ppm_coefs
+
+!> Bound edge values by the averages of the neighboring cells.
+!!
+!! Copied from regrid_edge_values.bound_edge_values().
+subroutine bound_edge_values(N, h, u, edge_val, h_neglect, answer_date)
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(N),   intent(in)    :: h !< Cell widths [H]
+  real, dimension(N),   intent(in)    :: u !< Cell averages [A]
+  real, dimension(N,2), intent(inout) :: edge_val !< Edge values [A]
+  real,                 intent(in)    :: h_neglect !< A negligibly small width [H]
+  integer,    optional, intent(in)    :: answer_date !< The vintage of the expressions to use
+
+  real    :: sigma_l, sigma_c, sigma_r
+  real    :: slope_x_h
+  logical :: use_2018_answers
+  integer :: k, km1, kp1
+
+  use_2018_answers = .true. ; if (present(answer_date)) use_2018_answers = (answer_date < 20190101)
+
+  do k = 1,N
+    km1 = max(1,k-1) ; kp1 = min(k+1,N)
+    slope_x_h = 0.0
+    if (use_2018_answers) then
+      sigma_l = 2.0 * ( u(k) - u(km1) ) / ( h(k) + h_neglect )
+      sigma_c = 2.0 * ( u(kp1) - u(km1) ) / ( h(km1) + 2.0*h(k) + h(kp1) + h_neglect )
+      sigma_r = 2.0 * ( u(kp1) - u(k) ) / ( h(k) + h_neglect )
+      if ( (sigma_l * sigma_r) > 0.0 ) &
+        slope_x_h = 0.5 * h(k) * sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
+    elseif ( ((h(km1) + h(kp1)) + 2.0*h(k)) > 0.0 ) then
+      sigma_l = ( u(k) - u(km1) )
+      sigma_c = ( u(kp1) - u(km1) ) * ( h(k) / ((h(km1) + h(kp1)) + 2.0*h(k)) )
+      sigma_r = ( u(kp1) - u(k) )
+      if ( (sigma_l * sigma_r) > 0.0 ) &
+        slope_x_h = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
+    endif
+    if ( (u(km1)-edge_val(k,1)) * (edge_val(k,1)-u(k)) < 0.0 ) then
+      edge_val(k,1) = u(k) - sign( min( abs(slope_x_h), abs(edge_val(k,1)-u(k)) ), slope_x_h )
+    endif
+    if ( (u(kp1)-edge_val(k,2)) * (edge_val(k,2)-u(k)) < 0.0 ) then
+      edge_val(k,2) = u(k) + sign( min( abs(slope_x_h), abs(edge_val(k,2)-u(k)) ), slope_x_h )
+    endif
+    edge_val(k,1) = max( min( edge_val(k,1), max(u(km1), u(k)) ), min(u(km1), u(k)) )
+    edge_val(k,2) = max( min( edge_val(k,2), max(u(kp1), u(k)) ), min(u(kp1), u(k)) )
+  enddo
+
+end subroutine bound_edge_values
+
+!> Replace discontinuous edge values with their average when not monotonic.
+!!
+!! Copied from regrid_edge_values.check_discontinuous_edge_values().
+subroutine check_discontinuous_edge_values(N, u, edge_val)
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(N),   intent(in)    :: u !< Cell averages [A]
+  real, dimension(N,2), intent(inout) :: edge_val !< Edge values [A]
+
+  integer :: k
+  real    :: u0_avg
+
+  do k = 1,N-1
+    if ( (edge_val(k+1,1) - edge_val(k,2)) * (u(k+1) - u(k)) < 0.0 ) then
+      u0_avg = 0.5 * ( edge_val(k,2) + edge_val(k+1,1) )
+      u0_avg = max( min( u0_avg, max(u(k), u(k+1)) ), min(u(k), u(k+1)) )
+      edge_val(k,2) = u0_avg
+      edge_val(k+1,1) = u0_avg
+    endif
+  enddo
+
+end subroutine check_discontinuous_edge_values
 
 end module Recon1d_PPM_hybgen

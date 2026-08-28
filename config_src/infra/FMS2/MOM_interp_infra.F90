@@ -6,10 +6,10 @@
 module MOM_interp_infra
 
 use MOM_domain_infra,    only : MOM_domain_type, domain2d
-use MOM_io,              only : axis_info
-use MOM_io,              only : get_var_axes_info
+use MOM_io_infra, only : axistype
+use MOM_io_infra, only : set_axis_data
 use MOM_time_manager,    only : time_type
-use MOM_error_handler, only : MOM_error, FATAL
+use MOM_error_infra, only : MOM_error => MOM_err, FATAL
 use MOM_string_functions, only : lowercase
 use horiz_interp_mod, only : horiz_interp_new, horiz_interp, horiz_interp_init, horiz_interp_type
 use netcdf_io_mod, only : FmsNetcdfFile_t, netcdf_file_open, netcdf_file_close
@@ -18,6 +18,17 @@ use time_interp_external2_mod, only : time_interp_external
 use time_interp_external2_mod, only : init_external_field, time_interp_external_init
 use time_interp_external2_mod, only : get_external_field_size
 use time_interp_external2_mod, only : get_external_field_missing
+
+! Use primitive netCDF, to replicate get_var_axes_info()
+use netcdf, only : nf90_open
+use netcdf, only : nf90_close
+use netcdf, only : nf90_inq_varid
+use netcdf, only : nf90_inquire_variable
+use netcdf, only : nf90_inquire_dimension
+use netcdf, only : nf90_get_var
+use netcdf, only : NF90_NOWRITE
+use netcdf, only : NF90_NOERR
+
 
 implicit none ; private
 
@@ -155,10 +166,115 @@ end function get_extern_field_size
 
 !> get axes of an external field from field index
 function get_extern_field_axes(field) result(axes)
-  type(external_field), intent(in) :: field   !< Field handle
-  type(axis_info), dimension(4) :: axes        !< Field axes
+  type(external_field), intent(in) :: field
+    !< Field handle
+  type(axistype), dimension(4) :: axes
+    !< Field axes
 
-  call get_var_axes_info(field%filename, field%label, axes)
+  integer :: ndims
+    ! Number of variable dimensions
+  integer, allocatable :: dims(:)
+    ! netCDF dimension IDs of variable
+  character(len=256) :: dim_name
+    ! Dimension name
+  integer :: dim_len
+    ! Dimension length
+  integer :: var_dim
+    ! netCDF ID of the variable associated with dimension of the same name
+  real, allocatable :: axis_points(:)
+    ! Axis values
+
+  integer :: ncid
+    ! netCDF file ID
+  integer :: varid
+    ! netCDF variable ID
+  integer :: rc
+    ! netCDF return code
+
+  ! netCDF requires the following to be length-1 arrays
+  integer :: nc_start(1)
+    ! netCDF start index
+  integer :: nc_count(1)
+    ! netCDF index count
+
+  integer :: d
+    ! Dimension index
+  character(len=2) :: d_str
+    ! Display string of d
+
+  ! This is a reimplementation of get_var_axes_info(), maybe it can be used
+  ! by the existing get_var_axes_info() ?
+
+  ! Open field%filename
+  rc = nf90_open(trim(field%filename), NF90_NOWRITE, ncid)
+  if (rc /= NF90_NOERR) &
+    call MOM_error(FATAL, "Error opening file " // trim(field%filename) // ".")
+
+  ! Use field%label to get the netCDF varid
+  rc = nf90_inq_varid(ncid, trim(field%label), varid)
+  if (rc /= NF90_NOERR) &
+    call MOM_error(FATAL, "Error finding variable " // trim(field%label) &
+        // " in " // trim(field%filename) // ".")
+
+  ! Use the varid to get the number of dims (ndims) and their IDs (dims(:))
+  !   Verify that ndims >= 3
+  rc = nf90_inquire_variable(ncid, varid, ndims=ndims)
+  if (rc /= NF90_NOERR) &
+    call MOM_error(FATAL, "Error querying variable " // trim(field%label) &
+        // " in " // trim(field%filename) // ".")
+
+  if (ndims < 3) &
+    call MOM_error(FATAL, trim(field%label) // " in " // trim(field%filename) &
+        // " has too few dimensions to be read as a 3D array.")
+
+  allocate(dims(ndims))
+
+  rc = nf90_inquire_variable(ncid, varid, dimids=dims)
+  if (rc /= NF90_NOERR) &
+    call MOM_error(FATAL, "Error querying variable " // trim(field%label) &
+        // " in " // trim(field%filename) // ".")
+
+  do d=1,ndims
+    ! Determine the name of each dimension
+    rc = nf90_inquire_dimension(ncid, dims(d), dim_name, len=dim_len)
+    if (rc /= NF90_NOERR) then
+      write(d_str, '(i0)') d
+      call MOM_error(FATAL, "Error querying dimension " // trim(d_str) &
+          // " of " // trim(field%label) // " in " // trim(field%filename) &
+          // ".")
+    endif
+
+    ! Now locate a variable with the same name as the dimension (e.g. "x")
+    rc = nf90_inq_varid(ncid, dim_name, var_dim)
+    if (rc /= NF90_NOERR) &
+      call MOM_error(FATAL, "Error finding dimension variable " &
+          // trim(dim_name) // " of " // trim(field%label) // " in " &
+          // trim(field%filename))
+
+    allocate(axis_points(dim_len))
+
+    ! Get the dimensional axis values
+    nc_start(1) = 1
+    nc_count(1) = dim_len
+    rc = nf90_get_var(ncid, var_dim, axis_points, nc_start, nc_count)
+    if (rc /= NF90_NOERR) &
+      call MOM_error(FATAL, "Error reading dimension " // trim(dim_name) &
+          // " axis data of " // trim(field%label) // " in " &
+          // trim(field%filename))
+
+    ! write via set_axis_info() equivalent for axistype
+    call set_axis_data(axes(d), dim_name, axis_points)
+
+    deallocate(axis_points)
+  enddo
+
+  deallocate(dims)
+
+  ! Close external file
+  rc = nf90_close(ncid)
+  if (rc /= NF90_NOERR) &
+    call MOM_error(FATAL, "Error closing file "//trim(field%filename)//".")
+
 end function get_extern_field_axes
 
 
@@ -175,25 +291,27 @@ end function get_extern_field_missing
 
 !> Get information about the external fields.
 subroutine get_external_field_info(field, size, axes, missing)
-  type(external_field),                   intent(in)    :: field    !< Handle for time interpolated external
-                                                                    !! field returned from a previous
-                                                                    !! call to init_external_field()
-  integer,         dimension(4), optional, intent(inout) :: size    !< Dimension sizes for the input data
-  type(axis_info), dimension(4), optional, intent(inout) :: axes    !< Axis types for the input data
-  real,                          optional, intent(inout) :: missing !< Missing value for the input data
+  type(external_field), intent(in) :: field
+    !< handle for time interpolated external field returned from a previous
+    !! call to init_external_field()
+  integer, optional, intent(inout) :: size(4)
+    !< Dimension sizes for the input data
+  type(axistype), optional, intent(inout) :: axes(4)
+    !< Axis types for the input data
+  real, optional, intent(inout) :: missing
+    !< Missing value for the input data
 
   if (present(size)) then
-    size(1:4) = get_extern_field_size(field%id)
+    size(:) = get_extern_field_size(field%id)
   endif
 
   if (present(axes)) then
-    axes(1:4) = get_extern_field_axes(field)
+    axes(:) = get_extern_field_axes(field)
   endif
 
   if (present(missing)) then
     missing = get_extern_field_missing(field%id)
   endif
-
 end subroutine get_external_field_info
 
 

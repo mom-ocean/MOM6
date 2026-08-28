@@ -621,7 +621,7 @@ end subroutine offline_add_diurnal_sw
 !! in a previous integration of the online model
 subroutine update_offline_from_files(G, GV, US, nk_input, mean_file, sum_file, snap_file, &
                 surf_file, h_end, uhtr, vhtr, temp_mean, salt_mean, mld, Kd, fluxes, &
-                ridx_sum, ridx_snap, read_mld, read_sw, read_ts_uvh, do_ale_in)
+                ridx_sum, ridx_snap, read_mld, mld_var_name, read_sw, read_ts_uvh, do_ale_in)
 
   type(ocean_grid_type),   intent(inout) :: G         !< Horizontal grid type
   type(verticalGrid_type), intent(in   ) :: GV        !< Vertical grid type
@@ -650,6 +650,8 @@ subroutine update_offline_from_files(G, GV, US, nk_input, mean_file, sum_file, s
   integer,                 intent(in   ) :: ridx_sum  !< Read index for sum, mean, and surf files
   integer,                 intent(in   ) :: ridx_snap !< Read index for snapshot file
   logical,                 intent(in   ) :: read_mld  !< True if reading in MLD
+  character(len=*),        intent(in   ) :: mld_var_name !< Name of the mixed layer depth variable
+                                                      !! to read from a file.
   logical,                 intent(in   ) :: read_sw   !< True if reading in radiative fluxes
   logical,                 intent(in   ) :: read_ts_uvh !< True if reading in uh, vh, and h
   logical,       optional, intent(in   ) :: do_ale_in !< True if using ALE algorithms
@@ -726,7 +728,7 @@ subroutine update_offline_from_files(G, GV, US, nk_input, mean_file, sum_file, s
   endif
 
   if (read_mld) then
-    call MOM_read_data(surf_file, 'ePBL_h_ML', mld, G%Domain, timelevel=ridx_sum, scale=US%m_to_Z)
+    call MOM_read_data(surf_file, mld_var_name, mld, G%Domain, timelevel=ridx_sum, scale=US%m_to_Z)
   endif
 
   if (read_sw) then

@@ -108,7 +108,7 @@ subroutine sloshing_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
       !z_inter(k) = (2.0**(n-1)) * (z_unif(k) + 0.5)**n - 0.5
 
       ! Thin pycnocline in the middle (piecewise linear profile)
-      x1 = 0.30; y1 = 0.48; x2 = 0.70; y2 = 0.52
+      x1 = 0.30 ; y1 = 0.48 ; x2 = 0.70 ; y2 = 0.52
 
       x = -z_unif(k)
 

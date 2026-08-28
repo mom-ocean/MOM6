@@ -237,7 +237,7 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, US, p
 
   logical :: sym
 
-  sym=.false.; if (present(symmetric)) sym=symmetric
+  sym = .false. ; if (present(symmetric)) sym = symmetric
 
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie

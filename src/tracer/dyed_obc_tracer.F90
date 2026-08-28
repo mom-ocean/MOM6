@@ -94,7 +94,7 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "NUM_DYED_TRACERS", CS%ntr, &
                  "The number of dyed_obc tracers in this run. Each tracer "//&
-                 "should have a separate boundary segment."//&
+                 "should have a separate boundary segment.  "//&
                  "If not present, use NUM_DYE_TRACERS.", default=-1)
   if (CS%ntr == -1) then
     !for backward compatibility

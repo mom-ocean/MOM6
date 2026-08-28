@@ -789,9 +789,9 @@ function auto_determine_io_layout(idiv, jdiv, nio) result(best_io_layout)
       if (ratio_diff < min_ratio_diff) then
         min_ratio_diff = ratio_diff
         best_io_layout = [io_layout(1), io_layout(2)]
-      end if
-    end if
-  end do
+      endif
+    endif
+  enddo
 
 end function auto_determine_io_layout
 

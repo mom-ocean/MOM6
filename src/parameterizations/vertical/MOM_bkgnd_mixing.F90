@@ -337,9 +337,6 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
   real, dimension(SZI_(G),SZK_(GV)) :: dz   !< Height change across layers [Z ~> m]
   real :: depth_c    !< depth of the center of a layer [H ~> m or kg m-2]
   real :: I_Hmix     !< inverse of fixed mixed layer thickness [H-1 ~> m-1 or m2 kg-1]
-  real :: I_2Omega   !< 1/(2 Omega) [T ~> s]
-  real :: N_2Omega   !  The ratio of the stratification to the Earth's rotation rate [nondim]
-  real :: N02_N2     !  The ratio a reference stratification to the actual stratification [nondim]
   real :: I_x30      !< 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg))) [nondim]
   real :: deg_to_rad !< factor converting degrees to radians [radians degree-1], pi/180.
   real :: abs_sinlat !< absolute value of sine of latitude [nondim]
@@ -485,8 +482,8 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
 
     ! Update Kd_int and Kv_bkgnd, based on Kd_lay.  These might be just used for diagnostic purposes.
     do i=is,ie
-      Kd_int(i,1) = 0.0; Kv_bkgnd(i,1) = 0.0
-      Kd_int(i,nz+1) = 0.0; Kv_bkgnd(i,nz+1) = 0.0
+      Kd_int(i,1) = 0.0 ; Kv_bkgnd(i,1) = 0.0
+      Kd_int(i,nz+1) = 0.0 ; Kv_bkgnd(i,nz+1) = 0.0
     enddo
     do K=2,nz ; do i=is,ie
       Kd_int(i,K) = 0.5*(Kd_lay(i,k-1) + Kd_lay(i,k))

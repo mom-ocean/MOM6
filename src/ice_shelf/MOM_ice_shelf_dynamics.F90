@@ -13,12 +13,13 @@ use MOM_IS_diag_mediator, only : register_diag_field=>register_MOM_IS_diag_field
 !use MOM_IS_diag_mediator, only : MOM_IS_diag_mediator_init, set_IS_diag_mediator_grid
 use MOM_IS_diag_mediator, only : diag_ctrl, time_type, enable_averages, disable_averaging
 use MOM_domains, only : MOM_domains_init, clone_MOM_domain
-use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE, CORNER, CENTER
+use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE, AGRID, CORNER, CENTER
+use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only : MOM_grid_init, ocean_grid_type
 use MOM_io, only : file_exists, slasher, MOM_read_data
-use MOM_io, only : open_ASCII_file, get_filename_appendix
+use MOM_io, only : open_ASCII_file, close_file, get_filename_appendix
 use MOM_io, only : APPEND_FILE, WRITEONLY_FILE
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_time_manager, only : time_type, get_time, set_time, time_type_to_real, operator(>)
@@ -40,6 +41,11 @@ public register_ice_shelf_dyn_restarts, initialize_ice_shelf_dyn, update_ice_she
 public ice_time_step_CFL, ice_shelf_dyn_end, change_in_draft, write_ice_shelf_energy
 public shelf_advance_front, ice_shelf_min_thickness_calve, calve_to_mask, volume_above_floatation
 public masked_var_grounded
+
+! SSA inner solver flags
+integer, parameter :: INNER_CG = 1       !< Conjugate gradient (default)
+integer, parameter :: INNER_MINRES = 2   !< MINRES
+integer, parameter :: INNER_CR = 3       !< Conjugate residual
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -94,6 +100,15 @@ type, public :: ice_shelf_dyn_CS ; private
   real, pointer, dimension(:,:,:) :: ice_visc => NULL() !< Area and depth-integrated Glen's law ice viscosity
                                                         !!  (Pa m3 s) in [R L4 Z T-1 ~> kg m2 s-1].
                                                         !!  at either 1 (cell-centered) or 4 quadrature points per cell
+  real, pointer, dimension(:,:,:) :: newton_visc_factor => NULL() !< Newton tangent stiffness coefficient:
+                                                      !!  (1/n_glen - 1)/2 * ice_visc / eps_e2 at each
+                                                      !!  viscosity quadrature point [R L4 Z T ~> kg m2 s]
+  real, pointer, dimension(:,:,:) :: newton_str_ux => NULL() !< Longitudinal x-strain-rate ux at each viscosity
+                                                      !!  quadrature point for Newton iterations [T-1 ~> s-1]
+  real, pointer, dimension(:,:,:) :: newton_str_vy => NULL() !< Longitudinal y-strain-rate vy at each viscosity
+                                                      !!  quadrature point for Newton iterations [T-1 ~> s-1]
+  real, pointer, dimension(:,:,:) :: newton_str_sh => NULL() !< Engineering shear strain-rate uy+vx at each
+                                                      !!  viscosity quadrature point for Newton iterations [T-1 ~> s-1]
   real, pointer, dimension(:,:) :: AGlen_visc => NULL() !< Ice-stiffness parameter in Glen's law ice viscosity,
                                                       !! often in [Pa-3 s-1] if n_Glen is 3.
   real, pointer, dimension(:,:) :: u_bdry_val => NULL() !< The zonal ice velocity at inflowing boundaries
@@ -108,12 +123,15 @@ type, public :: ice_shelf_dyn_CS ; private
                                                        !! the same as G%bathyT+Z_ref, when below sea-level.
                                                        !! Sign convention: positive below sea-level, negative above.
 
-  real, pointer, dimension(:,:) :: basal_traction => NULL() !< The area-integrated taub_beta field
-                                                            !! (m2 Pa s m-1, or kg s-1) related to the nonlinear part
-                                                            !! of "linearized" basal stress (Pa) [R Z L2 T-1 ~> kg s-1]
-                !!  The exact form depends on basal law exponent and/or whether flow is "hybridized" a la Goldberg 2011
   real, pointer, dimension(:,:) :: C_basal_friction => NULL()!< Coefficient in sliding law tau_b = C u^(n_basal_fric),
                                !! units of [R L Z T-2 (s m-1)^(n_basal_fric) ~> Pa (s m-1)^(n_basal_fric)]
+  real, pointer, dimension(:,:) :: coef_prefactor => NULL() !< Pre-computed area*C_basal_friction*L_T_to_m_s for
+                               !! basal friction quadrature evaluation [R L2 Z T-1 ~> kg s-1].
+  real, pointer, dimension(:,:) :: fB_elem => NULL()        !< Pre-computed element-level Coulomb fB parameter
+                               !! [(T L-1)^CF_PostPeak]; 0 for Weertman.
+                               !! Updated each outer iteration by calc_shelf_basal_prefactors.
+  real :: alpha_coulomb = 1.0  !< Coulomb prefactor (CF_PostPeak-1)^(CF_PostPeak-1)/CF_PostPeak^CF_PostPeak [nondim]
+  real :: coulomb_pp_n         !< CF_PostPeak/n_basal_fric [nondim]
   real, pointer, dimension(:,:) :: OD_rt => NULL()         !< A running total for calculating OD_av [Z ~> m].
   real, pointer, dimension(:,:) :: ground_frac_rt => NULL() !< A running total for calculating ground_frac.
   real, pointer, dimension(:,:) :: OD_av => NULL()         !< The time average open ocean depth [Z ~> m].
@@ -126,6 +144,10 @@ type, public :: ice_shelf_dyn_CS ; private
                                                 !! 4 quadrature points surrounding the cell vertices [L-1 ~> m-1].
   real, pointer, dimension(:,:,:) :: PhiC => NULL()  !< The gradients of bilinear basis elements at 1 cell-centered
                                                 !! quadrature point per cell [L-1 ~> m-1].
+  real, pointer, dimension(:,:,:) :: Jac => NULL()   !< Jacobian determinant |J_q| = a_q*d_q of the element
+                                                !! mapping at each of the 4 Gaussian quadrature points [L2 ~> m2].
+                                                !! Equal to G%areaT only for rectangular elements; differs when
+                                                !! opposite cell edges have unequal lengths (non-rectangular quads).
   real, pointer, dimension(:,:,:,:,:,:) :: Phisub => NULL() !< Quadrature structure weights at subgridscale
                                                 !!  locations for finite element calculations [nondim]
   integer :: OD_rt_counter = 0 !< A counter of the number of contributions to OD_rt.
@@ -155,6 +177,9 @@ type, public :: ice_shelf_dyn_CS ; private
   character(len=40) :: ice_viscosity_compute !< Specifies whether the ice viscosity is computed internally
                                    !! according to Glen's flow law; is constant (for debugging purposes)
                                    !! or using observed strain rates and read from a file
+  logical :: shelf_top_slope_bugs !< If true, use directionally inconsistent estimates of the grid
+                            !! spacing when calculating the ice shelf surface slope, and underestimate
+                            !! slopes near the edge of the ice shelf by a factor of 2.
   logical :: GL_regularize  !< Specifies whether to regularize the floatation condition
                             !! at the grounding line as in Goldberg Holland Schoof 2009
   integer :: n_sub_regularize
@@ -186,20 +211,42 @@ type, public :: ice_shelf_dyn_CS ; private
                             !! circulation or thermodynamics.  It is used to estimate the
                             !! gravitational driving force at the shelf front (until we think of
                             !! a better way to do it, but any difference will be negligible).
+  real :: rhoi_rhow         !< The density of ice divided by a typical water density [nondim]
+  real :: rhow_rhoi         !< A typical water density divided by the density of ice [nondim]
   real :: thresh_float_col_depth !< The water column depth over which the shelf if considered to be floating
   logical :: moving_shelf_front  !< Specify whether to advance shelf front (and calve).
   logical :: calve_to_mask       !< If true, calve off the ice shelf when it passes the edge of a mask.
   real :: min_thickness_simple_calve !< min. ice shelf thickness criteria for calving [Z ~> m].
   real :: T_shelf_missing   !< An ice shelf temperature to use where there is no ice shelf [C ~> degC]
-  real :: cg_tolerance !< The tolerance in the CG solver, relative to initial residual, that
+  real :: cg_tolerance !< For Picard iterations, the tolerance in the CG solver, relative to initial residual, that
                        !! determines when to stop the conjugate gradient iterations [nondim].
+  real :: cg_newton_tolerance !< For inexact Newton iterations, the initial tolerance in the CG solver, relative to
+                              !!  initial residual, that determines when to stop the CG iterations [nondim].
+  real :: cg_tol_current !< Working CG tolerance for the current inner solve [nondim].
   real :: nonlinear_tolerance !< The fractional nonlinear tolerance, relative to the initial error,
                               !! that sets when to stop the iterative velocity solver [nondim]
+  real :: newton_after_tolerance !< The fractional nonlinear tolerance, relative to the initial error, at
+                                 !! which to switch from Picard to Newton iterations in the velocity solver
+                                 !! If set to <= 0, no Picard [nondim]
+  type(group_pass_type) :: pass_visc_and_newton !< Handle for Newton-and-viscosity-related group passes
+  type(group_pass_type) :: pass_newton !< Handle for Newton-related group passes
+  logical :: newton_adapt_cg_tol !< Use an adaptive CG tolerance during Newton iterations
+  real :: ew_gamma !< Gamma in Eisenstat-Walker adaptive Newton tolerance [nondim].
+  real :: ew_alpha !< Alpha in Eisenstat-Walker adaptive Newton tolerance [nondim].
+  integer :: ew_safety !< Safeguard Eisenstat-Walker using:
+                    !!(0) no safeguard, (1) EW choice 2 threshold or (2) PETSc option 3 (Chacon 2008)
+  real :: ew_1_thres !< Threshold for Eisenstat-Walker version 1 [nondim]
+  real :: ew_eta_max !< Maximum allowed Eisenstat-Walker eta [nondim]
   integer :: cg_max_iterations !< The maximum number of iterations that can be used in the CG solver
-  integer :: nonlin_solve_err_mode  !< 1: exit vel solve based on nonlin residual
+  integer :: nonlin_solve_err_mode  !< 1: exit based on nonlin residual | F | / | F_0 | where | | is infty-norm
                     !! 2: exit based on "fixed point" metric (|u - u_last| / |u| < tol) where | | is infty-norm
-                    !! 3: exit based on change of norm
-
+                    !! 3: exit based on change of solution norm 2*abs(|u|-|u_last|)/(|u|+|u_last|) where | | is L2-norm
+                    !! 4: exit based on nonlin residual  | F | / | F_0 | where | | is L2-norm
+                    !! 5: exit based on relative residual | F | / | tau | where | | is L2-norm
+  logical :: ssa_add_rel_resid !< Nonlinear error in velocity solve will also depend on the
+                                   !! L2 residual norm relative to RHS norm
+  real :: rr_nonlinear_tolerance !< If ssa_add_rel_resid, the additional nonlin tolerance in the iterative
+                    !! velocity solve used for the relative residual [nondim]
   ! for write_ice_shelf_energy
   type(time_type) :: energysavedays            !< The interval between writing the energies
                                                !! and other integral quantities of the run.
@@ -218,7 +265,8 @@ type, public :: ice_shelf_dyn_CS ; private
   type(time_type) :: Start_time !< The start time of the simulation.
                                 ! Start_time is set in MOM_initialization.F90
   integer :: prev_IS_energy_calls = 0 !< The number of times write_ice_shelf_energy has been called.
-  integer :: IS_fileenergy_ascii   !< The unit number of the ascii version of the energy file.
+  integer :: IS_fileenergy_ascii = -1
+    !< The unit number of the ascii version of the energy file.
   character(len=200) :: IS_energyfile  !< The name of the ice sheet energy file with path.
 
   ! ids for outputting intermediate thickness in advection subroutine (debugging)
@@ -226,6 +274,11 @@ type, public :: ice_shelf_dyn_CS ; private
 
   logical :: debug                !< If true, write verbose checksums for debugging purposes
                                   !! and use reproducible sums
+  logical :: doing_newton = .false. !< If true, the outer iteration is using Newton (tangent) linearization
+                                    !! instead of Picard (secant) linearization for the ice viscosity
+  integer :: inner_solver !< The inner linear solver: INNER_CG (1),INNER_MINRES (2), or INNER_CR (3)
+  logical :: cg_halo_shrink = .true. !< If true, CG uses halo-shrinking to defer pass_vector calls;
+                                     !! if false, uses fixed CG_action range with 1 pass_vector per iteration
   logical :: module_is_initialized = .false. !< True if this module has been initialized.
 
   !>@{ Diagnostic handles
@@ -252,9 +305,10 @@ end type ice_shelf_dyn_CS
 
 !> A container for loop bounds
 type :: loop_bounds_type ; private
-  !>@{ Loop bounds
-  integer :: ish, ieh, jsh, jeh
-  !>@}
+  integer :: ish !< Starting i-index of the computational domain [nondim]
+  integer :: ieh !< Ending i-index of the computational domain [nondim]
+  integer :: jsh !< Starting j-index of the computational domain [nondim]
+  integer :: jeh !< Ending j-index of the computational domain [nondim]
 end type loop_bounds_type
 
 contains
@@ -340,7 +394,7 @@ subroutine register_ice_shelf_dyn_restarts(G, US, param_file, CS, restart_CS)
 
     call get_param(param_file, mdl, "NUMBER_OF_ICE_VISCOSITY_QUADRATURE_POINTS", CS%visc_qps, &
                  "Number of ice viscosity quadrature points. Either 1 (cell-centered) for 4", &
-                  units="none", default=1)
+                  units="none", default=4)
     if (CS%visc_qps/=1 .and. CS%visc_qps/=4) call MOM_error (FATAL, &
       "NUMBER OF ICE_VISCOSITY_QUADRATURE_POINTS must be 1 or 4")
 
@@ -359,10 +413,15 @@ subroutine register_ice_shelf_dyn_restarts(G, US, param_file, CS, restart_CS)
     allocate(CS%v_shelf(IsdB:IedB,JsdB:JedB), source=0.0)
     allocate(CS%t_shelf(isd:ied,jsd:jed), source=T_shelf_missing) ! [C ~> degC]
     allocate(CS%ice_visc(isd:ied,jsd:jed,CS%visc_qps), source=0.0)
+    allocate(CS%newton_visc_factor(isd:ied,jsd:jed,CS%visc_qps), source=0.0)
+    allocate(CS%newton_str_ux(isd:ied,jsd:jed,CS%visc_qps), source=0.0)
+    allocate(CS%newton_str_vy(isd:ied,jsd:jed,CS%visc_qps), source=0.0)
+    allocate(CS%newton_str_sh(isd:ied,jsd:jed,CS%visc_qps), source=0.0)
     allocate(CS%AGlen_visc(isd:ied,jsd:jed), source=2.261e-25) ! [Pa-3 s-1]
-    allocate(CS%basal_traction(isd:ied,jsd:jed), source=0.0)   ! [R Z L2 T-1 ~> kg s-1]
     allocate(CS%C_basal_friction(isd:ied,jsd:jed), source=5.0e10*US%Pa_to_RLZ_T2)
              ! Units of [R L Z T-2 (s m-1)^n_sliding ~> Pa (s m-1)^n_sliding]
+    allocate(CS%coef_prefactor(isd:ied,jsd:jed), source=0.0)
+    allocate(CS%fB_elem(isd:ied,jsd:jed), source=0.0)
     allocate(CS%OD_av(isd:ied,jsd:jed), source=0.0)
     allocate(CS%ground_frac(isd:ied,jsd:jed), source=0.0)
     allocate(CS%taudx_shelf(IsdB:IedB,JsdB:JedB), source=0.0)
@@ -375,6 +434,16 @@ subroutine register_ice_shelf_dyn_restarts(G, US, param_file, CS, restart_CS)
     allocate(CS%u_face_mask_bdry(IsdB:IedB,JsdB:JedB), source=-2.0)
     allocate(CS%v_face_mask_bdry(IsdB:iedB,JsdB:JedB), source=-2.0)
     allocate(CS%h_bdry_val(isd:ied,jsd:jed), source=0.0)
+
+    ! Create group pass handles
+    call create_group_pass(CS%pass_visc_and_newton, CS%ice_visc, G%domain)
+    call create_group_pass(CS%pass_visc_and_newton, CS%newton_str_sh, G%domain)
+    call create_group_pass(CS%pass_visc_and_newton, CS%newton_visc_factor, G%domain)
+    call create_group_pass(CS%pass_visc_and_newton, CS%newton_str_ux, CS%newton_str_vy, G%domain, TO_ALL, AGRID)
+
+    call create_group_pass(CS%pass_newton, CS%newton_str_sh, G%domain)
+    call create_group_pass(CS%pass_newton, CS%newton_visc_factor, G%domain)
+    call create_group_pass(CS%pass_newton, CS%newton_str_ux, CS%newton_str_vy, G%domain, TO_ALL, AGRID)
 
    ! additional restarts for ice shelf state
     call register_restart_field(CS%u_shelf, "u_shelf", .false., restart_CS, &
@@ -440,10 +509,13 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
   character(len=40)  :: var_name
   character(len=40)  :: mdl = "MOM_ice_shelf_dyn"  ! This module's name.
   logical :: shelf_mass_is_dynamic, override_shelf_movement, active_shelf_dynamics
+  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
+                          ! recreate the bugs, or if false bugs are only used if actively selected.
   logical :: debug
   integer :: i, j, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, iters
   character(len=200) :: IS_energyfile  ! The name of the energy file.
   character(len=32) :: filename_appendix = '' ! FMS appendix to filename for ensemble runs
+  character(len=16) :: inner_solver_str ! The type of inner solver to use for the SSA
 
   Isdq = G%isdB ; Iedq = G%iedB ; Jsdq = G%jsdB ; Jedq = G%jedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -546,13 +618,72 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     call get_param(param_file, mdl, "CF_Max", CS%CF_Max, &
                  "Coulomb friction maximum coefficient", &
                  units="none", default=0.5, fail_if_missing=.false.)
+    ! Pre-compute Coulomb prefactor alpha = (q-1)^(q-1)/q^q for q=CF_PostPeak [nondim].
+    ! Default is 1.0; only update when Coulomb is active and q /= 1.
+    ! Also store CS%coulomb_pp_n = CF_PostPeak/n_basal_fric [nondim]
+    if (CS%CoulombFriction) then
+      if (CS%CF_PostPeak /= 1.0) then
+        CS%alpha_coulomb = (CS%CF_PostPeak-1.0)**(CS%CF_PostPeak-1.0) / CS%CF_PostPeak**CS%CF_PostPeak
+      endif
+      CS%coulomb_pp_n = CS%CF_PostPeak/CS%n_basal_fric
+    endif
 
     call get_param(param_file, mdl, "DENSITY_ICE", CS%density_ice, &
                  "A typical density of ice.", units="kg m-3", default=917.0, scale=US%kg_m3_to_R)
+
+    ! Precompute commonly-used density ratios
+    CS%rhoi_rhow=CS%density_ice / CS%density_ocean_avg
+    CS%rhow_rhoi=CS%density_ocean_avg / CS%density_ice
+
     call get_param(param_file, mdl, "CONJUGATE_GRADIENT_TOLERANCE", CS%cg_tolerance, &
-                "tolerance in CG solver, relative to initial residual", units="nondim", default=1.e-6)
+                 "For Picard iterations, the tolerance in CG solver, relative to initial residual", &
+                 units="nondim", default=1.e-6)
+    call get_param(param_file, mdl, "NEWTON_CONJUGATE_GRADIENT_TOLERANCE", CS%cg_newton_tolerance, &
+                 "For inexact Newton iterations, the initial tolerance in CG solver, relative to initial residual", &
+                 units="nondim", default=CS%cg_tolerance)
+    CS%cg_tol_current = CS%cg_tolerance  ! Can be tightened adaptively during inexact Newton iterations
     call get_param(param_file, mdl, "ICE_NONLINEAR_TOLERANCE", CS%nonlinear_tolerance, &
                 "nonlin tolerance in iterative velocity solve", units="nondim", default=1.e-6)
+    call get_param(param_file, mdl, "NEWTON_AFTER_TOLERANCE", CS%newton_after_tolerance, &
+                "Switch from Picard to Newton iterations in the nonlinear ice velocity solve when "//&
+                "the fractional nonlinear residual falls below this tolerance. If <=0, no Picard.",&
+                units="none", default=CS%nonlinear_tolerance)
+    call get_param(param_file, mdl, "NEWTON_ADAPT_CG_TOL", CS%newton_adapt_cg_tol, &
+                "Use an adaptive CG tolerance during Newton iterations.", default=.true.)
+    call get_param(param_file, mdl, "NEWTON_EW_GAMMA", CS%ew_gamma, &
+                "Gamma in Eisenstat-Walker adaptive Newton tolerance", units="nondim", default=0.9, &
+                do_not_log=(.not. CS%newton_adapt_cg_tol))
+    call get_param(param_file, mdl, "NEWTON_EW_ALPHA", CS%ew_alpha, &
+                "Alpha in Eisenstat-Walker adaptive Newton tolerance", units="nondim", default=2.0,  &
+                do_not_log=(.not. CS%newton_adapt_cg_tol))
+    call get_param(param_file, mdl, "NEWTON_EW_SAFETY", CS%ew_safety, &
+                "Safeguard Eisenstat-Walker using (0) no safeguard, (1) EW choice 2 threshold "//&
+                "or (2) PETSc option 3 (Chacon 2008)", default=2, do_not_log=(.not. CS%newton_adapt_cg_tol))
+    call get_param(param_file, mdl, "NEWTON_EW_1_THRESHOLD", CS%ew_1_thres, &
+                "Eisenstat-Walker version 1 threshold", &
+                units="nondim", default=0.1, do_not_log=(.not. CS%newton_adapt_cg_tol))
+    call get_param(param_file, mdl, "NEWTON_EW_ETA_MAX", CS%ew_eta_max, &
+                "Maximum allowed Eisenstat-Walker eta (between 0 and 1)", &
+                units="nondim", default=0.9, do_not_log=(.not. CS%newton_adapt_cg_tol))
+    if (CS%ew_eta_max<=0 .or. CS%ew_eta_max>= 1) &
+      call MOM_error(FATAL, "NEWTON_EW_ETA_MAX must be between 0 and 1.")
+    call get_param(param_file, mdl, "ICE_SHELF_INNER_SOLVER", inner_solver_str, &
+                "Choice of inner linear solver for the ice-shelf SSA velocity system. "//&
+                "Valid choices are CG (default), CR, and MINRES.", &
+                default="CG")
+    select case (trim(inner_solver_str))
+      case ("CG")
+        CS%inner_solver = INNER_CG
+      case ("MINRES")
+        CS%inner_solver = INNER_MINRES
+      case ("CR")
+        CS%inner_solver = INNER_CR
+    end select
+    call get_param(param_file, mdl, "CG_HALO_SHRINK", CS%cg_halo_shrink, &
+                "If true, CG uses halo-shrinking to defer pass_vector calls. "//&
+                "If false, uses a fixed CG_action range with one pass_vector(D) per iteration, "//&
+                "which may reduce total communication for typical halo widths.", &
+                default=.true.)
     call get_param(param_file, mdl, "CONJUGATE_GRADIENT_MAXIT", CS%cg_max_iterations, &
                 "max iteratiions in CG solver", default=2000)
     call get_param(param_file, mdl, "THRESH_FLOAT_COL_DEPTH", CS%thresh_float_col_depth, &
@@ -561,8 +692,19 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
                 units="m", default=1.e-3, scale=US%m_to_Z)
     call get_param(param_file, mdl, "NONLIN_SOLVE_ERR_MODE", CS%nonlin_solve_err_mode, &
                 "Choose whether nonlin error in vel solve is based on nonlinear "//&
-                "residual (1), relative change since last iteration (2), or change in norm (3)", default=3)
-
+                "Linf norm residual (1), Linf norm relative change since last iteration (2), "//&
+                "change in solution L2 norm (3), L2 norm residual (4), L2 backward norm (5)", default=3)
+    if (CS%nonlin_solve_err_mode /= 5) then
+      call get_param(param_file, mdl, "SSA_ADD_REL_RESID", CS%ssa_add_rel_resid, &
+                  "Nonlinear error in vel solve will also depend on "// &
+                  "L2 residual norm relative to RHS norm.", default=.false.)
+    else
+      CS%ssa_add_rel_resid = .false. !Avoids redundantly calculating err_mode 5 twice
+    endif
+    call get_param(param_file, mdl, "ICE_RR_NONLINEAR_TOLERANCE", CS%rr_nonlinear_tolerance, &
+              "if ssa_add_rel_resid, the additional nonlin tolerance "//&
+              "in the iterative velocity solve for the residual norm relative to RHS norm", &
+              units="nondim", default=1.e-4)
     call get_param(param_file, mdl, "SHELF_MOVING_FRONT", CS%moving_shelf_front, &
                  "Specify whether to advance shelf front (and calve).", &
                  default=.false.)
@@ -579,10 +721,17 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
                  " If true, the domain is meridionally reentrant.", &
                  default=.false.)
     call get_param(param_file, mdl, "ICE_VISCOSITY_COMPUTE", CS%ice_viscosity_compute, &
-                 "If MODEL, compute ice viscosity internally using 1 or 4 quadrature points,"//&
-                 "if OBS read from a file,"//&
+                 "If MODEL, compute ice viscosity internally using 1 or 4 quadrature points, "//&
+                 "if OBS read from a file, "//&
                  "if CONSTANT a constant value (for debugging).", &
                  default="MODEL")
+
+    call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
+    call get_param(param_file, mdl, "ICE_SHELF_TOP_SLOPE_BUG", CS%shelf_top_slope_bugs, &
+                 "If true, use directionally inconsistent estimates of the grid spacing when "//&
+                 "calculating the ice shelf surface slope, and underestimate slopes near the "//&
+                 "edge of the ice shelf by a factor of 2.", default=enable_bugs)
 
     if ((CS%visc_qps/=1) .and. (trim(CS%ice_viscosity_compute) /= "MODEL")) then
       call MOM_error(FATAL, "NUMBER_OF_ICE_VISCOSITY_QUADRATURE_POINTS must be 1 unless ICE_VISCOSITY_COMPUTE==MODEL.")
@@ -659,9 +808,10 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     endif
 
     allocate(CS%Phi(1:8,1:4,isd:ied,jsd:jed), source=0.0)
+    allocate(CS%Jac(1:4,isd:ied,jsd:jed), source=0.0)
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
-      call bilinear_shape_fn_grid(G, i, j, CS%Phi(:,:,i,j))
-    enddo; enddo
+      call bilinear_shape_fn_grid(G, i, j, CS%Phi(:,:,i,j), CS%Jac(:,i,j))
+    enddo ; enddo
 
     if (CS%GL_regularize) then
       allocate(CS%Phisub(2,2,CS%n_sub_regularize,CS%n_sub_regularize,2,2), source=0.0)
@@ -673,7 +823,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
       allocate(CS%PhiC(1:8,G%isc:G%iec,G%jsc:G%jec), source=0.0)
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
         call bilinear_shape_fn_grid_1qp(G, i, j, CS%PhiC(:,i,j))
-      enddo; enddo
+      enddo ; enddo
     endif
 
     CS%elapsed_velocity_time = 0.0
@@ -686,7 +836,6 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
 
     call pass_var(CS%OD_av,G%domain, complete=.false.)
     call pass_var(CS%ground_frac, G%domain, complete=.false.)
-    call pass_var(CS%basal_traction, G%domain, complete=.false.)
     call pass_var(CS%AGlen_visc, G%domain, complete=.false.)
     call pass_var(CS%bed_elev, G%domain, complete=.false.)
     call pass_var(CS%C_basal_friction, G%domain, complete=.false.)
@@ -822,11 +971,11 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
        'y-driving stress of ice', 'kPa', conversion=1.e-3*US%RLZ_T2_to_Pa)
     CS%id_taud_shelf = register_diag_field('ice_shelf_model','taud_shelf',CS%diag%axesB1, Time, &
        'magnitude of driving stress of ice', 'kPa', conversion=1.e-3*US%RLZ_T2_to_Pa)
-    CS%id_sx_shelf = register_diag_field('ice_shelf_model','sx_shelf',CS%diag%axesB1, Time, &
+    CS%id_sx_shelf = register_diag_field('ice_shelf_model', 'sx_shelf', CS%diag%axesT1, Time, &
        'x-surface slope of ice', 'none')
-    CS%id_sy_shelf = register_diag_field('ice_shelf_model','sy_shelf',CS%diag%axesB1, Time, &
+    CS%id_sy_shelf = register_diag_field('ice_shelf_model', 'sy_shelf', CS%diag%axesT1, Time, &
        'y-surface slope of ice', 'none')
-    CS%id_surf_slope_mag_shelf = register_diag_field('ice_shelf_model','surf_slope_mag_shelf', CS%diag%axesB1, Time, &
+    CS%id_surf_slope_mag_shelf = register_diag_field('ice_shelf_model', 'surf_slope_mag_shelf', CS%diag%axesT1, Time, &
        'magnitude of surface slope of ice', 'none')
     CS%id_u_mask = register_diag_field('ice_shelf_model','u_mask',CS%diag%axesB1, Time, &
        'mask for u-nodes', 'none')
@@ -876,8 +1025,6 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     !IS_dynamics_post_data is called before update_ice_shelf
     if (CS%id_taudx_shelf>0 .or. CS%id_taudy_shelf>0) &
       call calc_shelf_driving_stress(CS, ISS, G, US, CS%taudx_shelf, CS%taudy_shelf, CS%OD_av)
-    if (CS%id_taub>0) &
-      call calc_shelf_taub(CS, ISS, G, US, CS%u_shelf, CS%v_shelf)
     if (CS%id_visc_shelf>0) &
       call calc_shelf_visc(CS, ISS, G, US, CS%u_shelf, CS%v_shelf)
   endif
@@ -898,17 +1045,15 @@ subroutine initialize_diagnostic_fields(CS, ISS, G, US, Time)
   type(time_type),        intent(in)    :: Time !< The current model time
 
   integer         :: i, j, iters, isd, ied, jsd, jed
-  real            :: rhoi_rhow
   real            :: OD  ! Depth of open water below the ice shelf [Z ~> m]
   type(time_type) :: dummy_time
 !
-  rhoi_rhow = CS%density_ice / CS%density_ocean_avg
   dummy_time = set_time(0,0)
   isd=G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   do j=jsd,jed
     do i=isd,ied
-      OD = CS%bed_elev(i,j) - rhoi_rhow * max(ISS%h_shelf(i,j),CS%min_h_shelf)
+      OD = CS%bed_elev(i,j) - CS%rhoi_rhow * max(ISS%h_shelf(i,j),CS%min_h_shelf)
       if (OD >= 0) then
     ! ice thickness does not take up whole ocean column -> floating
         CS%OD_av(i,j) = OD
@@ -1019,13 +1164,10 @@ subroutine volume_above_floatation(CS, G, ISS, vaf, hemisphere)
   real, dimension(SZI_(G),SZJ_(G))  :: vaf_cell !< cell-wise volume above floatation [Z L2 ~> m3]
   integer, dimension(SZI_(G),SZJ_(G))  :: mask ! a mask for active cells depending on hemisphere indicated
   integer :: is,ie,js,je,i,j
-  real :: rhoi_rhow, rhow_rhoi
 
   if (CS%GL_couple) &
     call MOM_error(FATAL, "MOM_ice_shelf_dyn, volume above floatation calculation assumes GL_couple=.FALSE..")
 
-  rhoi_rhow = CS%density_ice / CS%density_ocean_avg
-  rhow_rhoi = CS%density_ocean_avg / CS%density_ice
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   if (present(hemisphere)) then
@@ -1036,29 +1178,29 @@ subroutine volume_above_floatation(CS, G, ISS, vaf, hemisphere)
 
   mask(:,:)=0
   if (IS_ID==0) then     !Antarctica (S. Hemisphere) only
-    do j = js,je; do i = is,ie
+    do j = js,je ; do i = is,ie
       if (ISS%hmask(i,j)>0 .and. G%geoLatT(i,j)<=0.0) mask(i,j)=1
-    enddo; enddo
+    enddo ; enddo
   elseif (IS_ID==1) then !Greenland (N. Hemisphere) only
-    do j = js,je; do i = is,ie
+    do j = js,je ; do i = is,ie
       if (ISS%hmask(i,j)>0 .and. G%geoLatT(i,j)>0.0)  mask(i,j)=1
-    enddo; enddo
+    enddo ; enddo
   else                   !All ice sheets
     mask(is:ie,js:je)=ISS%hmask(is:ie,js:je)
   endif
 
   vaf_cell(:,:)=0.0
-  do j = js,je; do i = is,ie
+  do j = js,je ; do i = is,ie
     if (mask(i,j)>0) then
       if (CS%bed_elev(i,j) <= 0) then
         !grounded above sea level
         vaf_cell(i,j) = ISS%h_shelf(i,j) * ISS%area_shelf_h(i,j)
       else
         !grounded if vaf_cell(i,j) > 0
-        vaf_cell(i,j) = max(ISS%h_shelf(i,j) - rhow_rhoi * CS%bed_elev(i,j), 0.0) * ISS%area_shelf_h(i,j)
+        vaf_cell(i,j) = max(ISS%h_shelf(i,j) - CS%rhow_rhoi * CS%bed_elev(i,j), 0.0) * ISS%area_shelf_h(i,j)
       endif
     endif
-  enddo; enddo
+  enddo ; enddo
 
   vaf = reproducing_sum(vaf_cell, unscale=G%US%Z_to_m*G%US%L_to_m**2)
 end subroutine volume_above_floatation
@@ -1069,10 +1211,10 @@ subroutine masked_var_grounded(G,CS,var,varout)
   type(ice_shelf_dyn_CS), intent(in) :: CS !< The ice shelf dynamics control structure
   real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: var !< variable in
   real, dimension(SZI_(G),SZJ_(G)), intent(out)  :: varout !<variable out
-  integer :: i,j
-  do j = G%jsc,G%jec; do i = G%isc,G%iec
+  integer :: i, j
+  do j = G%jsc,G%jec ; do i = G%isc,G%iec
       varout(i,j) = var(i,j) * CS%ground_frac(i,j)
-  enddo; enddo
+  enddo ; enddo
 end subroutine masked_var_grounded
 
 !> Ice shelf dynamics post_data calls
@@ -1087,11 +1229,12 @@ subroutine IS_dynamics_post_data(time_step, Time, CS, ISS, G)
   real, dimension(SZDI_(G),SZDJ_(G))  :: ice_visc ! area-averaged vertically integrated ice viscosity
                                                   !! [R L2 Z T-1 ~> Pa s m]
   real, dimension(SZDI_(G),SZDJ_(G))  :: basal_tr ! area-averaged taub_beta field related to basal traction,
-                                                  !! [R L1 T-1 ~> Pa s m-1]
-  real, dimension(SZDIB_(G),SZDJB_(G)) :: surf_slope ! the surface slope of the ice shelf/sheet [nondim]
+                                                  !! [R L T-1 ~> Pa s m-1]
+  real, dimension(SZDI_(G),SZDJ_(G))   :: surf_slope ! the surface slope of the ice shelf/sheet [nondim]
   real, dimension(SZDIB_(G),SZDJB_(G)) :: ice_speed ! ice sheet flow speed [L T-1 ~> m s-1]
 
-  integer :: i,j
+  integer :: i, j
+
     call enable_averages(time_step, Time, CS%diag)
     if (CS%id_col_thick > 0) call post_data(CS%id_col_thick, CS%OD_av, CS%diag)
     if (CS%id_u_shelf > 0) call post_data(CS%id_u_shelf, CS%u_shelf, CS%diag)
@@ -1124,8 +1267,8 @@ subroutine IS_dynamics_post_data(time_step, Time, CS, ISS, G)
     if (CS%id_sx_shelf > 0) call post_data(CS%id_sx_shelf, CS%sx_shelf, CS%diag)
     if (CS%id_sy_shelf > 0) call post_data(CS%id_sy_shelf, CS%sy_shelf, CS%diag)
     if (CS%id_surf_slope_mag_shelf > 0) then
-      do J=G%jscB,G%jecB ; do I=G%iscB,G%iecB
-        surf_slope(I,J) = sqrt((CS%sx_shelf(I,J)**2)+(CS%sy_shelf(I,J)**2))
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        surf_slope(i,j) = sqrt((CS%sx_shelf(i,j)**2)+(CS%sy_shelf(i,j)**2))
       enddo ; enddo
       call post_data(CS%id_surf_slope_mag_shelf, surf_slope, CS%diag)
     endif
@@ -1137,9 +1280,7 @@ subroutine IS_dynamics_post_data(time_step, Time, CS, ISS, G)
       call post_data(CS%id_visc_shelf, ice_visc, CS%diag)
     endif
     if (CS%id_taub > 0) then
-      do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        basal_tr(i,j) = CS%basal_traction(i,j)*G%IareaT(i,j)
-      enddo ; enddo
+      call calc_shelf_taub(CS, ISS, G, basal_tr)
       call post_data(CS%id_taub, basal_tr, CS%diag)
     endif
     if (CS%id_u_mask > 0) call post_data(CS%id_u_mask, CS%umask, CS%diag)
@@ -1201,6 +1342,8 @@ subroutine write_ice_shelf_energy(CS, G, US, mass, area, day, time_step)
   character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
   integer :: start_of_day, num_days
   real    :: reday  ! Time in units given by CS%Timeunit, but often [days]
+  logical :: is_open
+    ! True if CS%fileenergy_ascii is open
 
   ! write_energy_time is the next integral multiple of energysavedays.
   if (present(time_step)) then
@@ -1251,7 +1394,7 @@ subroutine write_ice_shelf_energy(CS, G, US, mass, area, day, time_step)
     tmp1(i,j) = 0.03125 * (mass(i,j) * area(i,j)) * &
       ((((CS%u_shelf(I-1,J-1)+CS%u_shelf(I,J))+(CS%u_shelf(I,J-1)+CS%u_shelf(I-1,J)))**2) + &
        (((CS%v_shelf(I-1,J-1)+CS%v_shelf(I,J))+(CS%v_shelf(I,J-1)+CS%v_shelf(I-1,J)))**2))
-  enddo; enddo
+  enddo ; enddo
 
   KE_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, unscale=(US%RZL2_to_kg*US%L_T_to_m_s**2))
 
@@ -1259,13 +1402,17 @@ subroutine write_ice_shelf_energy(CS, G, US, mass, area, day, time_step)
   tmp1(:,:) = 0.0
   do j=js,je ; do i=is,ie
     tmp1(i,j) = mass(i,j) * area(i,j)
-  enddo; enddo
+  enddo ; enddo
 
   mass_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, unscale=US%RZL2_to_kg)
 
   if (is_root_pe()) then  ! Only the root PE actually writes anything.
     if (day > CS%Start_time) then
-      call open_ASCII_file(CS%IS_fileenergy_ascii, trim(CS%IS_energyfile), action=APPEND_FILE)
+      is_open = .false.
+      if (CS%IS_fileenergy_ascii /= -1) &
+        inquire(unit=CS%IS_fileenergy_ascii, opened=is_open)
+      if (.not. is_open) &
+        call open_ASCII_file(CS%IS_fileenergy_ascii, trim(CS%IS_energyfile), action=APPEND_FILE)
     else
       call open_ASCII_file(CS%IS_fileenergy_ascii, trim(CS%IS_energyfile), action=WRITEONLY_FILE)
       if (abs(CS%timeunit - 86400.0) < 1.0) then
@@ -1395,23 +1542,23 @@ subroutine ice_shelf_advect(CS, ISS, G, time_step, Time, calve_ice_shelf_bergs)
     call shelf_advance_front(CS, ISS, G, ISS%hmask, uh_ice, vh_ice)
     !add mass of the partially-filled cells to calving field, which is used to initialize icebergs
     !Then, remove the partially-filled cells from the ice shelf
-    ISS%calving(:,:)=0.0
-    ISS%calving_hflx(:,:)=0.0
-    do j=jsc,jec; do i=isc,iec
+    ISS%calving(:,:) = 0.0
+    ISS%calving_hflx(:,:) = 0.0
+    do j=jsc,jec ; do i=isc,iec
       if (ISS%hmask(i,j)==2) then
         ISS%calving(i,j) = (ISS%h_shelf(i,j) * CS%density_ice) * &
                            (ISS%area_shelf_h(i,j) * G%IareaT(i,j)) / time_step
         ISS%calving_hflx(i,j) = (CS%Cp_ice * CS%t_shelf(i,j)) * &
                                 ((ISS%h_shelf(i,j) * CS%density_ice) * &
                                 (ISS%area_shelf_h(i,j) * G%IareaT(i,j)))
-        ISS%h_shelf(i,j) = 0.0; ISS%area_shelf_h(i,j) = 0.0; ISS%hmask(i,j) = 0.0
+        ISS%h_shelf(i,j) = 0.0 ; ISS%area_shelf_h(i,j) = 0.0 ; ISS%hmask(i,j) = 0.0
       endif
-    enddo; enddo
+    enddo ; enddo
   endif
 
-  do j=jsc,jec; do i=isc,iec
+  do j=jsc,jec ; do i=isc,iec
     ISS%mass_shelf(i,j) = ISS%h_shelf(i,j) * CS%density_ice
-  enddo; enddo
+  enddo ; enddo
 
   call pass_var(ISS%mass_shelf, G%domain, complete=.false.)
   call pass_var(ISS%h_shelf, G%domain, complete=.false.)
@@ -1449,15 +1596,22 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
   real, dimension(SZDI_(G),SZDJ_(G)) :: float_cond ! If GL_regularize=true, indicates cells containing
                                                 ! the grounding line (float_cond=1) or not (float_cond=0)
   real, dimension(SZDIB_(G),SZDJB_(G)) :: Normvec  ! Velocities used for convergence [L2 T-2 ~> m2 s-2]
+  logical :: converged ! Indicates nonlinear convergence
+  logical :: calc_Au_for_convergence ! Used for convergence criteria than need a CG_action
   character(len=160) :: mesg  ! The text of an error message
   integer :: conv_flag, i, j, k,l, iter, nodefloat
   integer :: Isdq, Iedq, Jsdq, Jedq, isd, ied, jsd, jed
   integer :: Iscq, Iecq, Jscq, Jecq, isc, iec, jsc, jec
   real    :: err_max, err_tempu, err_tempv, err_init ! Errors in [R L3 Z T-2 ~> kg m s-2] or [L T-1 ~> m s-1]
+  real    :: norm_tau, err_rr ! Errors in [R L3 Z T-2 ~> kg m s-2] for relative residual
+  real    :: ew_resid       = 0.0  ! L2 norm of stress residual ||A(u)u - tau|| for Eisenstat-Walker [kg m s-2]
+  real    :: ew_prev_resid  = 0.0  ! Previous ew_resid; 0.0 flags first Newton call [kg m s-2]
+  real    :: ew_eta         = 0.0  ! Current EW inner tolerance [nondim]
+  real    :: ew_eta_prev    = 0.0  ! Previous EW inner tolerance for Chacon 2008 sharp-decrease safeguard [nondim]
+  real    :: ew_stol                ! Temporary safeguard tolerance [nondim]
   real    :: max_vel  ! The maximum velocity magnitude [L T-1 ~> m s-1]
   real    :: tempu, tempv   ! Temporary variables with velocity magnitudes [L T-1 ~> m s-1]
   real    :: Norm, PrevNorm ! Velocities used to assess convergence [L T-1 ~> m s-1]
-  real    :: rhoi_rhow ! The density of ice divided by a typical water density [nondim]
   integer :: Is_sum, Js_sum, Ie_sum, Je_sum ! Loop bounds for global sums or arrays starting at 1.
   integer :: Iscq_sv, Jscq_sv ! Starting loop bound for sum_vec
 
@@ -1465,100 +1619,10 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
   Iscq = G%IscB ; Iecq = G%IecB ; Jscq = G%JscB ; Jecq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
-  rhoi_rhow = CS%density_ice / CS%density_ocean_avg
 
-  taudx(:,:) = 0.0 ; taudy(:,:) = 0.0
-  Au(:,:) = 0.0 ; Av(:,:) = 0.0
-
-  ! need to make these conditional on GL interpolation
-  CS%float_cond(:,:) = 0.0 ; H_node(:,:) = 0.0
-  !CS%ground_frac(:,:) = 0.0
-
-  if (.not. CS%GL_couple) then
-    do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      if (rhoi_rhow * max(ISS%h_shelf(i,j),CS%min_h_shelf) - CS%bed_elev(i,j) > 0) then
-        CS%ground_frac(i,j) = 1.0
-        CS%OD_av(i,j) =0.0
-      endif
-    enddo ; enddo
-  endif
-
-  call calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, CS%OD_av)
-  call pass_vector(taudx, taudy, G%domain, TO_ALL, BGRID_NE)
-  ! This is to determine which cells contain the grounding line, the criterion being that the cell
-  ! is ice-covered, with some nodes floating and some grounded flotation condition is estimated by
-  ! assuming topography is cellwise constant and H is bilinear in a cell; floating where
-  ! rho_i/rho_w * H_node - D is negative
-
-  ! need to make this conditional on GL interp
-
-  if (CS%GL_regularize) then
-
-    call interpolate_H_to_B(G, ISS%h_shelf, ISS%hmask, H_node, CS%min_h_shelf)
-
-    do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      nodefloat = 0
-
-      do l=0,1 ; do k=0,1
-        if ((ISS%hmask(i,j) == 1 .or. ISS%hmask(i,j)==3) .and. &
-            (rhoi_rhow * H_node(i-1+k,j-1+l) - CS%bed_elev(i,j) <= 0)) then
-          nodefloat = nodefloat + 1
-        endif
-      enddo ; enddo
-      if ((nodefloat > 0) .and. (nodefloat < 4)) then
-        CS%float_cond(i,j) = 1.0
-        CS%ground_frac(i,j) = 1.0
-      endif
-    enddo ; enddo
-
-    call pass_var(CS%float_cond, G%Domain, complete=.false.)
-    call pass_var(CS%ground_frac, G%domain, complete=.false.)
-
-  endif
-
-  call calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
-  call pass_var(CS%basal_traction, G%domain, complete=.true.)
-  call calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
-  call pass_var(CS%ice_visc, G%domain)
-
-  ! This makes sure basal stress is only applied when it is supposed to be
-  if (CS%GL_regularize) then
-    do j=G%jsd,G%jed ; do i=G%isd,G%ied
-      if (CS%ground_frac(i,j)/=1.0) CS%basal_traction(i,j) = 0.0
-    enddo ; enddo
-  else
-    do j=G%jsd,G%jed ; do i=G%isd,G%ied
-      CS%basal_traction(i,j) = CS%basal_traction(i,j) * CS%ground_frac(i,j)
-    enddo ; enddo
-  endif
-
-  if (CS%nonlin_solve_err_mode == 1) then
-
-    Au(:,:) = 0.0 ; Av(:,:) = 0.0
-
-    call CG_action(CS, Au, Av, u_shlf, v_shlf, CS%Phi, CS%Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
-                   CS%ice_visc, CS%float_cond, CS%bed_elev, CS%basal_traction, &
-                   G, US, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi_rhow)
-    call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE)
-
-    err_init = 0 ; err_tempu = 0 ; err_tempv = 0
-    do J=G%JscB,G%JecB ; do I=G%IscB,G%IecB
-      if (CS%umask(I,J) == 1) then
-        err_tempu = ABS(Au(I,J) - taudx(I,J))
-        if (err_tempu >= err_init) err_init = err_tempu
-      endif
-      if (CS%vmask(I,J) == 1) then
-        err_tempv = ABS(Av(I,J) - taudy(I,J))
-        if (err_tempv >= err_init) err_init = err_tempv
-      endif
-    enddo ; enddo
-
-    call max_across_PEs(err_init)
-  elseif (CS%nonlin_solve_err_mode == 3) then
-    Normvec(:,:) = 0.0
-
-    ! Determine the loop limits for sums, bearing in mind that the arrays will be starting at 1.
-    ! Includes the edge of the tile is at the western/southern bdry (if symmetric)
+  ! Determine the loop limits for sums, bearing in mind that the arrays will be starting at 1.
+  ! Includes the edge of the tile is at the western/southern bdry (if symmetric)
+  if (CS%nonlin_solve_err_mode >= 3 .or. CS%ssa_add_rel_resid) then
     if ((isc+G%idg_offset==G%isg) .and. (.not. CS%reentrant_x)) then
       Is_sum = Iscq + (1-Isdq) ; Iscq_sv = Iscq
     else
@@ -1570,20 +1634,142 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
       Js_sum = jsc + (1-Jsdq) ; Jscq_sv = jsc
     endif
     Ie_sum = Iecq + (1-Isdq) ; Je_sum = Jecq + (1-Jsdq)
+  endif
 
+  taudx(:,:) = 0.0 ; taudy(:,:) = 0.0
+  Au(:,:) = 0.0 ; Av(:,:) = 0.0
+
+  ! need to make these conditional on GL interpolation
+  CS%float_cond(:,:) = 0.0 ; H_node(:,:) = 0.0
+  !CS%ground_frac(:,:) = 0.0
+
+  if (.not. CS%GL_couple) then
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      if (CS%rhoi_rhow * max(ISS%h_shelf(i,j),CS%min_h_shelf) - CS%bed_elev(i,j) > 0) then
+        CS%ground_frac(i,j) = 1.0
+        CS%OD_av(i,j) =0.0
+      endif
+    enddo ; enddo
+  endif
+
+  ! Warning: This turns off Picard entirely and may not converge.
+  if (CS%newton_after_tolerance<=0.0) CS%doing_newton=.true.
+
+  ! Calculate RHS
+  call calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, CS%OD_av)
+  call pass_vector(taudx, taudy, G%domain, TO_ALL, BGRID_NE)
+
+  ! This is to determine which cells contain the grounding line, the criterion being that the cell
+  ! is ice-covered, with some nodes floating and some grounded flotation condition is estimated by
+  ! assuming topography is cellwise constant and H is bilinear in a cell; floating where
+  ! rho_i/rho_w * H_node - D is negative
+  ! need to make this conditional on GL interp
+  if (CS%GL_regularize) then
+
+    call interpolate_H_to_B(G, ISS%h_shelf, ISS%hmask, H_node, CS%min_h_shelf)
+
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      nodefloat = 0
+
+      do l=0,1 ; do k=0,1
+        if ((ISS%hmask(i,j) == 1 .or. ISS%hmask(i,j)==3) .and. &
+            (CS%rhoi_rhow * H_node(i-1+k,j-1+l) - CS%bed_elev(i,j) <= 0)) then
+          nodefloat = nodefloat + 1
+        endif
+      enddo ; enddo
+      if ((nodefloat > 0) .and. (nodefloat < 4)) then
+        CS%float_cond(i,j) = 1.0
+        CS%ground_frac(i,j) = 1.0
+      endif
+    enddo ; enddo
+
+    call pass_var(CS%float_cond, G%Domain, complete=.false.)
+    call pass_var(CS%ground_frac, G%domain, complete=.true.)
+
+  endif
+
+  ! Calculate basal drag constants and initial velocity
+  call calc_shelf_basal_prefactors(CS, ISS, G, US)
+  call calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
+  if (CS%doing_newton) then
+    ! halo pass for ice_visc, newton_str_sh, newton_visc_factor, newton_str_x
+    call do_group_pass(CS%pass_visc_and_newton, G%domain)
+  else
+    call pass_var(CS%ice_visc, G%domain, complete=.true.)
+  endif
+
+  ! Calculate err_init, the denominator for some convergence criteria
+  if (CS%nonlin_solve_err_mode == 1 .or. CS%nonlin_solve_err_mode == 4) then
+    Au(:,:) = 0.0 ; Av(:,:) = 0.0
+    call CG_action(CS, Au, Av, u_shlf, v_shlf, CS%Phi, CS%Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
+                   CS%ice_visc, CS%float_cond, CS%bed_elev, u_shlf, v_shlf, &
+                   G, US, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, CS%rhoi_rhow, use_newton_in=.false.)
+    call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE) ! TODO: is this needed?
+  endif
+
+  if (CS%nonlin_solve_err_mode == 1) then
+    err_init = 0 ; err_tempu = 0 ; err_tempv = 0
+    do J=G%JscB,G%JecB ; do I=G%IscB,G%IecB
+      if (CS%umask(I,J) == 1) then
+        err_tempu = ABS(Au(I,J) - taudx(I,J))
+        if (err_tempu >= err_init) err_init = err_tempu
+      endif
+      if (CS%vmask(I,J) == 1) then
+        err_tempv = ABS(Av(I,J) - taudy(I,J))
+        if (err_tempv >= err_init) err_init = err_tempv
+      endif
+    enddo ; enddo
+    call max_across_PEs(err_init)
+
+  elseif (CS%nonlin_solve_err_mode == 3) then
+    Normvec(:,:) = 0.0
     do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
-      if (CS%umask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + u_shlf(I,J)**2
-      if (CS%vmask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + v_shlf(I,J)**2
+      if (CS%umask(I,J) == 1) Normvec(I,J) = (u_shlf(I,J)**2)
+      if (CS%vmask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + (v_shlf(I,J)**2)
     enddo ; enddo
     Norm = sqrt( reproducing_sum( Normvec, Is_sum, Ie_sum, Js_sum, Je_sum, unscale=US%L_T_to_m_s**2 ) )
+
+  elseif (CS%nonlin_solve_err_mode == 4) then
+    Normvec(:,:) = 0.0
+    do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
+      if (CS%umask(I,J) == 1) Normvec(I,J) = ((Au(I,J) - taudx(I,J))**2)
+      if (CS%vmask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + ((Av(I,J) - taudy(I,J))**2)
+    enddo ; enddo
+    err_init = sqrt(reproducing_sum(Normvec, Is_sum, Ie_sum, Js_sum, Je_sum, &
+                    unscale=((US%RZ_to_kg_m2*US%L_to_m)*US%L_T_to_m_s**2)**2))
+  endif
+
+  if (CS%nonlin_solve_err_mode == 5 .or. CS%ssa_add_rel_resid) then
+    Normvec(:,:) = 0.0
+    do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
+      if (CS%umask(I,J) == 1) Normvec(I,J) = (taudx(I,J)**2)
+      if (CS%vmask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + (taudy(I,J)**2)
+    enddo ; enddo
+    if (CS%nonlin_solve_err_mode == 5) then
+      err_init = sqrt(reproducing_sum(Normvec, Is_sum, Ie_sum, Js_sum, Je_sum, &
+                      unscale=((US%RZ_to_kg_m2*US%L_to_m)*US%L_T_to_m_s**2)**2))
+    else
+      norm_tau = sqrt(reproducing_sum(Normvec, Is_sum, Ie_sum, Js_sum, Je_sum, &
+                      unscale=((US%RZ_to_kg_m2*US%L_to_m)*US%L_T_to_m_s**2)**2))
+    endif
   endif
 
   u_last(:,:) = u_shlf(:,:) ; v_last(:,:) = v_shlf(:,:)
+  if (CS%doing_newton) then
+    CS%cg_tol_current = CS%cg_newton_tolerance
+  else
+    CS%cg_tol_current = CS%cg_tolerance
+  endif
+  ew_prev_resid  = 0.0
+  converged = .false.
+  calc_Au_for_convergence = (CS%nonlin_solve_err_mode == 1 .or. CS%nonlin_solve_err_mode == 4 .or. &
+                             CS%nonlin_solve_err_mode == 5 .or. CS%ssa_add_rel_resid)
 
   !! begin loop
 
   do iter=1,50
 
+    ! The linear solve
     call ice_shelf_solve_inner(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, H_node, CS%float_cond, &
                                ISS%hmask, conv_flag, iters, time, CS%Phi, CS%Phisub)
 
@@ -1595,48 +1781,58 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
     write(mesg,*) "ice_shelf_solve_outer: linear solve done in ",iters," iterations"
     call MOM_mesg(mesg, 5)
 
-    call calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
-    call pass_var(CS%basal_traction, G%domain, complete=.true.)
+    ! Update viscosity
     call calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
-    call pass_var(CS%ice_visc, G%domain)
 
-    ! makes sure basal stress is only applied when it is supposed to be
-    if (CS%GL_regularize) then
-      do j=G%jsd,G%jed ; do i=G%isd,G%ied
-        if (CS%ground_frac(i,j)/=1.0) CS%basal_traction(i,j) = 0.0
-      enddo ; enddo
+    if (CS%doing_newton) then
+      ! halo pass for ice_visc, newton_str_sh, newton_visc_factor, newton_str_x
+      call do_group_pass(CS%pass_visc_and_newton, G%domain)
     else
-      do j=G%jsd,G%jed ; do i=G%isd,G%ied
-        CS%basal_traction(i,j) = CS%basal_traction(i,j) * CS%ground_frac(i,j)
-      enddo ; enddo
+      call pass_var(CS%ice_visc, G%domain, complete=.true.)
     endif
 
-    if (CS%nonlin_solve_err_mode == 1) then
-
+    ! Calculate convergence norms
+    if (calc_Au_for_convergence) then
       Au(:,:) = 0 ; Av(:,:) = 0
+      call CG_action(CS, Au, Av, u_shlf, v_shlf, CS%Phi, CS%Phisub, CS%umask, CS%vmask, ISS%hmask, &
+                     H_node, CS%ice_visc, CS%float_cond, CS%bed_elev, u_shlf, v_shlf, &
+                     G, US, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, CS%rhoi_rhow, use_newton_in=.false.)
 
-      call CG_action(CS, Au, Av, u_shlf, v_shlf, CS%Phi, CS%Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
-                     CS%ice_visc, CS%float_cond, CS%bed_elev, CS%basal_traction, &
-                     G, US, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi_rhow)
+      if (CS%nonlin_solve_err_mode == 1) then
+        err_max = 0
 
-      call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE)
+        do J=G%jscB,G%jecB ; do I=G%iscB,G%iecB
+          if (CS%umask(I,J) == 1) then
+            err_tempu = ABS(Au(I,J) - taudx(I,J))
+            if (err_tempu >= err_max) err_max = err_tempu
+          endif
+          if (CS%vmask(I,J) == 1) then
+            err_tempv = ABS(Av(I,J) - taudy(I,J))
+            if (err_tempv >= err_max) err_max = err_tempv
+          endif
+        enddo ; enddo
 
-      err_max = 0
+        call max_across_PEs(err_max)
+      endif
 
-      do J=G%jscB,G%jecB ; do I=G%iscB,G%iecB
-        if (CS%umask(I,J) == 1) then
-          err_tempu = ABS(Au(I,J) - taudx(I,J))
-          if (err_tempu >= err_max) err_max = err_tempu
+      if (CS%nonlin_solve_err_mode == 4 .or. CS%nonlin_solve_err_mode == 5 .or. CS%ssa_add_rel_resid) then
+        Normvec(:,:) = 0.0
+        do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
+          if (CS%umask(I,J) == 1) Normvec(I,J) = ((Au(I,J) - taudx(I,J))**2)
+          if (CS%vmask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + ((Av(I,J) - taudy(I,J))**2)
+        enddo ; enddo
+        if (CS%nonlin_solve_err_mode == 4 .or. CS%nonlin_solve_err_mode == 5) then
+          err_max = sqrt(reproducing_sum(Normvec, Is_sum, Ie_sum, Js_sum, Je_sum, &
+            unscale=((US%RZ_to_kg_m2*US%L_to_m)*US%L_T_to_m_s**2)**2))
+          if (CS%ssa_add_rel_resid) err_rr = err_max
+        elseif (CS%ssa_add_rel_resid) then
+          err_rr = sqrt(reproducing_sum(Normvec, Is_sum, Ie_sum, Js_sum, Je_sum, &
+            unscale=((US%RZ_to_kg_m2*US%L_to_m)*US%L_T_to_m_s**2)**2))
         endif
-        if (CS%vmask(I,J) == 1) then
-          err_tempv = ABS(Av(I,J) - taudy(I,J))
-          if (err_tempv >= err_max) err_max = err_tempv
-        endif
-      enddo ; enddo
+      endif
+    endif
 
-      call max_across_PEs(err_max)
-
-    elseif (CS%nonlin_solve_err_mode == 2) then
+    if (CS%nonlin_solve_err_mode == 2) then
 
       err_max=0. ;  max_vel = 0 ; tempu = 0 ; tempv = 0 ; err_tempu = 0
       do J=G%jscB,G%jecB ; do I=G%iscB,G%iecB
@@ -1665,34 +1861,133 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
     elseif (CS%nonlin_solve_err_mode == 3) then
       PrevNorm = Norm ; Norm = 0.0 ; Normvec=0.0
       do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
-        if (CS%umask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + u_shlf(I,J)**2
-        if (CS%vmask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + v_shlf(I,J)**2
-      enddo; enddo
+        if (CS%umask(I,J) == 1) Normvec(I,J) = (u_shlf(I,J)**2)
+        if (CS%vmask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + (v_shlf(I,J)**2)
+      enddo ; enddo
       Norm = sqrt( reproducing_sum( Normvec, Is_sum, Ie_sum, Js_sum, Je_sum, unscale=US%L_T_to_m_s**2 ) )
       err_max = 2.*abs(Norm-PrevNorm) ; err_init = Norm+PrevNorm
     endif
 
-    write(mesg,*) "ice_shelf_solve_outer: nonlinear fractional residual = ", err_max/err_init
-    call MOM_mesg(mesg, 5)
-
+    !Test convergence
     if (err_max <= CS%nonlinear_tolerance * err_init) then
-      exit
+      if (CS%ssa_add_rel_resid) then
+        if (err_rr <= CS%rr_nonlinear_tolerance * norm_tau) converged = .true.
+      else
+        converged = .true.
+      endif
     endif
 
+    if (converged) then
+      exit
+    else
+      write(mesg,*) "ice_shelf_solve_outer: nonlinear fractional residual = ", err_max/err_init
+      call MOM_mesg(mesg, 5)
+
+      if (CS%ssa_add_rel_resid) then
+        write(mesg,*) "ice_shelf_solve_outer: nonlinear relative stress residual = ", err_rr/norm_tau
+        call MOM_mesg(mesg, 5)
+      endif
+
+      ! Activate Newton
+      if (err_max <= CS%newton_after_tolerance * err_init .and. .not. CS%doing_newton) then
+        CS%doing_newton = .true.
+        write(mesg,*) "ice_shelf_solve_outer: switching to Newton iterations at iter = ", iter
+        call MOM_mesg(mesg, 7)
+        ! halo pass for newton_str_sh, newton_visc_factor, newton_str_x
+        call do_group_pass(CS%pass_newton, G%domain)
+        CS%cg_tol_current = CS%cg_newton_tolerance
+      endif
+
+      ! Inexact Newton: Adapt inner solver tolerance to prevent oversolving
+      ! Based on Eisenstat-Walker Choice II (Eisenstat & Walker 1994): η_k = γ*(||F_k||/||F_{k-1}||)^α
+      ! with γ=0.9, α=2 as default.  Uses the L2 norm of the nonlinear stress residual ||Au - tau||_2,
+      ! consistent with the inner solver's convergence check (sv3dsums(3)).
+      ! The first Newton step uses the standard cg_tolerance.
+      if (CS%doing_newton .and. CS%newton_adapt_cg_tol) then
+        !calculate residual needed for EW; some convergence criteria already did this
+        if (CS%nonlin_solve_err_mode >= 4) then
+          ew_resid=err_max
+        elseif (CS%ssa_add_rel_resid) then
+          ew_resid=err_rr
+        else
+          if (.not. calc_Au_for_convergence) then
+            Au(:,:) = 0 ; Av(:,:) = 0
+            call CG_action(CS, Au, Av, u_shlf, v_shlf, CS%Phi, CS%Phisub, CS%umask, CS%vmask, ISS%hmask, &
+                           H_node, CS%ice_visc, CS%float_cond, CS%bed_elev, u_shlf, v_shlf, &
+                           G, US, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, CS%rhoi_rhow, use_newton_in=.false.)
+          endif
+          Normvec(:,:) = 0.0
+          do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
+            if (CS%umask(I,J) == 1) Normvec(I,J) = ((Au(I,J) - taudx(I,J))**2)
+            if (CS%vmask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + ((Av(I,J) - taudy(I,J))**2)
+          enddo ; enddo
+          ew_resid = sqrt(reproducing_sum(Normvec, Is_sum, Ie_sum, Js_sum, Je_sum, &
+            unscale=((US%RZ_to_kg_m2*US%L_to_m)*US%L_T_to_m_s**2)**2))
+        endif
+
+        if (ew_prev_resid == 0.0) then
+          ! First Newton iteration: seed residuals; use initial newton cg_tolerance this step
+          ew_prev_resid  = ew_resid
+          CS%cg_tol_current = CS%cg_newton_tolerance
+          ew_eta_prev = CS%cg_tol_current
+        else
+          ! Safeguarding and oversolving adjustments:
+          ! Eisenstat-Walker Choice II safeguard base formula
+          ew_eta = CS%ew_gamma * (ew_resid / ew_prev_resid)**CS%ew_alpha
+          ew_stol = CS%ew_gamma * ew_eta_prev**CS%ew_alpha
+          !Safeguards to sharp decrease/oversolving:
+          if (CS%ew_safety==1) then
+            ! Eisenstat-Walker Choice II safeguard:
+            write(mesg,*) "ice_shelf_solve_outer: ew_stol = ", ew_stol
+            call MOM_mesg(mesg, 8)
+            if (ew_stol > CS%ew_1_thres) ew_eta = max(ew_eta, ew_stol)
+          elseif (CS%ew_safety==2) then
+            ! PETSc choice 3 safeguard (e,g, Chacon 2008, J. Phys: Conf. Ser. 125 012041):
+            ! Avoid steep decreases in ew_eta
+            ew_eta  = min(CS%cg_newton_tolerance, max(ew_eta, ew_stol))
+            ! Avoid oversolving in last Newton iters:
+            ! The original is technically only applicable for nonlin_solve_err_mode=4:
+            ! ew_stol = CS%ew_gamma * ew_resid_first * CS%nonlinear_tolerance / ew_resid
+            ! Here, adapt for all nonlin_solve_err_modes:
+            ew_stol = CS%ew_gamma * err_init * CS%nonlinear_tolerance / err_max
+            if (CS%ssa_add_rel_resid) then
+              ew_stol = min(ew_stol, CS%ew_gamma * norm_tau * CS%rr_nonlinear_tolerance / err_rr)
+            endif
+            ew_eta  = min(CS%cg_newton_tolerance, max(ew_eta, ew_stol))
+            write(mesg,*) "ice_shelf_solve_outer: ew_stol = ", ew_stol
+            call MOM_mesg(mesg, 8)
+          endif
+          ew_eta = min(ew_eta,CS%ew_eta_max)
+          CS%cg_tol_current = ew_eta
+          ew_eta_prev   = ew_eta
+          ew_prev_resid = ew_resid
+          write(mesg,*) "ice_shelf_solve_outer: New inner tolerance = ", CS%cg_tol_current
+          call MOM_mesg(mesg, 8)
+        endif
+      endif
+    endif
   enddo
+  CS%doing_newton = .false.
+  CS%cg_tol_current = CS%cg_tolerance
 
   write(mesg,*) "ice_shelf_solve_outer: nonlinear fractional residual = ", err_max/err_init
   call MOM_mesg(mesg)
+  if (CS%ssa_add_rel_resid) then
+    write(mesg,*) "ice_shelf_solve_outer: nonlinear relative residual = ", err_rr/norm_tau
+    call MOM_mesg(mesg, 5)
+  endif
   write(mesg,*) "ice_shelf_solve_outer: exiting nonlinear solve after ",iter," iterations"
   call MOM_mesg(mesg)
 
 end subroutine ice_shelf_solve_outer
 
+!> Unified inner linear solver for ice shelf velocity.
+!! Performs shared setup (RHS, preconditioner, initial matrix-vector product),
+!! dispatches to the selected Krylov method, and applies boundary conditions.
 subroutine ice_shelf_solve_inner(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, H_node, float_cond, &
                                  hmask, conv_flag, iters, time, Phi, Phisub)
   type(ice_shelf_dyn_CS), intent(in)    :: CS !< A pointer to the ice shelf control structure
-  type(ice_shelf_state),  intent(in)    :: ISS !< A structure with elements that describe
-                                           !! the ice-shelf state
+  type(ice_shelf_state),  intent(in)    :: ISS !< A structure with elements that describe the ice-shelf state
   type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
   type(unit_scale_type),  intent(in)    :: US !< A structure containing unit conversion factors
   real, dimension(SZDIB_(G),SZDJB_(G)), &
@@ -1704,68 +1999,43 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, H
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                           intent(in)    :: taudy  !< The y-direction driving stress [R L3 Z T-2 ~> kg m s-2]
   real, dimension(SZDIB_(G),SZDJB_(G)), &
-                          intent(in)    :: H_node !< The ice shelf thickness at nodal (corner)
-                                             !! points [Z ~> m].
+                          intent(in)    :: H_node !< The ice shelf thickness at nodal (corner) points [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: float_cond !< If GL_regularize=true, indicates cells containing
-                                                !! the grounding line (float_cond=1) or not (float_cond=0)
+                                                      !! the grounding line (float_cond=1) or not (float_cond=0)
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: hmask !< A mask indicating which tracer points are
-                                             !! partly or fully covered by an ice-shelf
+                                                 !! partly or fully covered by an ice-shelf
   integer,                intent(out)   :: conv_flag !< A flag indicating whether (1) or not (0) the
-                                           !! iterations have converged to the specified tolerance
+                                                     !! iterations have converged to the specified tolerance
   integer,                intent(out)   :: iters !< The number of iterations used in the solver.
   type(time_type),        intent(in)    :: Time !< The current model time
   real, dimension(8,4,SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: Phi !< The gradients of bilinear basis elements at Gaussian
-                                             !! quadrature points surrounding the cell vertices [L-1 ~> m-1].
+                                               !! quadrature points surrounding the cell vertices [L-1 ~> m-1].
   real, dimension(:,:,:,:,:,:), &
                           intent(in)    :: Phisub !< Quadrature structure weights at subgridscale
-                                            !! locations for finite element calculations [nondim]
-! one linear solve (nonlinear iteration) of the solution for velocity
+                                                  !! locations for finite element calculations [nondim]
 
-! in this subroutine:
-!    RHS = taud
-!    diagonal of matrix is found (for Jacobi precondition)
-!    CG iteration is carried out for max. iterations or until convergence
-
-! assumed - u, v, taud, visc, basal_traction are valid on the halo
-
-  real, dimension(SZDIB_(G),SZDJB_(G)) ::  &
-                        Ru, Rv, &     ! Residuals in the stress calculations [R L3 Z T-2 ~> m kg s-2]
-                        Ru_old, Rv_old, & ! Previous values of Ru and Rv [R L3 Z T-2 ~> m kg s-2]
-                        Zu, Zv, & ! Contributions to velocity changes [L T-1 ~> m s-1]
-                        Zu_old, Zv_old, & ! Previous values of Zu and Zv [L T-1 ~> m s-1]
-                        DIAGu, DIAGv, & ! Diagonals with units like Ru/Zu [R L2 Z T-1 ~> kg s-1]
-                        RHSu, RHSv, & ! Right hand side of the stress balance [R L3 Z T-2 ~> m kg s-2]
-                        Au, Av, & ! The retarding lateral stress contributions [R L3 Z T-2 ~> kg m s-2]
-                        Du, Dv, & ! Velocity changes [L T-1 ~> m s-1]
-                        sum_vec, sum_vec_2, sum_vec_3 !, &
-                        !ubd, vbd   ! Boundary stress contributions [R L3 Z T-2 ~> kg m s-2]
-  real    :: beta_k, dot_p1, resid0tol2, cg_halo, max_cg_halo
-  real    :: alpha_k     ! A scaling factor for iterative corrections [nondim]
-  real    :: resid_scale ! A scaling factor for redimensionalizing the global residuals [m2 L-2 ~> 1]
-                         ! [m2 L-2 ~> 1] [R L3 Z T-2 ~> m kg s-2]
-  real    :: resid2_scale ! A scaling factor for redimensionalizing the global squared residuals
-                         ! [m2 L-2 ~> 1] [R L3 Z T-2 ~> m kg s-2]
-  real    :: rhoi_rhow  ! The density of ice divided by a typical water density [nondim]
-  integer :: iter, i, j, isd, ied, jsd, jed, isc, iec, jsc, jec, is, js, ie, je
+  real, dimension(SZDIB_(G),SZDJB_(G)) :: &
+        RHSu, RHSv, &      ! Right hand side of the stress balance [R L3 Z T-2 ~> m kg s-2]
+        Au, Av, &          ! Matrix-vector product A*x [R L3 Z T-2 ~> kg m s-2]
+        DIAGu, DIAGv, &    ! Diagonals [R L2 Z T-1 ~> kg s-1]
+        IDIAGu, IDIAGv     ! Reciprocal diagonals [R-1 L-2 Z-1 T ~> kg-1 s]
+  real    :: resid_scale   ! A scaling factor for redimensionalizing the global residuals
+                           ! [T3 kg m2 R-1 Z-1 L-4 s-3 ~> 1]
   integer :: Is_sum, Js_sum, Ie_sum, Je_sum ! Loop bounds for global sums or arrays starting at 1.
-  integer :: Isdq, Iedq, Jsdq, Jedq, Iscq, Iecq, Jscq, Jecq, nx_halo, ny_halo
-  integer :: Iscq_sv, Jscq_sv ! Starting loop bound for sum_vec
+  integer :: Iscq_sv, Jscq_sv ! Starting loop bound for sum_vec arrays
+  integer :: I, J
+  integer :: Isdq, Iedq, Jsdq, Jedq, Iscq, Iecq, Jscq, Jecq
+  integer :: isc, iec, jsc, jec
 
   Isdq = G%IsdB ; Iedq = G%IedB ; Jsdq = G%JsdB ; Jedq = G%JedB
   Iscq = G%IscB ; Iecq = G%IecB ; Jscq = G%JscB ; Jecq = G%JecB
-  ny_halo = G%domain%njhalo ; nx_halo = G%domain%nihalo
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
 
-  rhoi_rhow = CS%density_ice / CS%density_ocean_avg
-
-  Zu(:,:) = 0 ; Zv(:,:) = 0 ; DIAGu(:,:) = 0 ; DIAGv(:,:) = 0
-  Ru(:,:) = 0 ; Rv(:,:) = 0 ; Au(:,:) = 0 ; Av(:,:) = 0 ; RHSu(:,:) = 0 ; RHSv(:,:) = 0
-  Du(:,:) = 0 ; Dv(:,:) = 0
-  dot_p1 = 0
+  ! Initialize shared arrays
+  Au(:,:) = 0 ; Av(:,:) = 0 ; DIAGu(:,:) = 0 ; DIAGv(:,:) = 0
 
   ! Determine the loop limits for sums, bearing in mind that the arrays will be starting at 1.
   ! Includes the edge of the tile is at the western/southern bdry (if symmetric)
@@ -1782,155 +2052,46 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, H
   Ie_sum = Iecq + (1-Isdq) ; Je_sum = Jecq + (1-Jsdq)
 
   RHSu(:,:) = taudx(:,:) ; RHSv(:,:) = taudy(:,:)
-
   call pass_vector(RHSu, RHSv, G%domain, TO_ALL, BGRID_NE, complete=.false.)
 
-  call matrix_diagonal(CS, G, US, float_cond, H_node, CS%ice_visc, CS%basal_traction, &
-                       hmask, rhoi_rhow, Phi, Phisub, DIAGu, DIAGv)
-
+  call matrix_diagonal(CS, G, US, float_cond, H_node, CS%ice_visc, u_shlf, v_shlf, &
+                       hmask, CS%rhoi_rhow, Phi, Phisub, DIAGu, DIAGv)
   call pass_vector(DIAGu, DIAGv, G%domain, TO_ALL, BGRID_NE, complete=.false.)
 
   call CG_action(CS, Au, Av, u_shlf, v_shlf, Phi, Phisub, CS%umask, CS%vmask, hmask, &
-                 H_node, CS%ice_visc, float_cond, CS%bed_elev, CS%basal_traction, &
-                 G, US, isc-1, iec+1, jsc-1, jec+1, rhoi_rhow)
-
+                 H_node, CS%ice_visc, float_cond, CS%bed_elev, u_shlf, v_shlf, &
+                 G, US, isc-1, iec+1, jsc-1, jec+1, CS%rhoi_rhow, use_newton_in=.false.)
   call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE, complete=.true.)
 
-  Ru(:,:) = (RHSu(:,:) - Au(:,:)) ; Rv(:,:) = (RHSv(:,:) - Av(:,:))
-  resid_scale = US%s_to_T*(US%RZL2_to_kg*US%L_T_to_m_s**2)
-  resid2_scale = ((US%RZ_to_kg_m2*US%L_to_m)*US%L_T_to_m_s**2)**2
-
-  sum_vec(:,:) = 0.0
-  do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
-    if (CS%umask(I,J) == 1) sum_vec(I,J) = resid2_scale*Ru(I,J)**2
-    if (CS%vmask(I,J) == 1) sum_vec(I,J) = sum_vec(I,J) + resid2_scale*Rv(I,J)**2
-  enddo ; enddo
-
-  !resid0 = sqrt(reproducing_sum( sum_vec, Is_sum, Ie_sum, Js_sum, Je_sum ))
-  resid0tol2 = CS%cg_tolerance**2 * reproducing_sum( sum_vec, Is_sum, Ie_sum, Js_sum, Je_sum )
-
+  ! Precompute reciprocal diagonal
+  IDIAGu(:,:) = 0.0 ; IDIAGv(:,:) = 0.0
   do J=Jsdq,Jedq ; do I=Isdq,Iedq
-    if (CS%umask(I,J) == 1 .AND.(DIAGu(I,J)/=0)) Zu(I,J) = Ru(I,J) / DIAGu(I,J)
-    if (CS%vmask(I,J) == 1 .AND.(DIAGv(I,J)/=0)) Zv(I,J) = Rv(I,J) / DIAGv(I,J)
+    if (CS%umask(I,J)==1 .AND. DIAGu(I,J)/=0) IDIAGu(I,J) = 1.0 / DIAGu(I,J)
+    if (CS%vmask(I,J)==1 .AND. DIAGv(I,J)/=0) IDIAGv(I,J) = 1.0 / DIAGv(I,J)
   enddo ; enddo
 
-  Du(:,:) = Zu(:,:) ; Dv(:,:) = Zv(:,:)
+  resid_scale = US%s_to_T*(US%RZL2_to_kg*US%L_T_to_m_s**2)
 
-  if (G%symmetric) then
-    max_cg_halo=min(nx_halo,ny_halo)
-  else
-    max_cg_halo=min(nx_halo,ny_halo)-1
-  endif
-  cg_halo = max_cg_halo
-  conv_flag = 0
+  ! Dispatch to selected solver
+  select case (CS%inner_solver)
+    case (INNER_CG)
+      call ice_shelf_solve_inner_CG(CS, G, US, u_shlf, v_shlf, RHSu, RHSv, Au, Av, &
+                                    IDIAGu, IDIAGv, H_node, float_cond, hmask, &
+                                    CS%rhoi_rhow, resid_scale, Phi, Phisub, conv_flag, iters, &
+                                    Is_sum, Js_sum, Ie_sum, Je_sum, Iscq_sv, Jscq_sv)
+    case (INNER_MINRES)
+      call ice_shelf_solve_inner_MINRES(CS, G, US, u_shlf, v_shlf, RHSu, RHSv, Au, Av, &
+                                        IDIAGu, IDIAGv, H_node, float_cond, hmask, &
+                                        CS%rhoi_rhow, resid_scale, Phi, Phisub, conv_flag, iters, &
+                                        Is_sum, Js_sum, Ie_sum, Je_sum, Iscq_sv, Jscq_sv)
+    case (INNER_CR)
+      call ice_shelf_solve_inner_CR(CS, G, US, u_shlf, v_shlf, RHSu, RHSv, Au, Av, &
+                                    IDIAGu, IDIAGv, H_node, float_cond, hmask, &
+                                    CS%rhoi_rhow, resid_scale, Phi, Phisub, conv_flag, iters, &
+                                    Is_sum, Js_sum, Ie_sum, Je_sum, Iscq_sv, Jscq_sv)
+  end select
 
-  !!!!!!!!!!!!!!!!!!
-  !!              !!
-  !! MAIN CG LOOP !!
-  !!              !!
-  !!!!!!!!!!!!!!!!!!
-
-  ! initially, c-grid data is valid up to 3 halo nodes out
-
-  do iter = 1,CS%cg_max_iterations
-
-    ! we can never assume that any arrays are legit more than 3 vertices past
-    ! the computational domain - this is their state in the initial iteration
-
-    is = isc - cg_halo ; ie = Iecq + cg_halo
-    js = jsc - cg_halo ; je = Jecq + cg_halo
-
-    Au(:,:) = 0 ; Av(:,:) = 0
-
-    call CG_action(CS, Au, Av, Du, Dv, Phi, Phisub, CS%umask, CS%vmask, hmask, &
-                   H_node, CS%ice_visc, float_cond, CS%bed_elev, CS%basal_traction, &
-                   G, US, is, ie, js, je, rhoi_rhow)
-
-    ! Au, Av valid region moves in by 1
-
-    call pass_vector(Au,Av,G%domain, TO_ALL, BGRID_NE)
-
-    sum_vec(:,:) = 0.0 ; sum_vec_2(:,:) = 0.0
-
-    do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
-      if (CS%umask(I,J) == 1) then
-        sum_vec(I,J)   = resid_scale * (Zu(I,J) * Ru(I,J))
-        sum_vec_2(I,J) = resid_scale * (Du(I,J) * Au(I,J))
-        Ru_old(I,J) = Ru(I,J) ; Zu_old(I,J) = Zu(I,J)
-      endif
-      if (CS%vmask(I,J) == 1) then
-        sum_vec(I,J)   = sum_vec(I,J)   + resid_scale * (Zv(I,J) * Rv(I,J))
-        sum_vec_2(I,J) = sum_vec_2(I,J) + resid_scale * (Dv(I,J) * Av(I,J))
-        Rv_old(I,J) = Rv(I,J) ; Zv_old(I,J) = Zv(I,J)
-      endif
-    enddo ; enddo
-
-    alpha_k = reproducing_sum( sum_vec, Is_sum, Ie_sum, Js_sum, Je_sum ) / &
-              reproducing_sum( sum_vec_2, Is_sum, Ie_sum, Js_sum, Je_sum )
-
-    do J=js,je-1 ; do I=is,ie-1
-      if (CS%umask(I,J) == 1) then
-        u_shlf(I,J) = u_shlf(I,J) + alpha_k * Du(I,J)
-        Ru(I,J) = Ru(I,J) - alpha_k * Au(I,J)
-        if (DIAGu(I,J)/=0) Zu(I,J) = Ru(I,J) / DIAGu(I,J)
-      endif
-      if (CS%vmask(I,J) == 1) then
-        v_shlf(I,J) = v_shlf(I,J) + alpha_k * Dv(I,J)
-        Rv(I,J) = Rv(I,J) - alpha_k * Av(I,J)
-        if (DIAGv(I,J)/=0) Zv(I,J) = Rv(I,J) / DIAGv(I,J)
-      endif
-    enddo; enddo
-
-
-    ! R,u,v,Z valid region moves in by 1
-
-    ! beta_k = (Z \dot R) / (Zold \dot Rold)
-    sum_vec(:,:) = 0.0 ; sum_vec_2(:,:) = 0.0 ; sum_vec_3(:,:) = 0.0
-
-    do J=jscq_sv,jecq ; do i=iscq_sv,iecq
-      if (CS%umask(I,J) == 1) then
-        sum_vec(I,J)   = resid_scale  * (Zu(I,J) * Ru(I,J))
-        sum_vec_2(I,J) = resid_scale  * (Zu_old(I,J) * Ru_old(I,J))
-        sum_vec_3(I,J) = resid2_scale * Ru(I,J)**2
-      endif
-      if (CS%vmask(I,J) == 1) then
-        sum_vec(I,J)   = sum_vec(I,J)   + resid_scale  * (Zv(I,J) * Rv(I,J))
-        sum_vec_2(I,J) = sum_vec_2(I,J) + resid_scale  * (Zv_old(I,J) * Rv_old(I,J))
-        sum_vec_3(I,J) = sum_vec_3(I,J) + resid2_scale * Rv(I,J)**2
-      endif
-    enddo ; enddo
-
-    beta_k = reproducing_sum(sum_vec, Is_sum, Ie_sum, Js_sum, Je_sum ) / &
-             reproducing_sum(sum_vec_2, Is_sum, Ie_sum, Js_sum, Je_sum )
-
-    do J=js,je-1 ; do I=is,ie-1
-        if (CS%umask(I,J) == 1) Du(I,J) = Zu(I,J) + beta_k * Du(I,J)
-        if (CS%vmask(I,J) == 1) Dv(I,J) = Zv(I,J) + beta_k * Dv(I,J)
-    enddo ; enddo
-
-   ! D valid region moves in by 1
-
-    dot_p1 = reproducing_sum( sum_vec_3, Is_sum, Ie_sum, Js_sum, Je_sum )
-
-    !if sqrt(dot_p1) <= (CS%cg_tolerance * resid0)
-    if (dot_p1 <= resid0tol2) then
-      iters = iter
-      conv_flag = 1
-      exit
-    endif
-
-    cg_halo = cg_halo - 1
-
-    if (cg_halo == 0) then
-     ! pass vectors
-      call pass_vector(Du, Dv, G%domain, TO_ALL, BGRID_NE, complete=.false.)
-      call pass_vector(u_shlf, v_shlf, G%domain, TO_ALL, BGRID_NE, complete=.false.)
-      call pass_vector(Ru, Rv, G%domain, TO_ALL, BGRID_NE, complete=.true.)
-      cg_halo = max_cg_halo
-    endif
-
-  enddo ! end of CG loop
-
+  ! Shared teardown: Apply boundary conditions
   do J=Jsdq,Jedq ; do I=Isdq,Iedq
       if (CS%umask(I,J) == 3) then
         u_shlf(I,J) = CS%u_bdry_val(I,J)
@@ -1946,11 +2107,712 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, H
   enddo ; enddo
 
   call pass_vector(u_shlf, v_shlf, G%domain, TO_ALL, BGRID_NE)
+
   if (conv_flag == 0) then
     iters = CS%cg_max_iterations
   endif
 
 end subroutine ice_shelf_solve_inner
+
+!> CG (Conjugate Gradient) inner Krylov solve for ice shelf velocity.
+subroutine ice_shelf_solve_inner_CG(CS, G, US, u_shlf, v_shlf, RHSu, RHSv, Au, Av, &
+                                     IDIAGu, IDIAGv, H_node, float_cond, hmask, &
+                                     rhoi_rhow, resid_scale, Phi, Phisub, conv_flag, iters, &
+                                     Is_sum, Js_sum, Ie_sum, Je_sum, Iscq_sv, Jscq_sv)
+  type(ice_shelf_dyn_CS), intent(in)    :: CS !< A pointer to the ice shelf control structure
+  type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
+  type(unit_scale_type),  intent(in)    :: US !< A structure containing unit conversion factors
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(inout) :: u_shlf  !< The zonal ice shelf velocity [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(inout) :: v_shlf  !< The meridional ice shelf velocity [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: RHSu !< Right hand side, x [R L3 Z T-2 ~> m kg s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: RHSv !< Right hand side, y [R L3 Z T-2 ~> m kg s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(inout) :: Au !< Matrix-vector product workspace, x [R L3 Z T-2 ~> kg m s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(inout) :: Av !< Matrix-vector product workspace, y [R L3 Z T-2 ~> kg m s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: IDIAGu !< Reciprocal Jacobi diagonal, x [R-1 L-2 Z-1 T ~> kg-1 s]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: IDIAGv !< Reciprocal Jacobi diagonal, y [R-1 L-2 Z-1 T ~> kg-1 s]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: H_node !< The ice shelf thickness at nodal points [Z ~> m]
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(in)    :: float_cond !< Grounding line indicator [nondim]
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(in)    :: hmask !< Ice shelf coverage mask
+  real,                   intent(in)    :: rhoi_rhow !< Ice-to-ocean density ratio [nondim]
+  real,                   intent(in)    :: resid_scale !< Scaling for inner products
+                                                       !! [T3 kg m2 R-1 Z-1 L-4 s-3 ~> 1]
+  real, dimension(8,4,SZDI_(G),SZDJ_(G)), &
+                          intent(in)    :: Phi !< Basis element gradients at quadrature points [L-1 ~> m-1]
+  real, dimension(:,:,:,:,:,:), &
+                          intent(in)    :: Phisub !< Subgridscale quadrature weights [nondim]
+  integer,                intent(out)   :: conv_flag !< Convergence flag: 1=converged, 0=not
+  integer,                intent(out)   :: iters !< The number of iterations used
+  integer,                intent(in)    :: Is_sum !< Starting i-index for global sums
+  integer,                intent(in)    :: Js_sum !< Starting j-index for global sums
+  integer,                intent(in)    :: Ie_sum !< Ending i-index for global sums
+  integer,                intent(in)    :: Je_sum !< Ending j-index for global sums
+  integer,                intent(in)    :: Iscq_sv !< Starting i-index for sum_vec arrays
+  integer,                intent(in)    :: Jscq_sv !< Starting j-index for sum_vec arrays
+
+  real, dimension(SZDIB_(G),SZDJB_(G))  :: u_curr  !< Frozen current iterate u^k, used to evaluate basal friction
+                                                   !! at quadrature points [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G))  :: v_curr  !< Frozen current iterate v^k, used to evaluate basal friction
+                                                   !! at quadrature points [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G)) ::  &
+                        Ru, Rv, &     ! Residuals [R L3 Z T-2 ~> m kg s-2]
+                        Zu, Zv, &     ! Preconditioned residuals [L T-1 ~> m s-1]
+                        Du, Dv        ! Search directions [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G)) :: sum_vec ! Pointwise D·A products for the alpha_k global sum
+                                                  ! [kg m2 s-3]
+  real, dimension(SZDIB_(G),SZDJB_(G),2) :: sum_vec_3d ! Array used for various residuals
+                                                       ! sum_vec_3d(:,:,1) [kg m2 s-3]
+                                                       ! sum_vec_3d(:,:,2) [kg2 m2 s-4]
+  real    :: beta_k      ! Ratio of residuals used to update search direction [nondim]
+  real    :: resid0tol2  ! Convergence tolerance times the initial residual [m2 kg2 s-4]
+  real    :: sv3dsum     ! An unused variable returned when taking global sum of residuals [various]
+  real    :: sv3dsums(2) ! The index-wise global sums of sum_vec_3d
+                         ! sv3dsums(1) [kg m2 s-3]
+                         ! sv3dsums(2) [kg2 m2 s-4]
+  real    :: alpha_k     ! A scaling factor for iterative corrections [nondim]
+  real    :: rho_old     ! The preconditioned residual inner product Z·R from the previous CG
+                         ! iteration, scaled by resid_scale [kg m2 s-3]
+  real    :: resid2_scale ! A scaling factor for redimensionalizing the global squared residuals
+                          ! [T4 kg2 m2 R-2 Z-2 L-6 s-4 ~> 1]
+  integer :: cg_halo     ! Number of halo vertices to include during a CG iteration
+  integer :: max_cg_halo ! Maximum possible number of halo vertices to include in the CG iterations
+  integer :: iter, i, j, isc, iec, jsc, jec, is, js, ie, je, is2, ie2, js2, je2
+  integer :: Isdq, Iedq, Jsdq, Jedq, Iscq, Iecq, Jscq, Jecq, nx_halo, ny_halo
+
+  Isdq = G%IsdB ; Iedq = G%IedB ; Jsdq = G%JsdB ; Jedq = G%JedB
+  Iscq = G%IscB ; Iecq = G%IecB ; Jscq = G%JscB ; Jecq = G%JecB
+  ny_halo = G%domain%njhalo ; nx_halo = G%domain%nihalo
+  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
+
+  resid2_scale = ((US%RZ_to_kg_m2*US%L_to_m)*US%L_T_to_m_s**2)**2
+
+  Ru(:,:) = 0 ; Rv(:,:) = 0 ; Zu(:,:) = 0 ; Zv(:,:) = 0 ; Du(:,:) = 0 ; Dv(:,:) = 0
+
+  Ru(:,:) = (RHSu(:,:) - Au(:,:)) ; Rv(:,:) = (RHSv(:,:) - Av(:,:))
+
+  ! current velocities used in CG_action for basal drag
+  u_curr(:,:) = u_shlf(:,:) ; v_curr(:,:) = v_shlf(:,:)
+
+  do J=Jsdq,Jedq ; do I=Isdq,Iedq
+    if (CS%umask(I,J) == 1) Zu(I,J) = Ru(I,J) * IDIAGu(I,J)
+    if (CS%vmask(I,J) == 1) Zv(I,J) = Rv(I,J) * IDIAGv(I,J)
+    Du(I,J) = Zu(I,J)
+    Dv(I,J) = Zv(I,J)
+  enddo ; enddo
+
+  ! Compute rho_old = Z·R and resid0tol2 before the CG loop
+  sum_vec_3d(:,:,:) = 0.0
+  do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
+    if (CS%umask(I,J) == 1) then
+      sum_vec_3d(I,J,1) = resid_scale  * (Zu(I,J) * Ru(I,J))
+      sum_vec_3d(I,J,2) = resid2_scale * Ru(I,J)**2
+    endif
+    if (CS%vmask(I,J) == 1) then
+      sum_vec_3d(I,J,1) = sum_vec_3d(I,J,1) + resid_scale  * (Zv(I,J) * Rv(I,J))
+      sum_vec_3d(I,J,2) = sum_vec_3d(I,J,2) + resid2_scale * Rv(I,J)**2
+    endif
+  enddo ; enddo
+
+  sv3dsum = reproducing_sum( sum_vec_3d(:,:,1:2), Is_sum, Ie_sum, Js_sum, Je_sum, sums=sv3dsums(1:2) )
+
+  rho_old = sv3dsums(1)
+  !resid0 = sqrt(sv3dsums(2))
+  resid0tol2 = CS%cg_tol_current**2 * sv3dsums(2)
+
+  if (G%symmetric) then
+    max_cg_halo=min(nx_halo,ny_halo)
+  else
+    max_cg_halo=min(nx_halo,ny_halo)-1
+  endif
+  cg_halo = max_cg_halo
+  conv_flag = 0
+
+  if (CS%cg_halo_shrink) then
+    is = isc - cg_halo ; ie = Iecq + cg_halo
+    js = jsc - cg_halo ; je = Jecq + cg_halo
+    is2 = is ; ie2 = ie-1
+    js2 = js ; je2 = je-1
+  else
+    is = isc - 1 ; ie = iec + 1
+    js = jsc - 1 ; je = jec + 1
+    is2 = Iscq ; ie2 = Iecq
+    js2 = Jscq ; je2 = Jecq
+  endif
+
+  !!!!!!!!!!!!!!!!!!
+  !!              !!
+  !! MAIN CG LOOP !!
+  !!              !!
+  !!!!!!!!!!!!!!!!!!
+
+  do iter = 1,CS%cg_max_iterations
+
+    Au(:,:) = 0 ; Av(:,:) = 0
+
+    call CG_action(CS, Au, Av, Du, Dv, Phi, Phisub, CS%umask, CS%vmask, hmask, &
+                   H_node, CS%ice_visc, float_cond, CS%bed_elev, u_curr, v_curr, &
+                   G, US, is, ie, js, je, rhoi_rhow)
+
+    sum_vec(:,:) = 0.0
+
+    do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
+      if (CS%umask(I,J) == 1) sum_vec(I,J) = resid_scale * (Du(I,J) * Au(I,J))
+      if (CS%vmask(I,J) == 1) sum_vec(I,J) = sum_vec(I,J) + resid_scale * (Dv(I,J) * Av(I,J))
+    enddo ; enddo
+
+    sv3dsum = reproducing_sum( sum_vec(:,:), Is_sum, Ie_sum, Js_sum, Je_sum )
+
+    if (sv3dsum == 0.0) then
+      iters = iter
+      conv_flag = 1
+      exit
+    endif
+
+    alpha_k = rho_old / sv3dsum
+
+    do J=js2,je2 ; do I=is2,ie2
+      if (CS%umask(I,J) == 1) then
+        u_shlf(I,J) = u_shlf(I,J) + alpha_k * Du(I,J)
+        Ru(I,J) = Ru(I,J) - alpha_k * Au(I,J)
+        Zu(I,J) = Ru(I,J) * IDIAGu(I,J)
+      endif
+      if (CS%vmask(I,J) == 1) then
+        v_shlf(I,J) = v_shlf(I,J) + alpha_k * Dv(I,J)
+        Rv(I,J) = Rv(I,J) - alpha_k * Av(I,J)
+        Zv(I,J) = Rv(I,J) * IDIAGv(I,J)
+      endif
+    enddo ; enddo
+
+    ! beta_k = (Z \dot R) / (Z_prev \dot R_prev)
+    sum_vec_3d(:,:,:) = 0.0 ; sv3dsums(:)=0.0
+
+    do J=jscq_sv,jecq ; do i=iscq_sv,iecq
+      if (CS%umask(I,J) == 1) then
+        sum_vec_3d(I,J,1) = resid_scale  * (Zu(I,J) * Ru(I,J))
+        sum_vec_3d(I,J,2) = resid2_scale * Ru(I,J)**2
+      endif
+      if (CS%vmask(I,J) == 1) then
+        sum_vec_3d(I,J,1) = sum_vec_3d(I,J,1) + resid_scale  * (Zv(I,J) * Rv(I,J))
+        sum_vec_3d(I,J,2) = sum_vec_3d(I,J,2) + resid2_scale * Rv(I,J)**2
+      endif
+    enddo ; enddo
+
+    sv3dsum = reproducing_sum( sum_vec_3d(:,:,1:2), Is_sum, Ie_sum, Js_sum, Je_sum, sums=sv3dsums(1:2) )
+
+    beta_k = sv3dsums(1) / rho_old
+
+    if (sv3dsums(2) <= resid0tol2) then
+      iters = iter
+      conv_flag = 1
+      exit
+    endif
+
+    do J=js2,je2 ; do I=is2,ie2
+      if (CS%umask(I,J) == 1) Du(I,J) = Zu(I,J) + beta_k * Du(I,J)
+      if (CS%vmask(I,J) == 1) Dv(I,J) = Zv(I,J) + beta_k * Dv(I,J)
+    enddo ; enddo
+
+    rho_old = sv3dsums(1)
+
+    if (CS%cg_halo_shrink) then
+      cg_halo = cg_halo - 1
+      if (cg_halo == 0) then
+        call pass_vector(Du, Dv, G%domain, TO_ALL, BGRID_NE, complete=.false.)
+        call pass_vector(Zu, Zv, G%domain, TO_ALL, BGRID_NE, complete=.false.)
+        call pass_vector(Ru, Rv, G%domain, TO_ALL, BGRID_NE, complete=.false.)
+        call pass_vector(u_shlf, v_shlf, G%domain, TO_ALL, BGRID_NE, complete=.true.)
+        cg_halo = max_cg_halo
+      endif
+      is = isc - cg_halo ; ie = Iecq + cg_halo
+      js = jsc - cg_halo ; je = Jecq + cg_halo
+      is2 = is ; ie2 = ie-1
+      js2 = js ; je2 = je-1
+    else
+      call pass_vector(Du, Dv, G%domain, TO_ALL, BGRID_NE)
+    endif
+
+  enddo ! end of CG loop
+
+end subroutine ice_shelf_solve_inner_CG
+
+!> MINRES inner Krylov solve for ice shelf velocity.
+subroutine ice_shelf_solve_inner_MINRES(CS, G, US, u_shlf, v_shlf, RHSu, RHSv, Au, Av, &
+                                         IDIAGu, IDIAGv, H_node, float_cond, hmask, &
+                                         rhoi_rhow, resid_scale, Phi, Phisub, conv_flag, iters, &
+                                         Is_sum, Js_sum, Ie_sum, Je_sum, Iscq_sv, Jscq_sv)
+  type(ice_shelf_dyn_CS), intent(in)    :: CS !< A pointer to the ice shelf control structure
+  type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
+  type(unit_scale_type),  intent(in)    :: US !< A structure containing unit conversion factors
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(inout) :: u_shlf  !< The zonal ice shelf velocity [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(inout) :: v_shlf  !< The meridional ice shelf velocity [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: RHSu !< Right hand side, x [R L3 Z T-2 ~> m kg s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: RHSv !< Right hand side, y [R L3 Z T-2 ~> m kg s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(inout) :: Au !< Matrix-vector product workspace, x [R L3 Z T-2 ~> kg m s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(inout) :: Av !< Matrix-vector product workspace, y [R L3 Z T-2 ~> kg m s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: IDIAGu !< Reciprocal Jacobi diagonal, x [R-1 L-2 Z-1 T ~> kg-1 s]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: IDIAGv !< Reciprocal Jacobi diagonal, y [R-1 L-2 Z-1 T ~> kg-1 s]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: H_node !< The ice shelf thickness at nodal points [Z ~> m]
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(in)    :: float_cond !< Grounding line indicator [nondim]
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(in)    :: hmask !< Ice shelf coverage mask
+  real,                   intent(in)    :: rhoi_rhow !< Ice-to-ocean density ratio [nondim]
+  real,                   intent(in)    :: resid_scale !< Scaling for inner products
+                                                       !! [T3 kg m2 R-1 Z-1 L-4 s-3 ~> 1]
+  real, dimension(8,4,SZDI_(G),SZDJ_(G)), &
+                          intent(in)    :: Phi !< Basis element gradients at quadrature points [L-1 ~> m-1]
+  real, dimension(:,:,:,:,:,:), &
+                          intent(in)    :: Phisub !< Subgridscale quadrature weights [nondim]
+  integer,                intent(out)   :: conv_flag !< Convergence flag: 1=converged, 0=not
+  integer,                intent(out)   :: iters !< The number of iterations used
+  integer,                intent(in)    :: Is_sum !< Starting i-index for global sums
+  integer,                intent(in)    :: Js_sum !< Starting j-index for global sums
+  integer,                intent(in)    :: Ie_sum !< Ending i-index for global sums
+  integer,                intent(in)    :: Je_sum !< Ending j-index for global sums
+  integer,                intent(in)    :: Iscq_sv !< Starting i-index for sum_vec arrays
+  integer,                intent(in)    :: Jscq_sv !< Starting j-index for sum_vec arrays
+
+  real, dimension(SZDIB_(G),SZDJB_(G))  :: u_curr  !< Frozen current iterate u^k, used to evaluate basal friction
+                                                   !! at quadrature points [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G))  :: v_curr  !< Frozen current iterate v^k, used to evaluate basal friction
+                                                   !! at quadrature points [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G)) ::  &
+        V_old_u, V_old_v, V_curr_u, V_curr_v, V_new_u, V_new_v, & ! Lanczos basis vectors [R L3 Z T-2 ~> m kg s-2]
+        Z_curr_u, Z_curr_v, Z_new_u, Z_new_v, &    ! Preconditioned Lanczos vectors [L T-1 ~> m s-1]
+        W_old_u, W_old_v, W_curr_u, W_curr_v, W_new_u, W_new_v, & ! MINRES search directions [L T-1 ~> m s-1]
+        Qu, Qv            ! A * Z_curr [R L3 Z T-2 ~> m kg s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G)) :: sum_vec_3d ! Pointwise products for global sums
+                                                     ! [kg m2 s-3] before normalization;
+                                                     ! [nondim] inside loop (after Lanczos normalization)
+  real    :: alpha       ! Lanczos diagonal element (Rayleigh quotient) [nondim]
+  real    :: beta1       ! Current Lanczos off-diagonal coefficient;
+                         ! initial value [kg^1/2 m s^-3/2], then [nondim] after iter 1
+  real    :: beta2       ! Next Lanczos off-diagonal coefficient [nondim]
+  real    :: eta         ! MINRES residual norm estimate [kg^1/2 m s^-3/2]
+  real    :: eta_curr    ! Effective step magnitude for current iteration [kg^1/2 m s^-3/2]
+  real    :: c0, s0, c1, s1, c2, s2  ! Givens rotation cosines and sines [nondim]
+  real    :: d0, d1, d2  ! Tridiagonal QR factorization coefficients [nondim]
+  real    :: resid0tol   ! Convergence tolerance (CS%cg_tol_newton * beta1) [kg^1/2 m s^-3/2]
+  real    :: current_norm ! Current MINRES residual norm estimate [kg^1/2 m s^-3/2]
+  real    :: sv3dsum     ! Global reproducing sum of sum_vec_3d;
+                         ! [kg m2 s-3] before normalization, [nondim] inside loop
+  real    :: Ibeta1      ! Reciprocal of initial beta1 [kg^-1/2 m-1 s^3/2]
+  real    :: Ibeta2      ! Reciprocal of beta2 [nondim]
+  real    :: Id1         ! Reciprocal of d1 [nondim]
+  integer :: iter, i, j, isc, iec, jsc, jec
+  integer :: Isdq, Iedq, Jsdq, Jedq, Iscq, Iecq, Jscq, Jecq
+
+  Isdq = G%IsdB ; Iedq = G%IedB ; Jsdq = G%JsdB ; Jedq = G%JedB
+  Iscq = G%IscB ; Iecq = G%IecB ; Jscq = G%JscB ; Jecq = G%JecB
+  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
+
+  ! Initialize MINRES-specific arrays
+  V_old_u(:,:) = 0 ; V_old_v(:,:) = 0 ; V_curr_u(:,:) = 0 ; V_curr_v(:,:) = 0
+  Z_curr_u(:,:) = 0 ; Z_curr_v(:,:) = 0
+  W_old_u(:,:) = 0 ; W_old_v(:,:) = 0 ; W_curr_u(:,:) = 0 ; W_curr_v(:,:) = 0
+  Qu(:,:) = 0 ; Qv(:,:) = 0
+
+  ! Initial Residual
+  V_curr_u(:,:) = (RHSu(:,:) - Au(:,:)) ; V_curr_v(:,:) = (RHSv(:,:) - Av(:,:))
+
+  ! current velocities used in CG_action for basal drag
+  u_curr(:,:) = u_shlf(:,:) ; v_curr(:,:) = v_shlf(:,:)
+
+  do J=Jscq,Jecq ; do I=Iscq,Iecq
+     if (CS%umask(I,J) == 1) Z_curr_u(I,J) = V_curr_u(I,J) * IDIAGu(I,J)
+     if (CS%vmask(I,J) == 1) Z_curr_v(I,J) = V_curr_v(I,J) * IDIAGv(I,J)
+  enddo ; enddo
+
+  sum_vec_3d(:,:) = 0.0
+  do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
+    if (CS%umask(I,J) == 1) sum_vec_3d(I,J) = resid_scale * (V_curr_u(I,J) * Z_curr_u(I,J))
+    if (CS%vmask(I,J) == 1) sum_vec_3d(I,J) = sum_vec_3d(I,J) + resid_scale * (V_curr_v(I,J) * Z_curr_v(I,J))
+  enddo ; enddo
+  sv3dsum = reproducing_sum( sum_vec_3d(:,:), Is_sum, Ie_sum, Js_sum, Je_sum )
+
+  beta1 = sqrt(abs(sv3dsum))
+
+  if (beta1 == 0.0) then
+     conv_flag = 1
+     iters = 0
+     return
+  endif
+
+  Ibeta1 = 1.0/beta1
+
+  ! Normalize initial Lanczos vectors
+  do J=Jscq,Jecq ; do I=Iscq,Iecq
+     if (CS%umask(I,J) == 1) then
+         V_curr_u(I,J) = V_curr_u(I,J) * Ibeta1
+         Z_curr_u(I,J) = Z_curr_u(I,J) * Ibeta1
+     endif
+     if (CS%vmask(I,J) == 1) then
+         V_curr_v(I,J) = V_curr_v(I,J) * Ibeta1
+         Z_curr_v(I,J) = Z_curr_v(I,J) * Ibeta1
+     endif
+  enddo ; enddo
+
+  ! Sync Z_curr prior to entering the loop
+  call pass_vector(Z_curr_u, Z_curr_v, G%domain, TO_ALL, BGRID_NE)
+
+  eta = beta1
+  resid0tol = CS%cg_tol_current * beta1
+  conv_flag = 0
+
+  c0 = 1.0 ; s0 = 0.0 ; c1 = 1.0 ; s1 = 0.0
+
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!                                !!
+  !! MAIN MINRES LANCZOS LOOP       !!
+  !!                                !!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  do iter = 1, CS%cg_max_iterations
+
+    ! --- STEP 1: Matrix Vector Product ---
+    Qu(:,:) = 0 ; Qv(:,:) = 0
+    call CG_action(CS, Qu, Qv, Z_curr_u, Z_curr_v, Phi, Phisub, CS%umask, CS%vmask, hmask, &
+                   H_node, CS%ice_visc, float_cond, CS%bed_elev, u_curr, v_curr, &
+                   G, US, isc-1, iec+1, jsc-1, jec+1, rhoi_rhow)
+    ! --- STEP 2: alpha = q dot z_curr ---
+    sum_vec_3d(:,:) = 0.0
+    do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
+       if (CS%umask(I,J) == 1) sum_vec_3d(I,J) = resid_scale * (Qu(I,J) * Z_curr_u(I,J))
+       if (CS%vmask(I,J) == 1) sum_vec_3d(I,J) = sum_vec_3d(I,J) + resid_scale * (Qv(I,J) * Z_curr_v(I,J))
+    enddo ; enddo
+    sv3dsum = reproducing_sum( sum_vec_3d(:,:), Is_sum, Ie_sum, Js_sum, Je_sum )
+    alpha = sv3dsum
+
+    ! --- FUSED STEPS 3 & 4: Update V_new and Precondition to Z_new ---
+    do J=Jscq,Jecq ; do I=Iscq,Iecq
+       if (CS%umask(I,J) == 1) then
+           V_new_u(I,J) = Qu(I,J) - alpha * V_curr_u(I,J) - beta1 * V_old_u(I,J)
+           Z_new_u(I,J) = V_new_u(I,J) * IDIAGu(I,J)
+       endif
+       if (CS%vmask(I,J) == 1) then
+           V_new_v(I,J) = Qv(I,J) - alpha * V_curr_v(I,J) - beta1 * V_old_v(I,J)
+           Z_new_v(I,J) = V_new_v(I,J) * IDIAGv(I,J)
+       endif
+    enddo ; enddo
+
+    ! --- STEP 5: beta2 = sqrt(v_new dot z_new) ---
+    sum_vec_3d(:,:) = 0.0
+    do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
+       if (CS%umask(I,J) == 1) sum_vec_3d(I,J) = resid_scale * (V_new_u(I,J) * Z_new_u(I,J))
+       if (CS%vmask(I,J) == 1) sum_vec_3d(I,J) = sum_vec_3d(I,J) + resid_scale * (V_new_v(I,J) * Z_new_v(I,J))
+    enddo ; enddo
+    sv3dsum = reproducing_sum( sum_vec_3d(:,:), Is_sum, Ie_sum, Js_sum, Je_sum )
+    beta2 = sqrt(abs(sv3dsum))
+
+    ! --- STEP 6: Apply Givens Rotations ---
+    d0 = c1 * alpha - c0 * s1 * beta1
+    d1 = sqrt(d0**2 + beta2**2)
+
+    if (d1 == 0.0) then
+      iters = iter
+      conv_flag = 1
+      exit
+    endif
+
+    Id1 = 1.0 / d1
+    if (beta2 > 0) Ibeta2 = 1.0 / beta2
+
+    d2 = s1 * alpha + c0 * c1 * beta1
+    c2 = d0 * Id1
+    s2 = beta2 * Id1
+
+    eta_curr = c2 * eta
+    eta = -s2 * eta
+    current_norm = abs(eta)
+
+    ! --- FUSED STEPS 7 & 9: Update u/v, Check Convergence, and Shift Vectors ---
+    do J=Jscq,Jecq ; do I=Iscq,Iecq
+       if (CS%umask(I,J) == 1) then
+           W_new_u(I,J) = (Z_curr_u(I,J) - (d2 * W_curr_u(I,J) + beta1 * s0 * W_old_u(I,J))) * Id1
+           u_shlf(I,J) = u_shlf(I,J) + eta_curr * W_new_u(I,J)
+           if (beta2 > 0.0) then
+               V_old_u(I,J) = V_curr_u(I,J)
+               V_curr_u(I,J) = V_new_u(I,J) * Ibeta2
+               Z_curr_u(I,J) = Z_new_u(I,J) * Ibeta2
+               W_old_u(I,J) = W_curr_u(I,J)
+               W_curr_u(I,J) = W_new_u(I,J)
+           endif
+       endif
+       if (CS%vmask(I,J) == 1) then
+           W_new_v(I,J) = (Z_curr_v(I,J) - (d2 * W_curr_v(I,J) + beta1 * s0 * W_old_v(I,J))) * Id1
+           v_shlf(I,J) = v_shlf(I,J) + eta_curr * W_new_v(I,J)
+           if (beta2 > 0.0) then
+               V_old_v(I,J) = V_curr_v(I,J)
+               V_curr_v(I,J) = V_new_v(I,J) * Ibeta2
+               Z_curr_v(I,J) = Z_new_v(I,J) * Ibeta2
+               W_old_v(I,J) = W_curr_v(I,J)
+               W_curr_v(I,J) = W_new_v(I,J)
+           endif
+       endif
+    enddo ; enddo
+
+    ! --- STEP 8: Check Convergence ---
+    if (current_norm <= resid0tol .or. beta2 == 0.0) then
+      iters = iter
+      conv_flag = 1
+      exit
+    endif
+
+    ! Sync Z_curr for the next iteration's CG_action
+    call pass_vector(Z_curr_u, Z_curr_v, G%domain, TO_ALL, BGRID_NE)
+
+    beta1 = beta2
+    c0 = c1 ; c1 = c2
+    s0 = s1 ; s1 = s2
+
+  enddo ! end of MINRES loop
+
+end subroutine ice_shelf_solve_inner_MINRES
+
+!> CR (Conjugate Residual) inner Krylov solve for ice shelf velocity.
+subroutine ice_shelf_solve_inner_CR(CS, G, US, u_shlf, v_shlf, RHSu, RHSv, Au, Av, &
+                                     IDIAGu, IDIAGv, H_node, float_cond, hmask, &
+                                     rhoi_rhow, resid_scale, Phi, Phisub, conv_flag, iters, &
+                                     Is_sum, Js_sum, Ie_sum, Je_sum, Iscq_sv, Jscq_sv)
+  type(ice_shelf_dyn_CS), intent(in)    :: CS !< A pointer to the ice shelf control structure
+  type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
+  type(unit_scale_type),  intent(in)    :: US !< A structure containing unit conversion factors
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(inout) :: u_shlf  !< The zonal ice shelf velocity [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(inout) :: v_shlf  !< The meridional ice shelf velocity [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: RHSu !< Right hand side, x [R L3 Z T-2 ~> m kg s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: RHSv !< Right hand side, y [R L3 Z T-2 ~> m kg s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(inout) :: Au !< Matrix-vector product workspace, x [R L3 Z T-2 ~> kg m s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(inout) :: Av !< Matrix-vector product workspace, y [R L3 Z T-2 ~> kg m s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: IDIAGu !< Reciprocal Jacobi diagonal, x [R-1 L-2 Z-1 T ~> kg-1 s]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: IDIAGv !< Reciprocal Jacobi diagonal, y [R-1 L-2 Z-1 T ~> kg-1 s]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: H_node !< The ice shelf thickness at nodal points [Z ~> m]
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(in)    :: float_cond !< Grounding line indicator [nondim]
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(in)    :: hmask !< Ice shelf coverage mask
+  real,                   intent(in)    :: rhoi_rhow !< Ice-to-ocean density ratio [nondim]
+  real,                   intent(in)    :: resid_scale !< Scaling for inner products
+                                                       !! [T3 kg m2 R-1 Z-1 L-4 s-3 ~> 1]
+  real, dimension(8,4,SZDI_(G),SZDJ_(G)), &
+                          intent(in)    :: Phi !< Basis element gradients at quadrature points [L-1 ~> m-1]
+  real, dimension(:,:,:,:,:,:), &
+                          intent(in)    :: Phisub !< Subgridscale quadrature weights [nondim]
+  integer,                intent(out)   :: conv_flag !< Convergence flag: 1=converged, 0=not
+  integer,                intent(out)   :: iters !< The number of iterations used
+  integer,                intent(in)    :: Is_sum !< Starting i-index for global sums
+  integer,                intent(in)    :: Js_sum !< Starting j-index for global sums
+  integer,                intent(in)    :: Ie_sum !< Ending i-index for global sums
+  integer,                intent(in)    :: Je_sum !< Ending j-index for global sums
+  integer,                intent(in)    :: Iscq_sv !< Starting i-index for sum_vec arrays
+  integer,                intent(in)    :: Jscq_sv !< Starting j-index for sum_vec arrays
+
+  real, dimension(SZDIB_(G),SZDJB_(G))  :: u_curr  !< Frozen current iterate u^k, used to evaluate basal friction
+                                                   !! at quadrature points [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G))  :: v_curr  !< Frozen current iterate v^k, used to evaluate basal friction
+                                                   !! at quadrature points [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G)) ::  &
+                        Ru, Rv, &         ! Residuals (r) [R L3 Z T-2 ~> m kg s-2]
+                        Zu, Zv, &         ! Preconditioned residuals (z = M^-1 r) [L T-1 ~> m s-1]
+                        Du, Dv, &         ! Search directions (p) [L T-1 ~> m s-1]
+                        Qu, Qv            ! A * p [R L3 Z T-2 ~> m kg s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G),2) :: sum_vec_3d ! Pointwise products for global sums.
+                                ! sum_vec_3d(:,:,1): r^2 [kg2 m2 s-4] or z·q [kg m2 s-3] (context-dependent)
+                                ! sum_vec_3d(:,:,2): z·w or q·(M^-1 q) [kg m2 s-3]
+  real    :: alpha        ! Step length [nondim]
+  real    :: beta         ! Direction update coefficient [nondim]
+  real    :: r_norm_sq    ! Squared residual norm [kg2 m2 s-4]
+  real    :: z_w_sum      ! Inner product (z_k, A z_k); beta denominator [kg m2 s-3]
+  real    :: z_w_sum_new  ! Inner product (z_{k+1}, A z_{k+1}); beta numerator [kg m2 s-3]
+  real    :: z_q_sum      ! Inner product (z_k, A p_k); alpha numerator [kg m2 s-3]
+  real    :: q_s_sum      ! Inner product (A p_k, M^-1 A p_k); alpha denom [kg m2 s-3]
+  real    :: resid0tol2   ! Convergence threshold: tol^2 * ||r_0||^2 [kg2 m2 s-4]
+  real    :: sv3dsum      ! Unused scalar return from reproducing_sum [various]
+  real    :: sv3dsums(2)  ! Component sums from reproducing_sum
+                          ! sv3dsums(1): r^2 or z·q [kg2 m2 s-4 or kg m2 s-3] (context-dependent)
+                          ! sv3dsums(2): z·w or q·M^-1 q [kg m2 s-3]
+  real    :: resid2_scale ! Scaling for squared-stress inner products [T4 kg2 m2 R-2 Z-2 L-6 s-4 ~> 1]
+  integer :: iter, i, j, isc, iec, jsc, jec
+  integer :: Isdq, Iedq, Jsdq, Jedq, Iscq, Iecq, Jscq, Jecq
+
+  Isdq = G%IsdB ; Iedq = G%IedB ; Jsdq = G%JsdB ; Jedq = G%JedB
+  Iscq = G%IscB ; Iecq = G%IecB ; Jscq = G%JscB ; Jecq = G%JecB
+  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
+
+  resid2_scale = ((US%RZ_to_kg_m2*US%L_to_m)*US%L_T_to_m_s**2)**2
+
+  ! Initialize CR-specific arrays
+  Ru(:,:) = 0 ; Rv(:,:) = 0 ; Zu(:,:) = 0 ; Zv(:,:) = 0
+  Du(:,:) = 0 ; Dv(:,:) = 0 ; Qu(:,:) = 0 ; Qv(:,:) = 0
+
+  ! r_0 = b - A*x_0
+  Ru(:,:) = (RHSu(:,:) - Au(:,:)) ; Rv(:,:) = (RHSv(:,:) - Av(:,:))
+
+  ! current velocities used in CG_action for basal drag
+  u_curr(:,:) = u_shlf(:,:) ; v_curr(:,:) = v_shlf(:,:)
+
+  ! z_0 = M^-1 r_0
+  do J=Jsdq,Jedq ; do I=Isdq,Iedq
+     if (CS%umask(I,J) == 1) Zu(I,J) = Ru(I,J) * IDIAGu(I,J)
+     if (CS%vmask(I,J) == 1) Zv(I,J) = Rv(I,J) * IDIAGv(I,J)
+  enddo ; enddo
+
+  ! p_0 = z_0
+  Du(:,:) = Zu(:,:) ; Dv(:,:) = Zv(:,:)
+
+  ! Compute A * z_0
+  Au(:,:) = 0 ; Av(:,:) = 0
+  call CG_action(CS, Au, Av, Zu, Zv, Phi, Phisub, CS%umask, CS%vmask, hmask, &
+                 H_node, CS%ice_visc, float_cond, CS%bed_elev, u_curr, v_curr, &
+                 G, US, isc-1, iec+1, jsc-1, jec+1, rhoi_rhow)
+  call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE)
+
+  ! q_0 = A * p_0
+  Qu(:,:) = Au(:,:) ; Qv(:,:) = Av(:,:)
+
+  ! Initial Norms
+  sum_vec_3d(:,:,:) = 0.0 ; sv3dsums(1:2) = 0.0
+  do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
+    if (CS%umask(I,J) == 1) then
+      sum_vec_3d(I,J,1) = resid2_scale * Ru(I,J)**2
+      sum_vec_3d(I,J,2) = resid_scale  * (Zu(I,J) * Au(I,J))
+    endif
+    if (CS%vmask(I,J) == 1) then
+      sum_vec_3d(I,J,1) = sum_vec_3d(I,J,1) + resid2_scale * Rv(I,J)**2
+      sum_vec_3d(I,J,2) = sum_vec_3d(I,J,2) + resid_scale  * (Zv(I,J) * Av(I,J))
+    endif
+  enddo ; enddo
+  sv3dsum = reproducing_sum( sum_vec_3d(:,:,1:2), Is_sum, Ie_sum, Js_sum, Je_sum, sums=sv3dsums(1:2) )
+
+  r_norm_sq = sv3dsums(1)
+  z_w_sum   = sv3dsums(2)
+
+  resid0tol2 = CS%cg_tol_current**2 * r_norm_sq
+  conv_flag = 0
+
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!                                !!
+  !! MAIN CONJUGATE RESIDUAL LOOP   !!
+  !!                                !!
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  do iter = 1, CS%cg_max_iterations
+
+    ! --- STEP 1: alpha = (z_k, q_k) / (q_k, M^-1 q_k) ---
+    sum_vec_3d(:,:,:) = 0.0 ; sv3dsums(1:2) = 0.0
+    do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
+       if (CS%umask(I,J) == 1) then
+           sum_vec_3d(I,J,1) = resid_scale * (Zu(I,J) * Qu(I,J))
+           ! Order matters to prevent float overflow: Q * (Q * IDiag)
+           sum_vec_3d(I,J,2) = resid_scale * (Qu(I,J) * (Qu(I,J) * IDIAGu(I,J)))
+       endif
+       if (CS%vmask(I,J) == 1) then
+           sum_vec_3d(I,J,1) = sum_vec_3d(I,J,1) + resid_scale * (Zv(I,J) * Qv(I,J))
+           sum_vec_3d(I,J,2) = sum_vec_3d(I,J,2) + resid_scale * (Qv(I,J) * (Qv(I,J) * IDIAGv(I,J)))
+       endif
+    enddo ; enddo
+    sv3dsum = reproducing_sum( sum_vec_3d(:,:,1:2), Is_sum, Ie_sum, Js_sum, Je_sum, sums=sv3dsums(1:2) )
+
+    z_q_sum = sv3dsums(1)
+    q_s_sum = sv3dsums(2)
+
+    if (q_s_sum == 0.0) then
+      iters = iter
+      conv_flag = 1
+      exit
+    endif
+    alpha = z_q_sum / q_s_sum
+
+    ! --- STEP 2: Update x, r, and z (Fused over Full Domain) ---
+    ! Zu halos are populated here since the loop covers Jsdq..Jedq; no pass_vector needed.
+    do J=Jsdq,Jedq ; do I=Isdq,Iedq
+       if (CS%umask(I,J) == 1) then
+           u_shlf(I,J) = u_shlf(I,J) + alpha * Du(I,J)
+           Ru(I,J) = Ru(I,J) - alpha * Qu(I,J)
+           Zu(I,J) = Ru(I,J) * IDIAGu(I,J)
+       endif
+       if (CS%vmask(I,J) == 1) then
+           v_shlf(I,J) = v_shlf(I,J) + alpha * Dv(I,J)
+           Rv(I,J) = Rv(I,J) - alpha * Qv(I,J)
+           Zv(I,J) = Rv(I,J) * IDIAGv(I,J)
+       endif
+    enddo ; enddo
+
+    ! --- STEP 3: w_{k+1} = A z_{k+1} ---
+    Au(:,:) = 0 ; Av(:,:) = 0
+    call CG_action(CS, Au, Av, Zu, Zv, Phi, Phisub, CS%umask, CS%vmask, hmask, &
+                   H_node, CS%ice_visc, float_cond, CS%bed_elev, u_curr, v_curr, &
+                   G, US, isc-1, iec+1, jsc-1, jec+1, rhoi_rhow)
+    call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE)
+
+    ! --- STEP 4: beta and convergence check ---
+    sum_vec_3d(:,:,:) = 0.0 ; sv3dsums(1:2) = 0.0
+    do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
+       if (CS%umask(I,J) == 1) then
+           sum_vec_3d(I,J,1) = resid2_scale * Ru(I,J)**2
+           sum_vec_3d(I,J,2) = resid_scale  * (Zu(I,J) * Au(I,J))
+       endif
+       if (CS%vmask(I,J) == 1) then
+           sum_vec_3d(I,J,1) = sum_vec_3d(I,J,1) + resid2_scale * Rv(I,J)**2
+           sum_vec_3d(I,J,2) = sum_vec_3d(I,J,2) + resid_scale  * (Zv(I,J) * Av(I,J))
+       endif
+    enddo ; enddo
+    sv3dsum = reproducing_sum( sum_vec_3d(:,:,1:2), Is_sum, Ie_sum, Js_sum, Je_sum, sums=sv3dsums(1:2) )
+
+    r_norm_sq = sv3dsums(1)
+    z_w_sum_new = sv3dsums(2)
+
+    if (r_norm_sq <= resid0tol2 .or. z_w_sum==0.0) then
+      iters = iter
+      conv_flag = 1
+      exit
+    endif
+
+    beta = z_w_sum_new / z_w_sum
+    z_w_sum = z_w_sum_new
+
+    ! --- STEP 5: Update p and q ---
+    do J=Jsdq,Jedq ; do I=Isdq,Iedq
+       if (CS%umask(I,J) == 1) then
+           Du(I,J) = Zu(I,J) + beta * Du(I,J)
+           Qu(I,J) = Au(I,J) + beta * Qu(I,J)
+       endif
+       if (CS%vmask(I,J) == 1) then
+           Dv(I,J) = Zv(I,J) + beta * Dv(I,J)
+           Qv(I,J) = Av(I,J) + beta * Qv(I,J)
+       endif
+    enddo ; enddo
+
+  enddo ! end of CR loop
+
+end subroutine ice_shelf_solve_inner_CR
 
 subroutine ice_shelf_advect_thickness_x(CS, G, LB, time_step, hmask, h0, h_after_uflux, uh_ice)
   type(ice_shelf_dyn_CS), intent(in)    :: CS !< A pointer to the ice shelf control structure
@@ -2404,14 +3266,14 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
 
   real, dimension(SIZE(OD,1),SIZE(OD,2))  :: S     ! surface elevation [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)) :: sx_e, sy_e !element contributions to driving stress
-  real    :: rho, rhow, rhoi_rhow ! Ice and ocean densities [R ~> kg m-3]
-  real    :: sx, sy    ! Ice shelf top slopes [Z L-1 ~> nondim]
+  real    :: rho, rhow ! Ice and ocean densities [R ~> kg m-3]
+  real    :: sx, sy    ! Ice shelf top slopes at tracer points [Z L-1 ~> nondim]
   real    :: neumann_val ! [R Z L2 T-2 ~> kg s-2]
-  real    :: dxh, dyh,Dx,Dy  ! Local grid spacing [L ~> m]
   real    :: grav      ! The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real    :: scale     ! Scaling factor used to ensure surface slope magnitude does not exceed CS%max_surface_slope
+  logical :: valid_N, valid_S, valid_E, valid_W
   integer :: i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, is, js, iegq, jegq
-  integer :: giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
+  integer :: giec, gjec, gisc, gjsc, isc, jsc, iec, jec
   integer :: i_off, j_off
 
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
@@ -2422,126 +3284,105 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
   gisc = 1 ; gjsc = 1
 !  giec = G%domain%niglobal+G%domain%nihalo ; gjec = G%domain%njglobal+G%domain%njhalo
   giec = G%domain%niglobal ; gjec = G%domain%njglobal
-!  is = iscq - 1; js = jscq - 1
+!  is = iscq - 1 ; js = jscq - 1
   i_off = G%idg_offset ; j_off = G%jdg_offset
 
 
   rho =  CS%density_ice
   rhow = CS%density_ocean_avg
   grav = CS%g_Earth
-  rhoi_rhow = rho/rhow
   ! prelim - go through and calculate S
 
   if (CS%GL_couple) then
-    do j=jsc-G%domain%njhalo,jec+G%domain%njhalo
-      do i=isc-G%domain%nihalo,iec+G%domain%nihalo
-        S(i,j) = -CS%bed_elev(i,j) + (OD(i,j) + max(ISS%h_shelf(i,j),CS%min_h_shelf))
-      enddo
-    enddo
+    do j=jsc-2,jec+2 ; do i=isc-2,iec+2
+      S(i,j) = -CS%bed_elev(i,j) + (OD(i,j) + max(ISS%h_shelf(i,j),CS%min_h_shelf))
+    enddo ; enddo
   else
     ! check whether the ice is floating or grounded
-    do j=jsc-G%domain%njhalo,jec+G%domain%njhalo
-      do i=isc-G%domain%nihalo,iec+G%domain%nihalo
-        if (rhoi_rhow * max(ISS%h_shelf(i,j),CS%min_h_shelf) - CS%bed_elev(i,j) <= 0) then
-          S(i,j) = (1 - rhoi_rhow)*max(ISS%h_shelf(i,j),CS%min_h_shelf)
-        else
-          S(i,j) = max(ISS%h_shelf(i,j),CS%min_h_shelf)-CS%bed_elev(i,j)
-        endif
-      enddo
-    enddo
+    do j=jsc-2,jec+2 ; do i=isc-2,iec+2
+      if (CS%rhoi_rhow * max(ISS%h_shelf(i,j),CS%min_h_shelf) - CS%bed_elev(i,j) <= 0) then
+        S(i,j) = (1 - CS%rhoi_rhow)*max(ISS%h_shelf(i,j),CS%min_h_shelf)
+      else
+        S(i,j) = max(ISS%h_shelf(i,j),CS%min_h_shelf)-CS%bed_elev(i,j)
+      endif
+    enddo ; enddo
   endif
 
   call pass_var(S, G%domain)
 
-  sx_e(:,:)=0.0; sy_e(:,:)=0.0
-
   do j=jsc-1,jec+1
     do i=isc-1,iec+1
-      cnt = 0
-      sx = 0
-      sy = 0
-      dxh = G%dxT(i,j)
-      dyh = G%dyT(i,j)
-      Dx=dxh
-      Dy=dyh
+
       if (ISS%hmask(i,j) == 1 .or. ISS%hmask(i,j) == 3) then
         ! we are inside the global computational bdry, at an ice-filled cell
 
-        ! calculate sx
-        if (((i+i_off) == gisc) .and. (.not. CS%reentrant_x)) then ! at west computational bdry
-         if (ISS%hmask(i+1,j) == 1 .or. ISS%hmask(i+1,j) == 3) then
-            sx = (S(i+1,j)-S(i,j))/dxh
-          else
-            sx = 0
+        ! Calculate the x-direction surface slope at tracer points.
+        sx = 0.0
+        valid_E = (ISS%hmask(i+1,j) == 1 .or. ISS%hmask(i+1,j) == 3)
+        valid_W = (ISS%hmask(i-1,j) == 1 .or. ISS%hmask(i-1,j) == 3)
+        if (CS%shelf_top_slope_bugs) then
+          if (((i+i_off) == gisc) .and. (.not.CS%reentrant_x)) then ! at west computational bdry
+            if (valid_E) sx = (S(i+1,j)-S(i,j)) / G%dxT(i,j)
+          elseif (((i+i_off) == giec) .and. (.not.CS%reentrant_x)) then ! at east computational bdry
+            if (valid_W) sx = (S(i,j)-S(i-1,j)) / G%dxT(i,j)
+          elseif (valid_E .and. valid_W) then
+            ! This is the usual interior point
+            sx = (S(i+1,j) - S(i-1,j)) / (G%dxT(i,j) + G%dxT(i-1,j))
+          elseif (valid_E) then
+            sx = (S(i+1,j) - S(i,j)) / (G%dxT(i,j) + G%dxT(i+1,j))
+          elseif (valid_W) then
+            sx = (S(i,j) - S(i-1,j)) / (G%dxT(i,j) + G%dxT(i-1,j))
           endif
-        elseif (((i+i_off) == giec) .and. (.not. CS%reentrant_x)) then ! at east computational bdry
-          if (ISS%hmask(i-1,j) == 1 .or. ISS%hmask(i-1,j) == 3) then
-            sx = (S(i,j)-S(i-1,j))/dxh
-          else
-            sx = 0
-          endif
-        else ! interior
-          if (ISS%hmask(i+1,j) == 1 .or. ISS%hmask(i+1,j) == 3) then
-            cnt = cnt+1
-            Dx = dxh + G%dxT(i+1,j)
-            sx = S(i+1,j)
-          else
-            sx = S(i,j)
-          endif
-          if (ISS%hmask(i-1,j) == 1 .or. ISS%hmask(i-1,j) == 3) then
-            cnt = cnt+1
-            Dx = dxh + G%dxT(i-1,j)
-            sx = sx - S(i-1,j)
-          else
-            sx = sx - S(i,j)
-          endif
-          if (cnt == 0) then
-            sx = 0
-          else
-            sx = sx / Dx
+        else ! Correct the bugs in the version above.
+          if (((i+i_off) == gisc) .and. (.not.CS%reentrant_x)) then ! at west computational bdry
+            if (valid_E) sx = (S(i+1,j) - S(i,j)) * G%IdxCu(I,j)
+          elseif (((i+i_off) == giec) .and. (.not.CS%reentrant_x)) then ! at east computational bdry
+            if (valid_W) sx = (S(i,j) - S(i-1,j)) * G%IdxCu(I-1,j)
+          elseif (valid_E .and. valid_W) then
+            ! This is the usual interior point
+            sx = 0.5*(S(i+1,j) - S(i-1,j)) * G%IdxT(i,j)
+          elseif (valid_E) then ! Use a one-sided estimate from the east.
+            sx = (S(i+1,j) - S(i,j)) * G%IdxCu(I,j)
+          elseif (valid_W) then ! Use a one-sided estimate from the west.
+            sx = (S(i,j) - S(i-1,j)) * G%IdxCu(I-1,j)
           endif
         endif
 
-        cnt = 0
-
-        ! calculate sy, similarly
-        if (((j+j_off) == gjsc) .and. (.not. CS%reentrant_y)) then ! at south computational bdry
-          if (ISS%hmask(i,j+1) == 1 .or. ISS%hmask(i,j+1) == 3) then
-            sy = (S(i,j+1)-S(i,j))/dyh
-          else
-            sy = 0
+        ! Calculate the y-direction surface slope at tracer points.
+        sy = 0.0
+        valid_N = (ISS%hmask(i,j+1) == 1 .or. ISS%hmask(i,j+1) == 3)
+        valid_S = (ISS%hmask(i,j-1) == 1 .or. ISS%hmask(i,j-1) == 3)
+        if (CS%shelf_top_slope_bugs) then
+          if (((j+j_off) == gjsc) .and. (.not. CS%reentrant_y)) then ! at south computational bdry
+            if (valid_N) sy = (S(i,j+1)-S(i,j)) / G%dyT(i,j)
+          elseif (((j+j_off) == gjec) .and. (.not. CS%reentrant_y)) then ! at north computational bdry
+            if (valid_S) sy = (S(i,j)-S(i,j-1)) / G%dyT(i,j)
+          elseif (valid_N .and. valid_S) then
+            ! This is the usual interior point
+            sy = (S(i,j+1) - S(i,j-1)) / (G%dyT(i,j) + G%dyT(i,j-1))
+          elseif (valid_N) then
+            sy = (S(i,j+1) - S(i,j)) / (G%dyT(i,j) + G%dyT(i,j+1))
+          elseif (valid_S) then
+            sy = (S(i,j) - S(i,j-1)) / (G%dyT(i,j) + G%dyT(i,j-1))
           endif
-        elseif (((j+j_off) == gjec) .and. (.not. CS%reentrant_y)) then ! at north computational bdry
-          if (ISS%hmask(i,j-1) == 1 .or. ISS%hmask(i,j-1) == 3) then
-            sy = (S(i,j)-S(i,j-1))/dyh
-          else
-            sy = 0
-          endif
-        else ! interior
-          if (ISS%hmask(i,j+1) == 1 .or. ISS%hmask(i,j+1) == 3) then
-            cnt = cnt+1
-            Dy = dyh + G%dyT(i,j+1)
-            sy = S(i,j+1)
-          else
-            sy = S(i,j)
-          endif
-          if (ISS%hmask(i,j-1) == 1 .or. ISS%hmask(i,j-1) == 3) then
-            cnt = cnt+1
-            Dy = dyh + G%dyT(i,j-1)
-            sy = sy - S(i,j-1)
-          else
-            sy = sy - S(i,j)
-          endif
-          if (cnt == 0) then
-            sy = 0
-          else
-            sy = sy / Dy
+        else ! Correct the bugs in the version above.
+          if (((j+j_off) == gjsc) .and. (.not. CS%reentrant_y)) then ! at south computational bdry
+            if (valid_N) sy = (S(i,j+1) - S(i,j)) * G%IdyCv(i,J)
+          elseif (((j+j_off) == gjec) .and. (.not. CS%reentrant_y)) then ! at north computational bdry
+            if (valid_S) sy = (S(i,j) - S(i,j-1)) * G%IdyCv(i,J-1)
+          elseif (valid_N .and. valid_S) then
+            ! This is the usual interior point
+            sy = 0.5*(S(i,j+1) - S(i,j-1)) * G%IdyT(i,j)
+          elseif (valid_N) then ! Use a one-sided estimate from the north.
+            sy = (S(i,j+1) - S(i,j)) * G%IdyCv(i,J)
+          elseif (valid_S) then ! Use a one-sided estimate from the south.
+            sy = (S(i,j) - S(i,j-1)) * G%IdyCv(i,J-1)
           endif
         endif
 
         if (CS%max_surface_slope>0) then
-          scale = min(CS%max_surface_slope/sqrt((sx**2)+(sy**2)),1.0)
-          sx = scale*sx; sy = scale*sy
+          scale = CS%max_surface_slope / max( sqrt((sx**2) + (sy**2)), CS%max_surface_slope )
+          sx = scale*sx ; sy = scale*sy
         endif
 
         sx_e(i,j) = (-.25 * G%areaT(i,j)) * ((rho * grav) * (max(ISS%h_shelf(i,j),CS%min_h_shelf) * sx))
@@ -2551,9 +3392,10 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
 
         !Stress (Neumann) boundary conditions
         if (CS%ground_frac(i,j) == 1) then
-          neumann_val = ((.5 * grav) * (rho * max(ISS%h_shelf(i,j),CS%min_h_shelf)**2 - rhow * CS%bed_elev(i,j)**2))
+          neumann_val = ((.5 * grav) * (rho * max(ISS%h_shelf(i,j),CS%min_h_shelf)**2 - &
+                                        rhow * max(0.0, CS%bed_elev(i,j))**2))
         else
-          neumann_val = (.5 * grav) * ((1-rho/rhow) * (rho * max(ISS%h_shelf(i,j),CS%min_h_shelf)**2))
+          neumann_val = (.5 * grav) * ((1-CS%rhoi_rhow) * (rho * max(ISS%h_shelf(i,j),CS%min_h_shelf)**2))
         endif
         if ((CS%u_face_mask_bdry(I-1,j) == 2) .OR. &
           ((ISS%hmask(i-1,j) == 0 .OR. ISS%hmask(i-1,j) == 2) .AND. (CS%reentrant_x .OR. (i+i_off /= gisc)))) then
@@ -2566,42 +3408,46 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
           !     is not above the base of the ice in the current cell
 
           ! Note the negative sign due to the direction of the normal vector
-          taudx(I-1,J-1) = taudx(I-1,J-1) - .5 * dyh * neumann_val
-          taudx(I-1,J) = taudx(I-1,J) - .5 * dyh * neumann_val
+          taudx(I-1,J-1) = taudx(I-1,J-1) - .5 * G%dyCu(I-1,j) * neumann_val
+          taudx(I-1,J) = taudx(I-1,J) - .5 * G%dyCu(I-1,j) * neumann_val
         endif
 
         if ((CS%u_face_mask_bdry(I,j) == 2) .OR. &
           ((ISS%hmask(i+1,j) == 0 .OR. ISS%hmask(i+1,j) == 2) .and. (CS%reentrant_x .OR. (i+i_off /= giec)))) then
           ! east face of the cell is at a stress boundary
-          taudx(I,J-1) = taudx(I,J-1) + .5 * dyh * neumann_val
-          taudx(I,J) = taudx(I,J) + .5 * dyh * neumann_val
+          taudx(I,J-1) = taudx(I,J-1) + .5 * G%dyCu(I,j) * neumann_val
+          taudx(I,J) = taudx(I,J) + .5 * G%dyCu(I,j) * neumann_val
         endif
 
         if ((CS%v_face_mask_bdry(i,J-1) == 2) .OR. &
           ((ISS%hmask(i,j-1) == 0 .OR. ISS%hmask(i,j-1) == 2) .and. (CS%reentrant_y .OR. (j+j_off /= gjsc)))) then
           ! south face of the cell is at a stress boundary
-          taudy(I-1,J-1) = taudy(I-1,J-1) - .5 * dxh * neumann_val
-          taudy(I,J-1) = taudy(I,J-1) - .5 * dxh * neumann_val
+          taudy(I-1,J-1) = taudy(I-1,J-1) - .5 * G%dxCv(i,J-1) * neumann_val
+          taudy(I,J-1) = taudy(I,J-1) - .5 * G%dxCv(i,J-1) * neumann_val
         endif
 
         if ((CS%v_face_mask_bdry(i,J) == 2) .OR. &
           ((ISS%hmask(i,j+1) == 0 .OR. ISS%hmask(i,j+1) == 2) .and. (CS%reentrant_y .OR. (j+j_off /= gjec)))) then
           ! north face of the cell is at a stress boundary
-          taudy(I-1,J) = taudy(I-1,J) + .5 * dxh * neumann_val
-          taudy(I,J) = taudy(I,J) + .5 * dxh * neumann_val
+          taudy(I-1,J) = taudy(I-1,J) + .5 * G%dxCv(i,J) * neumann_val
+          taudy(I,J) = taudy(I,J) + .5 * G%dxCv(i,J) * neumann_val
         endif
+      else ! This is not an ice-filled cell, so zero out the slopes here
+        CS%sx_shelf(i,j) = 0.0 ; CS%sy_shelf(i,j) = 0.0
+        sx_e(i,j) = 0.0
+        sy_e(i,j) = 0.0
       endif
     enddo
   enddo
 
-  do J=jsc-2,jec+1; do I=isc-2,iec+1
+  do J=jsc-1,jec ; do I=isc-1,iec
     taudx(I,J) = taudx(I,J) + ((sx_e(i,j)+sx_e(i+1,j+1)) + (sx_e(i+1,j)+sx_e(i,j+1)))
     taudy(I,J) = taudy(I,J) + ((sy_e(i,j)+sy_e(i+1,j+1)) + (sy_e(i+1,j)+sy_e(i,j+1)))
-  enddo; enddo
+  enddo ; enddo
 end subroutine calc_shelf_driving_stress
 
 subroutine CG_action(CS, uret, vret, u_shlf, v_shlf, Phi, Phisub, umask, vmask, hmask, H_node, &
-                     ice_visc, float_cond, bathyT, basal_trac, G, US, is, ie, js, je, dens_ratio)
+                     ice_visc, float_cond, bathyT, u_curr, v_curr, G, US, is, ie, js, je, dens_ratio, use_newton_in)
 
   type(ice_shelf_dyn_CS), intent(in)    :: CS !< A pointer to the ice shelf control structure
   type(ocean_grid_type), intent(in) :: G  !< The grid structure used by the ice shelf.
@@ -2635,14 +3481,17 @@ subroutine CG_action(CS, uret, vret, u_shlf, v_shlf, Phi, Phisub, umask, vmask, 
                          intent(in)    :: ice_visc !< A field related to the ice viscosity from Glen's
                                                !! flow law [R L4 Z T-1 ~> kg m2 s-1].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(in)    :: float_cond !< If GL_regularize=true, an array indicating where the ice
-                                                !! shelf is floating: 0 if floating, 1 if not
+                         intent(in)    :: float_cond !< If GL_regularize=true, indicates cells containing
+                                                !! the grounding line (float_cond=1) or not (float_cond=0)
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: bathyT !< The depth of ocean bathymetry at tracer points
                                                  !! relative to sea-level [Z ~> m].
-  real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(in)    :: basal_trac  !< Area-integrated taub_beta field related to the nonlinear
-                                                !! part of the "linearized" basal stress [R Z L2 T-1 ~> kg s-1].
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                         intent(in)    :: u_curr  !< Frozen current iterate u^k, used to evaluate basal friction
+                                               !! at quadrature points [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                         intent(in)    :: v_curr  !< Frozen current iterate v^k, used to evaluate basal friction
+                                               !! at quadrature points [L T-1 ~> m s-1]
 
   real,                  intent(in)    :: dens_ratio !< The density of ice divided by the density
                                                      !! of seawater, nondimensional
@@ -2651,6 +3500,7 @@ subroutine CG_action(CS, uret, vret, u_shlf, v_shlf, Phi, Phisub, umask, vmask, 
   integer,               intent(in)    :: ie  !< The ending i-index to work on
   integer,               intent(in)    :: js  !< The starting j-index to work on
   integer,               intent(in)    :: je  !< The ending j-index to work on
+  logical, optional,     intent(in)    :: use_newton_in !< If present, overrides CS%doing_newton for Newton correction
 
 ! the linear action of the matrix on (u,v) with bilinear finite elements
 ! as of now everything is passed in so no grid pointers or anything of the sort have to be dereferenced,
@@ -2672,12 +3522,25 @@ subroutine CG_action(CS, uret, vret, u_shlf, v_shlf, Phi, Phisub, umask, vmask, 
 ! Phi_k is equal to 1 at vertex k, and 0 at vertex l /= k, and bilinear
 
   real :: ux, uy, vx, vy ! Components of velocity shears or divergence [T-1 ~> s-1]
-  real :: uq, vq  ! Interpolated velocities [L T-1 ~> m s-1]
+  real :: uq, vq  ! Interpolated direction-vector δu at quadrature point [L T-1 ~> m s-1]
+  real :: strx_n, stry_n, strsh_n, dstrain_n  ! Newton viscosity correction variables [T-1 ~> s-1], [T-2 ~> s-2]
+  real :: u_curr_qp, v_curr_qp  ! Current iterate u^k at quadrature point [L T-1 ~> m s-1]
+  real :: unorm2_qp  ! Regularized squared speed of u^k at quadrature point [L2 T-2 ~> m2 s-2]
+  real :: basal_coef_qp  ! Picard basal friction coefficient at quadrature point [R L2 Z T-1 ~> kg s-1]
+  real :: drag_newt_qp   ! Newton basal drag coefficient at quadrature point [R Z T-1 ~> kg m-2 s-1]
+  real :: inner_dot_qp   ! u^k_qp · δu_qp inner product for Newton basal drag [L2 T-2 ~> m2 s-2]
+  real :: coef_prefactor_e  ! Pre-computed area * C_basal_friction * L_T_to_m_s [R L2 Z T-1 ~> kg s-1]
+  real :: eps_vel2_e     ! Velocity regularization squared for current element [L2 T-2 ~> m2 s-2]
+  real :: min_trac_e     ! min_basal_traction * areaT for current element [R L2 Z T-1 ~> kg s-1]
+  real :: fB_e           ! Pre-computed Coulomb fB for element; 0 for Weertman [(T L-1)^CF_PostPeak]
+  real :: jac_wt  ! Per-quadrature-point metric correction |J_q|/areaT [nondim]
   integer :: iq, jq, iphi, jphi, i, j, ilq, jlq, Itgt, Jtgt, qp, qpv
   logical :: visc_qp4
+  logical :: use_newton  ! Whether to apply Newton tangent stiffness corrections
+  logical :: do_newton_visc  ! Whether to apply viscosity-related Newton tangent stiffness corrections
   real, dimension(2) :: xquad  ! Nondimensional quadrature ratios [nondim]
-  real, dimension(2,2) :: Ucell, Vcell, Usub, Vsub  ! Velocities at the nodal points around the cell [L T-1 ~> m s-1]
-  real, dimension(2,2) :: Hcell   ! Ice shelf thickness at notal (corner) points [Z ~> m]
+  real, dimension(2,2) :: Usub, Vsub  ! Subgrid nodal contributions to basal traction [R L3 Z T-2 ~> kg m s-2]
+  real, dimension(2,2) :: Hcell   ! Ice shelf thickness at nodal (corner) points [Z ~> m]
   real, dimension(2,2,4) :: uret_qp, vret_qp                ! Temporary arrays in [R Z L3 T-2 ~> kg m s-2]
   real, dimension(SZDIB_(G),SZDJB_(G),4) :: uret_b, vret_b  ! Temporary arrays in [R Z L3 T-2 ~> kg m s-2]
 
@@ -2690,12 +3553,23 @@ subroutine CG_action(CS, uret, vret, u_shlf, v_shlf, Phi, Phisub, umask, vmask, 
     qpv = 1
   endif
 
-  uret(:,:) = 0.0; vret(:,:)=0.0
-  uret_b(:,:,:)=0.0 ; vret_b(:,:,:)=0.0
+  use_newton = CS%doing_newton
+  if (present(use_newton_in)) use_newton = use_newton_in
+  do_newton_visc = use_newton .and. trim(CS%ice_viscosity_compute) == "MODEL"
+
+  uret(:,:) = 0.0 ; vret(:,:) = 0.0
+  uret_b(:,:,:) = 0.0 ; vret_b(:,:,:) = 0.0
 
   do j=js,je ; do i=is,ie ; if (hmask(i,j) == 1 .or. hmask(i,j)==3) then
 
-    uret_qp(:,:,:)=0.0; vret_qp(:,:,:)=0.0
+    uret_qp(:,:,:) = 0.0 ; vret_qp(:,:,:) = 0.0
+
+      ! Pre-computed element-level basal friction quantities (updated each outer Newton iteration
+      ! by calc_shelf_basal_prefactors; avoids O(N_cg) recomputation of expensive prefactors).
+      coef_prefactor_e = CS%coef_prefactor(i,j)
+      eps_vel2_e = CS%eps_glen_min**2 * ((G%dxT(i,j)**2) + (G%dyT(i,j)**2))
+      min_trac_e = CS%min_basal_traction * G%areaT(i,j)
+      fB_e = CS%fB_elem(i,j)  ! 0 for Weertman; non-zero for Coulomb
 
       do iq=1,2 ; do jq=1,2
 
@@ -2733,21 +3607,80 @@ subroutine CG_action(CS, uret, vret, u_shlf, v_shlf, Phi, Phisub, umask, vmask, 
 
         if (visc_qp4) qpv = qp !current quad point for viscosity
 
+        ! Newton correction: compute dstrain scalar once per quadrature point
+        if (do_newton_visc) then
+          strx_n = CS%newton_str_ux(i,j,qpv)
+          stry_n = CS%newton_str_vy(i,j,qpv)
+          strsh_n = CS%newton_str_sh(i,j,qpv)
+          dstrain_n = (((2.*strx_n + stry_n)*ux) + ((2.*stry_n + strx_n)*vy)) + &
+                      (strsh_n * (uy + vx) * 0.5)
+        endif
+
+        ! Basal friction and Newton Jacobian evaluated at this quadrature point (fully grounded cells only).
+        ! Evaluating at quadrature points rather than cell-averaged ensures the Newton correction is the
+        ! exact Jacobian of the Picard residual, enabling quadratic convergence for all friction exponents.
+        if (float_cond(i,j) == 0  .and. CS%ground_frac(i,j)>0) then
+          u_curr_qp = ((u_curr(I-1,J-1) * (xquad(3-iq) * xquad(3-jq))) + &
+                       (u_curr(I,J) * (xquad(iq) * xquad(jq)))) + &
+                      ((u_curr(I,J-1) * (xquad(iq) * xquad(3-jq))) + &
+                       (u_curr(I-1,J) * (xquad(3-iq) * xquad(jq))))
+          v_curr_qp = ((v_curr(I-1,J-1) * (xquad(3-iq) * xquad(3-jq))) + &
+                       (v_curr(I,J) * (xquad(iq) * xquad(jq)))) + &
+                      ((v_curr(I,J-1) * (xquad(iq) * xquad(3-jq))) + &
+                       (v_curr(I-1,J) * (xquad(3-iq) * xquad(jq))))
+          unorm2_qp = ((u_curr_qp**2) + (v_curr_qp**2)) + eps_vel2_e
+          call compute_basal_coef(unorm2_qp, coef_prefactor_e, min_trac_e, fB_e, &
+              CS%n_basal_fric, CS%CoulombFriction, CS%CF_PostPeak, US%L_T_to_m_s, use_newton, &
+              basal_coef_qp, drag_newt_qp)
+          ! Apply ground fraction scaling (replaces external scaling of basal_traction)
+          basal_coef_qp = basal_coef_qp * CS%ground_frac(i,j)
+          if (use_newton) then
+            drag_newt_qp = drag_newt_qp * CS%ground_frac(i,j)
+            ! Inner product u^k_qp . delta_u_qp for the Newton correction.
+            inner_dot_qp = (u_curr_qp * uq) + (v_curr_qp * vq)
+          endif
+        endif
+
+        ! Ratio |J_q|/areaT corrects the uniform-area weight baked into ice_visc for
+        ! non-rectangular elements where opposite cell edges have unequal lengths.
+        jac_wt = CS%Jac(qp,i,j) * G%IareaT(i,j)
+
         do jphi=1,2 ; Jtgt = J-2+jphi ; do iphi=1,2 ; Itgt = I-2+iphi
-          if (umask(Itgt,Jtgt) == 1) uret_qp(iphi,jphi,qp) = ice_visc(i,j,qpv) * &
+          if (umask(Itgt,Jtgt) == 1) uret_qp(iphi,jphi,qp) = jac_wt * ice_visc(i,j,qpv) * &
             (((4*ux+2*vy) * Phi(2*(2*(jphi-1)+iphi)-1,qp,i,j)) + &
             ((uy+vx) * Phi(2*(2*(jphi-1)+iphi),qp,i,j)))
-          if (vmask(Itgt,Jtgt) == 1) vret_qp(iphi,jphi,qp) = ice_visc(i,j,qpv) * &
+          if (vmask(Itgt,Jtgt) == 1) vret_qp(iphi,jphi,qp) = jac_wt * ice_visc(i,j,qpv) * &
             (((uy+vx) * Phi(2*(2*(jphi-1)+iphi)-1,qp,i,j)) + &
             ((4*vy+2*ux) * Phi(2*(2*(jphi-1)+iphi),qp,i,j)))
 
-          if (float_cond(i,j) == 0) then
+          ! Newton viscosity tangent stiffness: (dη/dε_e^2) * (g·δε) * (g·φ_m).
+          if (do_newton_visc) then
+            if (umask(Itgt,Jtgt) == 1) uret_qp(iphi,jphi,qp) = uret_qp(iphi,jphi,qp) + &
+              jac_wt * CS%newton_visc_factor(i,j,qpv) * dstrain_n * &
+              (((2.*strx_n + stry_n) * Phi(2*(2*(jphi-1)+iphi)-1,qp,i,j)) + &
+               (strsh_n * 0.5 * Phi(2*(2*(jphi-1)+iphi),qp,i,j)))
+            if (vmask(Itgt,Jtgt) == 1) vret_qp(iphi,jphi,qp) = vret_qp(iphi,jphi,qp) + &
+              jac_wt * CS%newton_visc_factor(i,j,qpv) * dstrain_n * &
+              ((strsh_n * 0.5 * Phi(2*(2*(jphi-1)+iphi)-1,qp,i,j)) + &
+               ((2.*stry_n + strx_n) * Phi(2*(2*(jphi-1)+iphi),qp,i,j)))
+          endif
+
+          if (float_cond(i,j) == 0 .and. CS%ground_frac(i,j)>0) then
             ilq = 1 ; if (iq == iphi) ilq = 2
             jlq = 1 ; if (jq == jphi) jlq = 2
-            if (umask(Itgt,Jtgt) == 1) uret_qp(iphi,jphi,qp) = uret_qp(iphi,jphi,qp) +  &
-              ((basal_trac(i,j) * uq) * (xquad(ilq) * xquad(jlq)))
-            if (vmask(Itgt,Jtgt) == 1) vret_qp(iphi,jphi,qp) = vret_qp(iphi,jphi,qp) +  &
-              ((basal_trac(i,j) * vq) * (xquad(ilq) * xquad(jlq)))
+            ! Picard basal drag: C*|u^k|^(m-1) * δu evaluated at quadrature point, weighted by φ_m
+            if (umask(Itgt,Jtgt) == 1) uret_qp(iphi,jphi,qp) = uret_qp(iphi,jphi,qp) + &
+              (jac_wt * (basal_coef_qp * uq) * (xquad(ilq) * xquad(jlq)))
+            if (vmask(Itgt,Jtgt) == 1) vret_qp(iphi,jphi,qp) = vret_qp(iphi,jphi,qp) + &
+              (jac_wt * (basal_coef_qp * vq) * (xquad(ilq) * xquad(jlq)))
+            ! Newton basal drag: pointwise Jacobian of the Picard residual.
+            ! Tangent stiffness = basal_coef_qp*I + drag_newt_qp * u^k_qp ⊗ u^k_qp
+            if (use_newton) then
+              if (umask(Itgt,Jtgt) == 1) uret_qp(iphi,jphi,qp) = uret_qp(iphi,jphi,qp) + &
+                jac_wt * drag_newt_qp * u_curr_qp * inner_dot_qp * (xquad(ilq) * xquad(jlq))
+              if (vmask(Itgt,Jtgt) == 1) vret_qp(iphi,jphi,qp) = vret_qp(iphi,jphi,qp) + &
+                jac_wt * drag_newt_qp * v_curr_qp * inner_dot_qp * (xquad(ilq) * xquad(jlq))
+            endif
           endif
         enddo ; enddo
       enddo ; enddo
@@ -2769,103 +3702,225 @@ subroutine CG_action(CS, uret, vret, u_shlf, v_shlf, Phi, Phisub, umask, vmask, 
       vret_b(I  ,J  ,1) = 0.25*((vret_qp(2,2,1)+vret_qp(2,2,4))+(vret_qp(2,2,2)+vret_qp(2,2,3)))
 
       if (float_cond(i,j) == 1) then
-        Ucell(:,:) = u_shlf(I-1:I,J-1:J) ; Vcell(:,:) = v_shlf(I-1:I,J-1:J)
+        ! Subgrid grounding-line: evaluate basal friction at each grounded sub-quadrature point.
+        ! Picard and Newton Jacobian are both computed inside CG_action_subgrid_basal.
         Hcell(:,:) = H_node(I-1:I,J-1:J)
-
-        call CG_action_subgrid_basal(Phisub, Hcell, Ucell, Vcell, &
-                                     bathyT(i,j), dens_ratio, Usub, Vsub)
-
-        if (umask(I-1,J-1) == 1) uret_b(I-1,J-1,4) = uret_b(I-1,J-1,4) + (Usub(1,1) * basal_trac(i,j))
-        if (umask(I-1,J  ) == 1) uret_b(I-1,J  ,2) = uret_b(I-1,J  ,2) + (Usub(1,2) * basal_trac(i,j))
-        if (umask(I  ,J-1) == 1) uret_b(I  ,J-1,3) = uret_b(I  ,J-1,3) + (Usub(2,1) * basal_trac(i,j))
-        if (umask(I  ,J  ) == 1) uret_b(I  ,J  ,1) = uret_b(I  ,J  ,1) + (Usub(2,2) * basal_trac(i,j))
-
-        if (vmask(I-1,J-1) == 1) vret_b(I-1,J-1,4) = vret_b(I-1,J-1,4) + (Vsub(1,1) * basal_trac(i,j))
-        if (vmask(I-1,J  ) == 1) vret_b(I-1,J  ,2) = vret_b(I-1,J  ,2) + (Vsub(1,2) * basal_trac(i,j))
-        if (vmask(I  ,J-1) == 1) vret_b(I  ,J-1,3) = vret_b(I  ,J-1,3) + (Vsub(2,1) * basal_trac(i,j))
-        if (vmask(I  ,J  ) == 1) vret_b(I  ,J  ,1) = vret_b(I  ,J  ,1) + (Vsub(2,2) * basal_trac(i,j))
+        call CG_action_subgrid_basal(CS, G, US, Phisub, Hcell, &
+                                     u_curr(I-1:I,J-1:J), v_curr(I-1:I,J-1:J), &
+                                     u_shlf(I-1:I,J-1:J), v_shlf(I-1:I,J-1:J), &
+                                     bathyT(i,j), dens_ratio, i, j, fB_e, use_newton, Usub, Vsub, &
+                                     G%dxCv(i,j-1), G%dxCv(i,j), G%dyCu(i-1,j), G%dyCu(i,j), G%IareaT(i,j))
+        if (umask(I-1,J-1) == 1) uret_b(I-1,J-1,4) = uret_b(I-1,J-1,4) + Usub(1,1)
+        if (umask(I-1,J  ) == 1) uret_b(I-1,J  ,2) = uret_b(I-1,J  ,2) + Usub(1,2)
+        if (umask(I  ,J-1) == 1) uret_b(I  ,J-1,3) = uret_b(I  ,J-1,3) + Usub(2,1)
+        if (umask(I  ,J  ) == 1) uret_b(I  ,J  ,1) = uret_b(I  ,J  ,1) + Usub(2,2)
+        if (vmask(I-1,J-1) == 1) vret_b(I-1,J-1,4) = vret_b(I-1,J-1,4) + Vsub(1,1)
+        if (vmask(I-1,J  ) == 1) vret_b(I-1,J  ,2) = vret_b(I-1,J  ,2) + Vsub(1,2)
+        if (vmask(I  ,J-1) == 1) vret_b(I  ,J-1,3) = vret_b(I  ,J-1,3) + Vsub(2,1)
+        if (vmask(I  ,J  ) == 1) vret_b(I  ,J  ,1) = vret_b(I  ,J  ,1) + Vsub(2,2)
       endif
   endif ; enddo ; enddo
 
   do J=js-1,je ; do I=is-1,ie
     uret(I,J) = (uret_b(I,J,1)+uret_b(I,J,4)) + (uret_b(I,J,2)+uret_b(I,J,3))
     vret(I,J) = (vret_b(I,J,1)+vret_b(I,J,4)) + (vret_b(I,J,2)+vret_b(I,J,3))
-  enddo; enddo
+  enddo ; enddo
 
 end subroutine CG_action
 
-subroutine CG_action_subgrid_basal(Phisub, H, U, V, bathyT, dens_ratio, Ucontr, Vcontr)
-  real, dimension(:,:,:,:,:,:), &
-                        intent(in)    :: Phisub !< Quadrature structure weights at subgridscale
-                                            !! locations for finite element calculations [nondim]
-  real, dimension(2,2), intent(in)    :: H  !< The ice shelf thickness at nodal (corner) points [Z ~> m].
-  real, dimension(2,2), intent(in)    :: U  !< The zonal ice shelf velocity at vertices [L T-1 ~> m s-1]
-  real, dimension(2,2), intent(in)    :: V  !< The meridional ice shelf velocity at vertices [L T-1 ~> m s-1]
-  real,                 intent(in)    :: bathyT !< The depth of ocean bathymetry at tracer points
-                                            !! relative to sea-level [Z ~> m].
-  real,                 intent(in)    :: dens_ratio !< The density of ice divided by the density
-                                            !! of seawater [nondim]
-  real, dimension(2,2), intent(out)   :: Ucontr !< The areal average of u-velocities where the ice shelf
-                                            !! is grounded, or 0 where it is floating [L T-1 ~> m s-1].
-  real, dimension(2,2), intent(out)   :: Vcontr !< The areal average of v-velocities where the ice shelf
-                                            !! is grounded, or 0 where it is floating [L T-1 ~> m s-1].
+!> Compute subgrid grounding-line basal traction nodal contributions for a CG action.
+!! Evaluates basal friction (Picard and Newton Jacobian) at each grounded sub-quadrature point.
+!! The sub-qp flotation test accounts for partial grounding; no external ground_frac scaling needed.
+subroutine CG_action_subgrid_basal(CS, G, US, Phisub, H, U_curr, V_curr, U_delta, V_delta, &
+                                   bathyT, dens_ratio, i_elem, j_elem, fB_e, use_newton, Ucontr, Vcontr, &
+                                   dxCv_S, dxCv_N, dyCu_W, dyCu_E, IareaT)
+  type(ice_shelf_dyn_CS), intent(in) :: CS      !< Ice shelf control structure
+  type(ocean_grid_type),  intent(in) :: G       !< The grid structure
+  type(unit_scale_type),  intent(in) :: US      !< Unit conversion factors
+  real, dimension(:,:,:,:,:,:), intent(in) :: Phisub !< Sub-grid quadrature weights [nondim]
+  real, dimension(2,2),   intent(in) :: H       !< Ice thickness at element corners [Z ~> m]
+  real, dimension(2,2),   intent(in) :: U_curr  !< Frozen u^k at element corners [L T-1 ~> m s-1]
+  real, dimension(2,2),   intent(in) :: V_curr  !< Frozen v^k at element corners [L T-1 ~> m s-1]
+  real, dimension(2,2),   intent(in) :: U_delta !< Search direction δu at element corners [L T-1 ~> m s-1]
+  real, dimension(2,2),   intent(in) :: V_delta !< Search direction δv at element corners [L T-1 ~> m s-1]
+  real,                   intent(in) :: bathyT  !< Ocean bathymetry depth at tracer point [Z ~> m]
+  real,                   intent(in) :: dens_ratio !< Ice density / water density [nondim]
+  integer,                intent(in) :: i_elem  !< Tracer-grid i-index of the element
+  integer,                intent(in) :: j_elem  !< Tracer-grid j-index of the element
+  real,                   intent(in) :: fB_e    !< Element Coulomb parameter fB; 0 for Weertman [(T L-1)^CF_PostPeak]
+  logical,                intent(in) :: use_newton !< If true, include Newton basal drag correction
+  real, dimension(2,2),   intent(out) :: Ucontr !< Nodal u-contributions with friction applied [R L3 Z T-2 ~> kg m s-2]
+  real, dimension(2,2),   intent(out) :: Vcontr !< Nodal v-contributions with friction applied [R L3 Z T-2 ~> kg m s-2]
+  real,                   intent(in) :: dxCv_S !< The cell width at the southern (v-point) edge [L ~> m]
+  real,                   intent(in) :: dxCv_N !< The cell width at the northern (v-point) edge [L ~> m]
+  real,                   intent(in) :: dyCu_W !< The cell height at the western (u-point) edge [L ~> m]
+  real,                   intent(in) :: dyCu_E !< The cell height at the eastern (u-point) edge [L ~> m]
+  real,                   intent(in) :: IareaT !< The inverse of the cell area at the tracer point [L-2 ~> m-2]
 
-  real, dimension(SIZE(Phisub,3),SIZE(Phisub,3),2,2) :: Ucontr_sub, Vcontr_sub ! The contributions to Ucontr and Vcontr
-                                                                               !! at each sub-cell
-  real, dimension(2,2,SIZE(Phisub,3),SIZE(Phisub,3)) :: uloc_arr !The local sub-cell u-velocity [L T-1 ~> m s-1]
-  real, dimension(2,2,SIZE(Phisub,3),SIZE(Phisub,3)) :: vloc_arr !The local sub-cell v-velocity [L T-1 ~> m s-1]
-  real, dimension(2,2) :: Ucontr_q, Vcontr_q !Contributions to a node from each quadrature point in a sub-grid cell
-  real    :: subarea ! The fractional sub-cell area [nondim]
-  real    :: hloc    ! The local sub-cell ice thickness [Z ~> m]
+  real, dimension(SIZE(Phisub,3),SIZE(Phisub,3),2,2) :: Ucontr_sub, Vcontr_sub  ! The contributions to Ucontr and Vcontr
+                                                                                !! at each sub-cell
+  real, dimension(2,2,2,2) :: U_qp_nd, V_qp_nd  ! Per-qp nodal contributions (qx,qy,m,n)
+                                                ! accumulated then pair-summed for rotation invariance
+  real :: hloc          ! Local sub-cell ice thickness [Z ~> m]
+  real :: u_curr_loc    ! Frozen u^k interpolated to sub-qp [L T-1 ~> m s-1]
+  real :: v_curr_loc    ! Frozen v^k interpolated to sub-qp [L T-1 ~> m s-1]
+  real :: u_delta_loc   ! Search direction δu interpolated to sub-qp [L T-1 ~> m s-1]
+  real :: v_delta_loc   ! Search direction δv interpolated to sub-qp [L T-1 ~> m s-1]
+  real :: unorm2_loc    ! Regularized |u^k|^2 at sub-qp [L2 T-2 ~> m2 s-2]
+  real :: basal_coef_loc ! Picard friction coefficient at sub-qp [R L2 Z T-1 ~> kg s-1]
+  real :: drag_newt_loc  ! Newton drag coefficient at sub-qp [R Z T ~> kg m-2 s]
+  real :: inner_dot_loc  ! u^k · δu inner product at sub-qp [L2 T-2 ~> m2 s-2]
+  real :: phi_mn         ! Basis function value at sub-qp [nondim]
+  real :: contrib        ! Quadrature weight contribution [nondim]
+  real :: coef_prefactor ! Pre-computed area * C_basal_friction * L_T_to_m_s [R L2 Z T-1 ~> kg s-1]
+  real :: min_trac_area  ! Minimum area-integrated traction floor [R L2 Z T-1 ~> kg s-1]
+  real :: eps_vel2       ! Velocity regularization squared [L2 T-2 ~> m2 s-2]
+  real :: jac_sub_wt ! Per-sub-cell-QP metric correction |J_sub|/areaT [nondim]
+  real :: a, d      ! Interpolated cell-edge spacings at the sub-cell QP [L ~> m]
+  real :: subarea        ! Fractional sub-cell area [nondim]
   integer :: nsub, i, j, qx, qy, m, n
 
-  nsub = size(Phisub,3)
-  subarea = 1.0 / (nsub**2)
+  nsub    = size(Phisub, 3)
+  subarea = 1.0 / real(nsub)**2
 
-  uloc_arr(:,:,:,:) = 0.0; vloc_arr(:,:,:,:)=0.0
+  coef_prefactor = CS%coef_prefactor(i_elem,j_elem)
+  min_trac_area  = CS%min_basal_traction * G%areaT(i_elem,j_elem)
+  eps_vel2 = CS%eps_glen_min**2 * ((G%dxT(i_elem,j_elem)**2) + (G%dyT(i_elem,j_elem)**2))
 
-  do j=1,nsub ; do i=1,nsub;  do qy=1,2 ; do qx=1,2
-    hloc = ((Phisub(qx,qy,i,j,1,1)*H(1,1)) + (Phisub(qx,qy,i,j,2,2)*H(2,2))) + &
-           ((Phisub(qx,qy,i,j,1,2)*H(1,2)) + (Phisub(qx,qy,i,j,2,1)*H(2,1)))
-    if (dens_ratio * hloc - bathyT > 0) then
-      uloc_arr(qx,qy,i,j) = (((Phisub(qx,qy,i,j,1,1) * U(1,1)) + (Phisub(qx,qy,i,j,2,2) * U(2,2))) + &
-                             ((Phisub(qx,qy,i,j,1,2) * U(1,2)) + (Phisub(qx,qy,i,j,2,1) * U(2,1))))
-      vloc_arr(qx,qy,i,j) = (((Phisub(qx,qy,i,j,1,1) * V(1,1)) + (Phisub(qx,qy,i,j,2,2) * V(2,2))) + &
-                             ((Phisub(qx,qy,i,j,1,2) * V(1,2)) + (Phisub(qx,qy,i,j,2,1) * V(2,1))))
-    endif
-  enddo; enddo ; enddo ; enddo
+  Ucontr_sub(:,:,:,:) = 0.0 ; Vcontr_sub(:,:,:,:) = 0.0
 
-  do n=1,2 ; do m=1,2 ; do j=1,nsub ; do i=1,nsub
+  do j=1,nsub ; do i=1,nsub
+    U_qp_nd(:,:,:,:) = 0.0 ; V_qp_nd(:,:,:,:) = 0.0
     do qy=1,2 ; do qx=1,2
-      !calculate quadrature point contributions for the sub-cell, to each node
-        Ucontr_q(qx,qy) = Phisub(qx,qy,i,j,m,n) * uloc_arr(qx,qy,i,j)
-        Vcontr_q(qx,qy) = Phisub(qx,qy,i,j,m,n) * vloc_arr(qx,qy,i,j)
-    enddo; enddo
+      hloc = ((Phisub(qx,qy,i,j,1,1)*H(1,1)) + (Phisub(qx,qy,i,j,2,2)*H(2,2))) + &
+             ((Phisub(qx,qy,i,j,1,2)*H(1,2)) + (Phisub(qx,qy,i,j,2,1)*H(2,1)))
+      if (dens_ratio * hloc - bathyT > 0) then  ! grounded sub-qp
+        u_curr_loc  = (((Phisub(qx,qy,i,j,1,1)*U_curr(1,1))  + (Phisub(qx,qy,i,j,2,2)*U_curr(2,2)))  + &
+                       ((Phisub(qx,qy,i,j,1,2)*U_curr(1,2))  + (Phisub(qx,qy,i,j,2,1)*U_curr(2,1))))
+        v_curr_loc  = (((Phisub(qx,qy,i,j,1,1)*V_curr(1,1))  + (Phisub(qx,qy,i,j,2,2)*V_curr(2,2)))  + &
+                       ((Phisub(qx,qy,i,j,1,2)*V_curr(1,2))  + (Phisub(qx,qy,i,j,2,1)*V_curr(2,1))))
+        u_delta_loc = (((Phisub(qx,qy,i,j,1,1)*U_delta(1,1)) + (Phisub(qx,qy,i,j,2,2)*U_delta(2,2))) + &
+                       ((Phisub(qx,qy,i,j,1,2)*U_delta(1,2)) + (Phisub(qx,qy,i,j,2,1)*U_delta(2,1))))
+        v_delta_loc = (((Phisub(qx,qy,i,j,1,1)*V_delta(1,1)) + (Phisub(qx,qy,i,j,2,2)*V_delta(2,2))) + &
+                       ((Phisub(qx,qy,i,j,1,2)*V_delta(1,2)) + (Phisub(qx,qy,i,j,2,1)*V_delta(2,1))))
 
-    !calculate sub-cell contribution to each node by summing up quadrature point contributions from the sub-cell
-    Ucontr_sub(i,j,m,n) = (subarea * 0.25) * ((Ucontr_q(1,1) + Ucontr_q(2,2)) + (Ucontr_q(1,2)+Ucontr_q(2,1)))
-    Vcontr_sub(i,j,m,n) = (subarea * 0.25) * ((Vcontr_q(1,1) + Vcontr_q(2,2)) + (Vcontr_q(1,2)+Vcontr_q(2,1)))
-  enddo; enddo ; enddo ; enddo
+        unorm2_loc = ((u_curr_loc**2) + (v_curr_loc**2)) + eps_vel2
+        call compute_basal_coef(unorm2_loc, coef_prefactor, min_trac_area, fB_e, &
+            CS%n_basal_fric, CS%CoulombFriction, CS%CF_PostPeak, US%L_T_to_m_s, use_newton, &
+            basal_coef_loc, drag_newt_loc)
+        inner_dot_loc = (u_curr_loc * u_delta_loc) + (v_curr_loc * v_delta_loc)
 
-  !sum up the sub-cell contributions to each node
+        ! Interpolate cell-edge metrics to the sub-cell QP using the bilinear shape function values
+        ! from bilinear_shape_functions_subgrid.  Marginal sums of Phisub give the interpolation
+        ! weights: sum over k=1 nodes gives (1-y); k=2 gives y; l=1 gives (1-x); l=2 gives x.
+        ! This is analogous to jac_wt = CS%Jac(qp,i,j) * G%IareaT(i,j) in the regular routines.
+        a = (dxCv_S * (Phisub(qx,qy,i,j,1,1) + Phisub(qx,qy,i,j,2,1))) + &  ! (1-y) * dxCv_S
+            (dxCv_N * (Phisub(qx,qy,i,j,1,2) + Phisub(qx,qy,i,j,2,2)))      !  + y  * dxCv_N
+        d = (dyCu_W * (Phisub(qx,qy,i,j,1,1) + Phisub(qx,qy,i,j,1,2))) + &  ! (1-x) * dyCu_W
+            (dyCu_E * (Phisub(qx,qy,i,j,2,1) + Phisub(qx,qy,i,j,2,2)))      !  + x  * dyCu_E
+        jac_sub_wt = 0.25 * subarea * (a * d) * IareaT
+
+        do n=1,2 ; do m=1,2
+          phi_mn  = Phisub(qx,qy,i,j,m,n)
+          contrib = jac_sub_wt * phi_mn
+          ! Picard: friction matrix applied to search direction δu
+          U_qp_nd(qx,qy,m,n) = contrib * (basal_coef_loc * u_delta_loc)
+          V_qp_nd(qx,qy,m,n) = contrib * (basal_coef_loc * v_delta_loc)
+          ! Newton: Jacobian d(tau_b_i)/d(u_j) = basal_coef*I + drag_newt*u^k_i*u^k_j
+          if (use_newton) then
+            U_qp_nd(qx,qy,m,n) = U_qp_nd(qx,qy,m,n) + (contrib * (drag_newt_loc * u_curr_loc * inner_dot_loc))
+            V_qp_nd(qx,qy,m,n) = V_qp_nd(qx,qy,m,n) + (contrib * (drag_newt_loc * v_curr_loc * inner_dot_loc))
+          endif
+        enddo ; enddo
+      endif
+    enddo ; enddo
+
+    do n=1,2 ; do m=1,2
+      Ucontr_sub(i,j,m,n) = (U_qp_nd(1,1,m,n) + U_qp_nd(2,2,m,n)) + &
+                            (U_qp_nd(1,2,m,n) + U_qp_nd(2,1,m,n))
+      Vcontr_sub(i,j,m,n) = (V_qp_nd(1,1,m,n) + V_qp_nd(2,2,m,n)) + &
+                            (V_qp_nd(1,2,m,n) + V_qp_nd(2,1,m,n))
+    enddo ; enddo
+  enddo ; enddo
+
   do n=1,2 ; do m=1,2
-    call sum_square_matrix(Ucontr(m,n),Ucontr_sub(:,:,m,n),nsub)
-    call sum_square_matrix(Vcontr(m,n),Vcontr_sub(:,:,m,n),nsub)
+    call sum_square_matrix(Ucontr(m,n), Ucontr_sub(:,:,m,n), nsub)
+    call sum_square_matrix(Vcontr(m,n), Vcontr_sub(:,:,m,n), nsub)
   enddo ; enddo
 
 end subroutine CG_action_subgrid_basal
 
+!> Compute the Picard basal friction coefficient and Newton drag coefficient at a
+!! single quadrature point. Encapsulates the 3-path dispatch (linear Weertman / nonlinear
+!! Weertman / Coulomb) so that CG_action, matrix_diagonal, and their subgrid equivalents
+!! remain readable. The ground_frac scaling is NOT applied here; callers do it after the call.
+subroutine compute_basal_coef(unorm2_qp, coef_prefactor, min_trac_area, fB_e, &
+    n_basal_fric, CoulombFriction, CF_PostPeak, L_T_to_m_s, use_newton, &
+    basal_coef, drag_newt)
+  real,    intent(in)  :: unorm2_qp      !< Regularized |u^k|^2 > 0 at quadrature point [L2 T-2 ~> m2 s-2]
+  real,    intent(in)  :: coef_prefactor !< Pre-computed area * C_basal_friction * L_T_to_m_s [R L2 Z T-1 ~> kg s-1]
+  real,    intent(in)  :: min_trac_area  !< Pre-computed min_basal_traction * areaT floor [R L2 Z T-1 ~> kg s-1]
+  real,    intent(in)  :: fB_e           !< Element-level Coulomb fB; 0 for Weertman [(T L-1)^CF_PostPeak]
+  real,    intent(in)  :: n_basal_fric   !< Friction sliding exponent m [nondim]
+  logical, intent(in)  :: CoulombFriction !< True if using Coulomb friction
+  real,    intent(in)  :: CF_PostPeak    !< Coulomb post-peak exponent q [nondim]
+  real,    intent(in)  :: L_T_to_m_s    !< Unit conversion factor from internal [L T-1] to [m s-1]
+  logical, intent(in)  :: use_newton     !< If true, evaluate drag_newt; otherwise set to 0
+  real,    intent(out) :: basal_coef     !< Picard friction coefficient at quadrature point [R L2 Z T-1 ~> kg s-1]
+  real,    intent(out) :: drag_newt      !< Newton drag coefficient [R Z T ~> kg m-2 s]; 0 without Newton
+
+  real :: unorm    ! |u^k| at quadrature point in physical units [m s-1]
+  real :: raw_coef ! Pre-floor friction coefficient [R L2 Z T-1 ~> kg s-1]
+  real :: fBuq     ! fB_e * |u^k|^q [nondim]
+
+  if (n_basal_fric == 1.0 .and. .not. CoulombFriction) then
+    ! Linear Weertman: coef is independent of |u|; sqrt and Newton correction not needed
+    basal_coef = max(coef_prefactor, min_trac_area)
+    drag_newt  = 0.0
+  elseif (CoulombFriction) then
+    ! Schoof/Gagliardini Coulomb friction
+    unorm    = L_T_to_m_s * sqrt(unorm2_qp)
+    fBuq     = fB_e * unorm**CF_PostPeak
+    raw_coef = coef_prefactor * (unorm**(n_basal_fric-1.0)) / (1.0 + fBuq)**n_basal_fric
+    if (raw_coef < min_trac_area) then
+      basal_coef = min_trac_area  ;  drag_newt = 0.0
+    else
+      basal_coef = raw_coef
+      if (use_newton) then
+        drag_newt = (1.0/unorm2_qp) * raw_coef * &
+            ((n_basal_fric-1.0) - n_basal_fric * CF_PostPeak * fBuq / (1.0 + fBuq))
+      else
+        drag_newt = 0.0
+      endif
+    endif
+  else
+    ! Nonlinear Weertman (m > 1)
+    unorm    = L_T_to_m_s * sqrt(unorm2_qp)
+    raw_coef = coef_prefactor * (unorm**(n_basal_fric-1.0))
+    if (raw_coef < min_trac_area) then
+      basal_coef = min_trac_area  ;  drag_newt = 0.0
+    else
+      basal_coef = raw_coef
+      if (use_newton) then
+        drag_newt = (n_basal_fric-1.0) / unorm2_qp * raw_coef
+      else
+        drag_newt = 0.0
+      endif
+    endif
+  endif
+
+end subroutine compute_basal_coef
 
 !! Returns the sum of the elements in a square matrix. This sum is bitwise identical even if the matrices are rotated.
 subroutine sum_square_matrix(sum_out, mat_in, n)
   integer, intent(in) :: n !< The length and width of each matrix in mat_in
   real, dimension(n,n), intent(in) :: mat_in !< The n x n matrix whose elements will be summed
   real, intent(out) :: sum_out !< The sum of the elements of matrix mat_in
-  integer :: s0,e0,s1,e1
+  integer :: s0, e0, s1, e1
 
-  sum_out=0.0
+  sum_out = 0.0
 
-  s0=1; e0=n
+  s0 = 1 ; e0 = n
 
   !start by summing elements on outer edges of matrix
   do while (s0<e0)
@@ -2873,7 +3928,7 @@ subroutine sum_square_matrix(sum_out, mat_in, n)
     !corners
     sum_out = sum_out + ( (mat_in(s0,s0) + mat_in(e0,e0)) + (mat_in(e0,s0) + mat_in(s0,e0)) )
 
-    s1=s0+1; e1=e0-1
+    s1 = s0+1 ; e1 = e0-1
 
     do while (s1<e1) !non-corners
 
@@ -2881,13 +3936,13 @@ subroutine sum_square_matrix(sum_out, mat_in, n)
                 ( ( (mat_in(s0,s1) + mat_in(s1,s0)) + (mat_in(e0,e1) + mat_in(e1,e0)) ) + &
                   ( (mat_in(e1,s0) + mat_in(e0,s1)) + (mat_in(s1,e0) + mat_in(s0,e1)) ) )
 
-      s1=s1+1 ; e1=e1-1
+      s1 = s1+1 ; e1 = e1-1
     enddo
 
     !center element of an edge
     if (s1==e1) sum_out = sum_out + ( (mat_in(s1,s0) + mat_in(e1,e0)) + (mat_in(e0,e1) + mat_in(s0,s1)) )
 
-    s0=s0+1 ; e0=e0-1 !next loop iteration using new edges that are one element inward of the current edges
+    s0 = s0+1 ; e0 = e0-1 !next loop iteration using new edges that are one element inward of the current edges
   enddo
 
   !center element of entire matrix
@@ -2896,8 +3951,8 @@ subroutine sum_square_matrix(sum_out, mat_in, n)
 end subroutine sum_square_matrix
 
 !> returns the diagonal entries of the matrix for a Jacobi preconditioning
-subroutine matrix_diagonal(CS, G, US, float_cond, H_node, ice_visc, basal_trac, hmask, dens_ratio, &
-                           Phi, Phisub, u_diagonal, v_diagonal)
+subroutine matrix_diagonal(CS, G, US, float_cond, H_node, ice_visc, u_curr, v_curr, &
+                           hmask, dens_ratio, Phi, Phisub, u_diagonal, v_diagonal)
 
   type(ice_shelf_dyn_CS), intent(in)    :: CS !< A pointer to the ice shelf control structure
   type(ocean_grid_type),  intent(in)    :: G  !< The grid structure used by the ice shelf.
@@ -2911,9 +3966,12 @@ subroutine matrix_diagonal(CS, G, US, float_cond, H_node, ice_visc, basal_trac, 
   real, dimension(SZDI_(G),SZDJ_(G),CS%visc_qps), &
                           intent(in)    :: ice_visc !< A field related to the ice viscosity from Glen's
                                                 !! flow law [R L4 Z T-1 ~> kg m2 s-1].
-  real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(in)    :: basal_trac !< Area-integrated taub_beta field related to the nonlinear
-                                                !! part of the "linearized" basal stress [R L3 T-1 ~> kg s-1].
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: u_curr  !< Frozen current iterate u^k, used to evaluate basal friction
+                                               !! at quadrature points [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G)), &
+                          intent(in)    :: v_curr  !< Frozen current iterate v^k, used to evaluate basal friction
+                                               !! at quadrature points [L T-1 ~> m s-1]
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
@@ -2935,11 +3993,23 @@ subroutine matrix_diagonal(CS, G, US, float_cond, H_node, ice_visc, basal_trac, 
 ! returns the diagonal entries of the matrix for a Jacobi preconditioning
 
   real :: ux, uy, vx, vy ! Interpolated weight gradients [L-1 ~> m-1]
-  real :: uq, vq
+  real :: jac_wt  ! Per-quadrature-point metric correction |J_q|/areaT [nondim]
+  real :: strx_n, stry_n, strsh_n  ! Newton viscosity strain rates [T-1 ~> s-1]
+  real :: dstrain_diag_u, dstrain_diag_v  ! Newton viscosity diagonal correction factors [T-1 L-1 ~> s-1 m-1]
+  real :: phi_m_sq  ! Squared basis function value at quadrature point [nondim]
+  real :: u_curr_qp, v_curr_qp  ! Current iterate u^k at quadrature point [L T-1 ~> m s-1]
+  real :: unorm2_qp  ! Regularized squared speed of u^k at quadrature point [L2 T-2 ~> m2 s-2]
+  real :: basal_coef_qp  ! Picard basal friction coefficient at quadrature point [R L2 Z T-1 ~> kg s-1]
+  real :: drag_newt_qp   ! Newton basal drag coefficient at quadrature point [R Z T-1 ~> kg m-2 s-1]
+  real :: coef_prefactor_e  ! Pre-computed area * C_basal_friction * L_T_to_m_s [R L2 Z T-1 ~> kg s-1]
+  real :: eps_vel2_e     ! Velocity regularization squared for current element [L2 T-2 ~> m2 s-2]
+  real :: min_trac_e     ! min_basal_traction * areaT for current element [R L2 Z T-1 ~> kg s-1]
+  real :: fB_e           ! Pre-computed Coulomb fB for element; 0 for Weertman [(T L-1)^CF_PostPeak]
   real, dimension(2)   :: xquad
-  real, dimension(2,2) :: Hcell, sub_ground
+  real, dimension(2,2) :: Hcell, u_diag_sub, v_diag_sub  ! Subgrid diagonal contributions [R L2 Z T-1 ~> kg s-1]
   real, dimension(2,2,4) :: u_diag_qp, v_diag_qp
   real, dimension(SZDIB_(G),SZDJB_(G),4) :: u_diag_b, v_diag_b
+  logical :: do_newton_visc  ! Whether to apply viscosity-related Newton tangent stiffness corrections
   logical :: visc_qp4
   integer :: i, j, isc, jsc, iec, jec, iphi, jphi, iq, jq, ilq, jlq, Itgt, Jtgt, qp, qpv
 
@@ -2954,6 +4024,8 @@ subroutine matrix_diagonal(CS, G, US, float_cond, H_node, ice_visc, basal_trac, 
     qpv = 1
   endif
 
+  do_newton_visc = CS%doing_newton .and. trim(CS%ice_viscosity_compute) == "MODEL"
+
   u_diag_b(:,:,:)=0.0
   v_diag_b(:,:,:)=0.0
 
@@ -2962,17 +4034,53 @@ subroutine matrix_diagonal(CS, G, US, float_cond, H_node, ice_visc, basal_trac, 
     ! Phi(2*i-1,j) gives d(Phi_i)/dx at quadrature point j
     ! Phi(2*i,j) gives d(Phi_i)/dy at quadrature point j
 
-    u_diag_qp(:,:,:)=0.0; v_diag_qp(:,:,:)=0.0
+    u_diag_qp(:,:,:) = 0.0 ; v_diag_qp(:,:,:) = 0.0
+
+      ! Pre-computed element-level basal friction quantities (updated each outer iteration).
+      coef_prefactor_e = CS%coef_prefactor(i,j)
+      eps_vel2_e = CS%eps_glen_min**2 * ((G%dxT(i,j)**2) + (G%dyT(i,j)**2))
+      min_trac_e = CS%min_basal_traction * G%areaT(i,j)
+      fB_e = CS%fB_elem(i,j)  ! 0 for Weertman; non-zero for Coulomb
 
     do iq=1,2 ; do jq=1,2
 
       qp = 2*(jq-1)+iq !current quad point
       if (visc_qp4) qpv = qp !current quad point for viscosity
 
+      ! Ratio |J_q|/areaT corrects the uniform-area weight baked into ice_visc for
+      ! non-rectangular elements where opposite cell edges have unequal lengths.
+      jac_wt = CS%Jac(qp,i,j) * G%IareaT(i,j)
+
+      ! Pre-compute Newton strain data for this QP (for viscosity diagonal correction)
+      if (do_newton_visc) then
+        strx_n = CS%newton_str_ux(i,j,qpv)
+        stry_n = CS%newton_str_vy(i,j,qpv)
+        strsh_n = CS%newton_str_sh(i,j,qpv)
+      endif
+
+      ! Basal friction coefficients at this quadrature point (fully grounded cells only)
+      if (float_cond(i,j) == 0 .and. CS%ground_frac(i,j)>0) then
+        u_curr_qp = ((u_curr(I-1,J-1) * (xquad(3-iq) * xquad(3-jq))) + &
+                     (u_curr(I,J) * (xquad(iq) * xquad(jq)))) + &
+                    ((u_curr(I,J-1) * (xquad(iq) * xquad(3-jq))) + &
+                     (u_curr(I-1,J) * (xquad(3-iq) * xquad(jq))))
+        v_curr_qp = ((v_curr(I-1,J-1) * (xquad(3-iq) * xquad(3-jq))) + &
+                     (v_curr(I,J) * (xquad(iq) * xquad(jq)))) + &
+                    ((v_curr(I,J-1) * (xquad(iq) * xquad(3-jq))) + &
+                     (v_curr(I-1,J) * (xquad(3-iq) * xquad(jq))))
+        unorm2_qp = ((u_curr_qp**2) + (v_curr_qp**2)) + eps_vel2_e
+        call compute_basal_coef(unorm2_qp, coef_prefactor_e, min_trac_e, fB_e, &
+            CS%n_basal_fric, CS%CoulombFriction, CS%CF_PostPeak, US%L_T_to_m_s, .true., &
+            basal_coef_qp, drag_newt_qp)
+        basal_coef_qp = basal_coef_qp * CS%ground_frac(i,j)
+        drag_newt_qp  = drag_newt_qp  * CS%ground_frac(i,j)
+      endif
+
       do jphi=1,2 ; Jtgt = J-2+jphi ; do iphi=1,2 ; Itgt = I-2+iphi
 
         ilq = 1 ; if (iq == iphi) ilq = 2
         jlq = 1 ; if (jq == jphi) jlq = 2
+        phi_m_sq = (xquad(ilq) * xquad(jlq))**2
 
         if (CS%umask(Itgt,Jtgt) == 1) then
 
@@ -2981,14 +4089,24 @@ subroutine matrix_diagonal(CS, G, US, float_cond, H_node, ice_visc, basal_trac, 
           vx = 0.
           vy = 0.
 
-          u_diag_qp(iphi,jphi,qp) = &
+          u_diag_qp(iphi,jphi,qp) = jac_wt * &
             ice_visc(i,j,qpv) * (((4*ux+2*vy) * Phi(2*(2*(jphi-1)+iphi)-1,qp,i,j)) + &
             ((uy+vx) * Phi(2*(2*(jphi-1)+iphi),qp,i,j)))
 
-          if (float_cond(i,j) == 0) then
-            uq = xquad(ilq) * xquad(jlq)
+          ! Newton viscosity diagonal correction: newton_visc_factor * (g . grad_phi_m_u)^2
+          ! where grad_phi_m_u = [(2*strx+stry)*Phi_xm + strsh/2*Phi_ym] for u-DOF at node m
+          if (do_newton_visc) then
+            dstrain_diag_u = ((2.*strx_n + stry_n) * Phi(2*(2*(jphi-1)+iphi)-1,qp,i,j)) + &
+                             (strsh_n * 0.5 * Phi(2*(2*(jphi-1)+iphi),qp,i,j))
             u_diag_qp(iphi,jphi,qp) = u_diag_qp(iphi,jphi,qp) + &
-              (basal_trac(i,j) * uq) * (xquad(ilq) * xquad(jlq))
+              jac_wt * CS%newton_visc_factor(i,j,qpv) * dstrain_diag_u**2
+          endif
+
+          if (float_cond(i,j) == 0 .and. CS%ground_frac(i,j)>0) then
+            ! Picard diagonal: basal_coef_qp * phi_m^2; Newton diagonal adds drag_newt_qp * u^k_qp^2 * phi_m^2.
+            u_diag_qp(iphi,jphi,qp) = u_diag_qp(iphi,jphi,qp) + jac_wt * basal_coef_qp * phi_m_sq
+            if (CS%doing_newton) &
+              u_diag_qp(iphi,jphi,qp) = u_diag_qp(iphi,jphi,qp) + jac_wt * drag_newt_qp * u_curr_qp**2 * phi_m_sq
           endif
         endif
 
@@ -2999,14 +4117,22 @@ subroutine matrix_diagonal(CS, G, US, float_cond, H_node, ice_visc, basal_trac, 
           ux = 0.
           uy = 0.
 
-          v_diag_qp(iphi,jphi,qp) = &
+          v_diag_qp(iphi,jphi,qp) = jac_wt *  &
             ice_visc(i,j,qpv) * (((uy+vx) * Phi(2*(2*(jphi-1)+iphi)-1,qp,i,j)) + &
             ((4*vy+2*ux) * Phi(2*(2*(jphi-1)+iphi),qp,i,j)))
 
-          if (float_cond(i,j) == 0) then
-            vq = xquad(ilq) * xquad(jlq)
+          ! Newton viscosity diagonal correction for v-DOF: uses [strsh/2*Phi_xm + (2*stry+strx)*Phi_ym]
+          if (do_newton_visc) then
+            dstrain_diag_v = (strsh_n * 0.5 * Phi(2*(2*(jphi-1)+iphi)-1,qp,i,j)) + &
+                             ((2.*stry_n + strx_n) * Phi(2*(2*(jphi-1)+iphi),qp,i,j))
             v_diag_qp(iphi,jphi,qp) = v_diag_qp(iphi,jphi,qp) + &
-              (basal_trac(i,j) * vq) * (xquad(ilq) * xquad(jlq))
+              jac_wt * CS%newton_visc_factor(i,j,qpv) * dstrain_diag_v**2
+          endif
+
+          if (float_cond(i,j) == 0 .and. CS%ground_frac(i,j)>0) then
+            v_diag_qp(iphi,jphi,qp) = v_diag_qp(iphi,jphi,qp) + jac_wt * basal_coef_qp * phi_m_sq
+            if (CS%doing_newton) &
+              v_diag_qp(iphi,jphi,qp) = v_diag_qp(iphi,jphi,qp) + jac_wt * drag_newt_qp * v_curr_qp**2 * phi_m_sq
           endif
         endif
       enddo ; enddo
@@ -3029,18 +4155,23 @@ subroutine matrix_diagonal(CS, G, US, float_cond, H_node, ice_visc, basal_trac, 
     v_diag_b(I  ,J  ,1) = 0.25*((v_diag_qp(2,2,1)+v_diag_qp(2,2,4))+(v_diag_qp(2,2,2)+v_diag_qp(2,2,3)))
 
     if (float_cond(i,j) == 1) then
-      Hcell(:,:) = H_node(i-1:i,j-1:j)
-      call CG_diagonal_subgrid_basal(Phisub, Hcell, CS%bed_elev(i,j), dens_ratio, sub_ground)
+      ! Subgrid grounding-line: evaluate basal friction diagonal at each grounded sub-quadrature point.
+      ! Returns separate u_diag_sub and v_diag_sub (differ in Newton term: u^2 vs v^2).
+      ! The sub-qp flotation test handles grounding fraction; no external ground_frac scaling needed.
+      Hcell(:,:) = H_node(I-1:I,J-1:J)
+      call CG_diagonal_subgrid_basal(CS, G, US, Phisub, Hcell, &
+          u_curr(I-1:I,J-1:J), v_curr(I-1:I,J-1:J), &
+          CS%bed_elev(i,j), dens_ratio, i, j, fB_e, u_diag_sub, v_diag_sub, &
+          G%dxCv(i,j-1), G%dxCv(i,j), G%dyCu(i-1,j), G%dyCu(i,j), G%IareaT(i,j))
 
-        if (CS%umask(I-1,J-1) == 1) u_diag_b(I-1,J-1,4) = u_diag_b(I-1,J-1,4) + (sub_ground(1,1) * basal_trac(i,j))
-        if (CS%umask(I-1,J  ) == 1) u_diag_b(I-1,J  ,2) = u_diag_b(I-1,J  ,2) + (sub_ground(1,2) * basal_trac(i,j))
-        if (CS%umask(I  ,J-1) == 1) u_diag_b(I  ,J-1,3) = u_diag_b(I  ,J-1,3) + (sub_ground(2,1) * basal_trac(i,j))
-        if (CS%umask(I  ,J  ) == 1) u_diag_b(I  ,J  ,1) = u_diag_b(I  ,J  ,1) + (sub_ground(2,2) * basal_trac(i,j))
-
-        if (CS%vmask(I-1,J-1) == 1) v_diag_b(I-1,J-1,4) = v_diag_b(I-1,J-1,4) + (sub_ground(1,1) * basal_trac(i,j))
-        if (CS%vmask(I-1,J  ) == 1) v_diag_b(I-1,J  ,2) = v_diag_b(I-1,J  ,2) + (sub_ground(1,2) * basal_trac(i,j))
-        if (CS%vmask(I  ,J-1) == 1) v_diag_b(I  ,J-1,3) = v_diag_b(I  ,J-1,3) + (sub_ground(2,1) * basal_trac(i,j))
-        if (CS%vmask(I  ,J  ) == 1) v_diag_b(I  ,J  ,1) = v_diag_b(I  ,J  ,1) + (sub_ground(2,2) * basal_trac(i,j))
+      if (CS%umask(I-1,J-1)==1) u_diag_b(I-1,J-1,4) = u_diag_b(I-1,J-1,4) + u_diag_sub(1,1)
+      if (CS%umask(I-1,J  )==1) u_diag_b(I-1,J  ,2) = u_diag_b(I-1,J  ,2) + u_diag_sub(1,2)
+      if (CS%umask(I  ,J-1)==1) u_diag_b(I  ,J-1,3) = u_diag_b(I  ,J-1,3) + u_diag_sub(2,1)
+      if (CS%umask(I  ,J  )==1) u_diag_b(I  ,J  ,1) = u_diag_b(I  ,J  ,1) + u_diag_sub(2,2)
+      if (CS%vmask(I-1,J-1)==1) v_diag_b(I-1,J-1,4) = v_diag_b(I-1,J-1,4) + v_diag_sub(1,1)
+      if (CS%vmask(I-1,J  )==1) v_diag_b(I-1,J  ,2) = v_diag_b(I-1,J  ,2) + v_diag_sub(1,2)
+      if (CS%vmask(I  ,J-1)==1) v_diag_b(I  ,J-1,3) = v_diag_b(I  ,J-1,3) + v_diag_sub(2,1)
+      if (CS%vmask(I  ,J  )==1) v_diag_b(I  ,J  ,1) = v_diag_b(I  ,J  ,1) + v_diag_sub(2,2)
     endif
   endif ; enddo ; enddo
 
@@ -3051,48 +4182,113 @@ subroutine matrix_diagonal(CS, G, US, float_cond, H_node, ice_visc, basal_trac, 
 
 end subroutine matrix_diagonal
 
-subroutine CG_diagonal_subgrid_basal (Phisub, H_node, bathyT, dens_ratio, f_grnd)
-  real, dimension(:,:,:,:,:,:), &
-                        intent(in) :: Phisub !< Quadrature structure weights at subgridscale
-                                             !! locations for finite element calculations [nondim]
-  real, dimension(2,2), intent(in) :: H_node !< The ice shelf thickness at nodal (corner)
-                                             !! points [Z ~> m].
-  real,              intent(in)    :: bathyT !< The depth of ocean bathymetry at tracer points [Z ~> m].
-  real,              intent(in)    :: dens_ratio !< The density of ice divided by the density
-                                                 !! of seawater [nondim]
-  real, dimension(2,2), intent(out) :: f_grnd !< The weighted fraction of the sub-cell where the ice shelf
-                                              !! is grounded [nondim]
+!> Compute subgrid grounding-line basal traction contributions for the preconditioner diagonal.
+!! Evaluates friction at each grounded sub-quadrature point. Returns separate u and v diagonals
+!! because the Newton term uses u^2 for the u-block and v^2 for the v-block.
+!! The sub-qp flotation test handles partial grounding; no external ground_frac scaling needed.
+subroutine CG_diagonal_subgrid_basal(CS, G, US, Phisub, H_node, U_curr, V_curr, &
+                                     bathyT, dens_ratio, i_elem, j_elem, fB_e, u_diag, v_diag, &
+                                     dxCv_S, dxCv_N, dyCu_W, dyCu_E, IareaT)
+  type(ice_shelf_dyn_CS), intent(in) :: CS      !< Ice shelf control structure
+  type(ocean_grid_type),  intent(in) :: G       !< The grid structure
+  type(unit_scale_type),  intent(in) :: US      !< Unit conversion factors
+  real, dimension(:,:,:,:,:,:), intent(in) :: Phisub  !< Sub-grid quadrature weights [nondim]
+  real, dimension(2,2),   intent(in) :: H_node  !< Ice thickness at element corners [Z ~> m]
+  real, dimension(2,2),   intent(in) :: U_curr  !< Frozen u^k at element corners [L T-1 ~> m s-1]
+  real, dimension(2,2),   intent(in) :: V_curr  !< Frozen v^k at element corners [L T-1 ~> m s-1]
+  real,                   intent(in) :: bathyT  !< Ocean bathymetry depth at tracer point [Z ~> m]
+  real,                   intent(in) :: dens_ratio !< Ice density / water density [nondim]
+  integer,                intent(in) :: i_elem  !< Tracer-grid i-index of the element
+  integer,                intent(in) :: j_elem  !< Tracer-grid j-index of the element
+  real,                   intent(in) :: fB_e    !< Element Coulomb parameter fB; 0 for Weertman [(T L-1)^CF_PostPeak]
+  real, dimension(2,2),   intent(out) :: u_diag !< Nodal u-diagonal entries [R L2 Z T-1 ~> kg s-1]
+  real, dimension(2,2),   intent(out) :: v_diag !< Nodal v-diagonal entries [R L2 Z T-1 ~> kg s-1]
+  real,                   intent(in)  :: dxCv_S !< The cell width at the southern (v-point) edge [L ~> m]
+  real,                   intent(in)  :: dxCv_N !< The cell width at the northern (v-point) edge [L ~> m]
+  real,                   intent(in)  :: dyCu_W !< The cell height at the western (u-point) edge [L ~> m]
+  real,                   intent(in)  :: dyCu_E !< The cell height at the eastern (u-point) edge [L ~> m]
+  real,                   intent(in)  :: IareaT !< The inverse of the cell area at the tracer point [L-2 ~> m-2]
 
-  real, dimension(SIZE(Phisub,3),SIZE(Phisub,3),2,2) :: f_grnd_sub ! The contributions to nodal f_grnd
-                                                                   !! from each sub-cell
-  integer, dimension(2,2,SIZE(Phisub,3),SIZE(Phisub,3)) :: grnd_stat !0 at floating quad points, 1 at grounded
-  real, dimension(2,2) :: f_grnd_q  !Contributions to a node from each quadrature point in a sub-grid cell
-  real    :: subarea ! The fractional sub-cell area [nondim]
-  real    :: hloc    ! The local sub-region thickness [Z ~> m]
+  real, dimension(SIZE(Phisub,3),SIZE(Phisub,3),2,2) :: u_diag_sub, v_diag_sub
+  real, dimension(2,2,2,2) :: u_diag_qp_nd, v_diag_qp_nd  ! Per-qp nodal diagonal entries (qx,qy,m,n),
+                                                         ! pair-summed for rotation invariance
+  real :: hloc           ! Local sub-cell ice thickness [Z ~> m]
+  real :: u_curr_loc     ! Frozen u^k interpolated to sub-qp [L T-1 ~> m s-1]
+  real :: v_curr_loc     ! Frozen v^k interpolated to sub-qp [L T-1 ~> m s-1]
+  real :: unorm2_loc     ! Regularized |u^k|^2 at sub-qp [L2 T-2 ~> m2 s-2]
+  real :: basal_coef_loc ! Picard friction coefficient at sub-qp [R L2 Z T-1 ~> kg s-1]
+  real :: drag_newt_loc  ! Newton drag coefficient at sub-qp [R Z T ~> kg m-2 s]
+  real :: phi_mn_sq      ! Squared basis function value at sub-qp [nondim]
+  real :: contrib        ! Quadrature weight contribution [nondim]
+  real :: coef_prefactor ! Pre-computed area * C_basal_friction * L_T_to_m_s [R L2 Z T-1 ~> kg s-1]
+  real :: min_trac_area  ! Minimum area-integrated traction floor [R L2 Z T-1 ~> kg s-1]
+  real :: eps_vel2       ! Velocity regularization squared [L2 T-2 ~> m2 s-2]
+  real :: jac_sub_wt ! Per-sub-cell-QP metric correction |J_sub|/areaT [nondim]
+  real :: a, d      ! Interpolated cell-edge spacings at the sub-cell QP [L ~> m]
+  real :: subarea        ! Fractional sub-cell area [nondim]
   integer :: nsub, i, j, qx, qy, m, n
 
-  nsub = size(Phisub,3)
-  subarea = 1.0 / (nsub**2)
+  nsub    = size(Phisub, 3)
+  subarea = 1.0 / real(nsub)**2
 
-  grnd_stat(:,:,:,:)=0
+  coef_prefactor = CS%coef_prefactor(i_elem,j_elem)
+  min_trac_area  = CS%min_basal_traction * G%areaT(i_elem,j_elem)
+  eps_vel2 = CS%eps_glen_min**2 * ((G%dxT(i_elem,j_elem)**2) + (G%dyT(i_elem,j_elem)**2))
 
-  do j=1,nsub ; do i=1,nsub;  do qy=1,2 ; do qx=1,2
-    hloc = ((Phisub(qx,qy,i,j,1,1)*H_node(1,1)) + (Phisub(qx,qy,i,j,2,2)*H_node(2,2))) + &
-           ((Phisub(qx,qy,i,j,1,2)*H_node(1,2)) + (Phisub(qx,qy,i,j,2,1)*H_node(2,1)))
-    if (dens_ratio * hloc - bathyT > 0) grnd_stat(qx,qy,i,j) = 1
-  enddo; enddo ; enddo ; enddo
+  u_diag_sub(:,:,:,:) = 0.0 ; v_diag_sub(:,:,:,:) = 0.0
 
-  do n=1,2 ; do m=1,2 ; do j=1,nsub ; do i=1,nsub
-    do qy=1,2 ; do qx = 1,2
-        f_grnd_q(qx,qy) = grnd_stat(qx,qy,i,j) * Phisub(qx,qy,i,j,m,n)**2
+  do j=1,nsub ; do i=1,nsub
+    ! Zero the 4-qp per-node buffer so ungrounded qp contribute exactly 0.
+    u_diag_qp_nd(:,:,:,:) = 0.0 ; v_diag_qp_nd(:,:,:,:) = 0.0
+    do qy=1,2 ; do qx=1,2
+      hloc = ((Phisub(qx,qy,i,j,1,1)*H_node(1,1)) + (Phisub(qx,qy,i,j,2,2)*H_node(2,2))) + &
+             ((Phisub(qx,qy,i,j,1,2)*H_node(1,2)) + (Phisub(qx,qy,i,j,2,1)*H_node(2,1)))
+      if (dens_ratio * hloc - bathyT > 0) then  ! grounded sub-qp
+        u_curr_loc = (((Phisub(qx,qy,i,j,1,1)*U_curr(1,1)) + (Phisub(qx,qy,i,j,2,2)*U_curr(2,2))) + &
+                      ((Phisub(qx,qy,i,j,1,2)*U_curr(1,2)) + (Phisub(qx,qy,i,j,2,1)*U_curr(2,1))))
+        v_curr_loc = (((Phisub(qx,qy,i,j,1,1)*V_curr(1,1)) + (Phisub(qx,qy,i,j,2,2)*V_curr(2,2))) + &
+                      ((Phisub(qx,qy,i,j,1,2)*V_curr(1,2)) + (Phisub(qx,qy,i,j,2,1)*V_curr(2,1))))
+
+        unorm2_loc = ((u_curr_loc**2) + (v_curr_loc**2)) + eps_vel2
+        call compute_basal_coef(unorm2_loc, coef_prefactor, min_trac_area, fB_e, &
+            CS%n_basal_fric, CS%CoulombFriction, CS%CF_PostPeak, US%L_T_to_m_s, .true., &
+            basal_coef_loc, drag_newt_loc)
+        ! Interpolate cell-edge metrics to the sub-cell QP using the bilinear shape function values
+        ! from bilinear_shape_functions_subgrid.  Marginal sums of Phisub give the interpolation
+        ! weights: sum over k=1 nodes gives (1-y); k=2 gives y; l=1 gives (1-x); l=2 gives x.
+        ! This is analogous to jac_wt = CS%Jac(qp,i,j) * G%IareaT(i,j) in the regular routines.
+        a = (dxCv_S * (Phisub(qx,qy,i,j,1,1) + Phisub(qx,qy,i,j,2,1))) + &  ! (1-y) * dxCv_S
+            (dxCv_N * (Phisub(qx,qy,i,j,1,2) + Phisub(qx,qy,i,j,2,2)))      !  + y  * dxCv_N
+        d = (dyCu_W * (Phisub(qx,qy,i,j,1,1) + Phisub(qx,qy,i,j,1,2))) + &  ! (1-x) * dyCu_W
+            (dyCu_E * (Phisub(qx,qy,i,j,2,1) + Phisub(qx,qy,i,j,2,2)))      !  + x  * dyCu_E
+        jac_sub_wt = 0.25 * subarea * (a * d) * IareaT
+
+        do n=1,2 ; do m=1,2
+          phi_mn_sq = Phisub(qx,qy,i,j,m,n)**2
+          contrib   = jac_sub_wt * phi_mn_sq
+          ! Picard diagonal + Newton diagonal (u_curr^2 for u-block, v_curr^2 for v-block)
+          if (CS%doing_newton) then
+            u_diag_qp_nd(qx,qy,m,n) = contrib * (basal_coef_loc + drag_newt_loc * u_curr_loc**2)
+            v_diag_qp_nd(qx,qy,m,n) = contrib * (basal_coef_loc + drag_newt_loc * v_curr_loc**2)
+          else
+            u_diag_qp_nd(qx,qy,m,n) = contrib * basal_coef_loc
+            v_diag_qp_nd(qx,qy,m,n) = contrib * basal_coef_loc
+          endif
+        enddo ; enddo
+      endif
     enddo ; enddo
-    !calculate sub-cell contribution to each node by summing up quadrature point contributions from the sub-cell
-    f_grnd_sub(i,j,m,n) = (subarea * 0.25) * ((f_grnd_q(1,1) + f_grnd_q(2,2)) + (f_grnd_q(1,2)+f_grnd_q(2,1)))
-  enddo ; enddo ; enddo ; enddo
 
-  !sum up the sub-cell contributions to each node
+    do n=1,2 ; do m=1,2
+      u_diag_sub(i,j,m,n) = (u_diag_qp_nd(1,1,m,n) + u_diag_qp_nd(2,2,m,n)) + &
+                            (u_diag_qp_nd(1,2,m,n) + u_diag_qp_nd(2,1,m,n))
+      v_diag_sub(i,j,m,n) = (v_diag_qp_nd(1,1,m,n) + v_diag_qp_nd(2,2,m,n)) + &
+                            (v_diag_qp_nd(1,2,m,n) + v_diag_qp_nd(2,1,m,n))
+    enddo ; enddo
+  enddo ; enddo
+
   do n=1,2 ; do m=1,2
-   call sum_square_matrix(f_grnd(m,n),f_grnd_sub(:,:,m,n),nsub)
+    call sum_square_matrix(u_diag(m,n), u_diag_sub(:,:,m,n), nsub)
+    call sum_square_matrix(v_diag(m,n), v_diag_sub(:,:,m,n), nsub)
   enddo ; enddo
 
 end subroutine CG_diagonal_subgrid_basal
@@ -3122,14 +4318,14 @@ subroutine IS_dynamics_post_data_2(CS, ISS, G)
     allocate(CS%PhiC(1:8,G%isc:G%iec,G%jsc:G%jec), source=0.0)
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       call bilinear_shape_fn_grid_1qp(G, i, j, CS%PhiC(:,i,j))
-    enddo; enddo
+    enddo ; enddo
   endif
 
   !Calculate flux divergence and its components
   if (CS%id_duHdx > 0 .or. CS%id_dvHdy > 0 .or. CS%id_fluxdiv > 0) then
     call interpolate_H_to_B(G, ISS%h_shelf, ISS%hmask, H_node, CS%min_h_shelf)
 
-    Hu(:,:) = 0.0; Hv(:,:) = 0.0; Hux(:,:) = 0.0 ; Hvy(:,:) = 0.0 ; flux_div(:,:) = 0.0
+    Hu(:,:) = 0.0 ; Hv(:,:) = 0.0 ; Hux(:,:) = 0.0 ; Hvy(:,:) = 0.0 ; flux_div(:,:) = 0.0
     do J=G%jscB,G%jecB ; do I=G%iscB,G%iecB
       if (CS%umask(I,J) > 0) then
         Hu(I,J) = (H_node(I,J) * CS%u_shelf(I,J))
@@ -3137,7 +4333,7 @@ subroutine IS_dynamics_post_data_2(CS, ISS, G)
       if (CS%vmask(I,J) > 0) then
         Hv(I,J) = (H_node(I,J) * CS%v_shelf(I,J))
       endif
-    enddo; enddo
+    enddo ; enddo
 
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       if ((ISS%hmask(i,j) == 1) .or. (ISS%hmask(i,j) == 3)) then
@@ -3211,7 +4407,7 @@ subroutine IS_dynamics_post_data_2(CS, ISS, G)
             dev_stress(i,j,2) = 2*ice_visc(i,j)*strain_rate(i,j,2)/ISS%h_shelf(i,j) !deviatoric stress yy
             dev_stress(i,j,3) = 2*ice_visc(i,j)*strain_rate(i,j,3)/ISS%h_shelf(i,j) !deviatoric stress xy
           endif
-        enddo; enddo
+        enddo ; enddo
         if (CS%id_devstress_xx > 0) call post_data(CS%id_devstress_xx, dev_stress(:,:,1), CS%diag)
         if (CS%id_devstress_yy > 0) call post_data(CS%id_devstress_yy, dev_stress(:,:,2), CS%diag)
         if (CS%id_devstress_xy > 0) call post_data(CS%id_devstress_xy, dev_stress(:,:,3), CS%diag)
@@ -3224,7 +4420,7 @@ subroutine IS_dynamics_post_data_2(CS, ISS, G)
             p_dev_stress(i,j,1) = 2*ice_visc(i,j)*p_strain_rate(i,j,1)/ISS%h_shelf(i,j) !max horiz principal dev stress
             p_dev_stress(i,j,2) = 2*ice_visc(i,j)*p_strain_rate(i,j,2)/ISS%h_shelf(i,j) !min horiz principal dev stress
           endif
-        enddo; enddo
+        enddo ; enddo
         if (CS%id_pdevstress_1 > 0) call post_data(CS%id_pdevstress_1, p_dev_stress(:,:,1), CS%diag)
         if (CS%id_pdevstress_2 > 0) call post_data(CS%id_pdevstress_2, p_dev_stress(:,:,2), CS%diag)
       endif
@@ -3254,6 +4450,8 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
   real :: Visc_coef, n_g
   real :: ux, uy, vx, vy
   real :: eps_min   ! Velocity shears [T-1 ~> s-1]
+  real :: In_g ! inverse of Glen's exponent [nondim]
+  real :: eps_e2_exp ! (1.-n_g)/(2.*n_g) [nondim]
   logical :: model_qp1, model_qp4
 
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
@@ -3262,7 +4460,7 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
   iegq = G%iegB ; jegq = G%jegB
   gisc = G%domain%nihalo+1 ; gjsc = G%domain%njhalo+1
   giec = G%domain%niglobal+gisc ; gjec = G%domain%njglobal+gjsc
-  is = iscq - 1; js = jscq - 1
+  is = iscq - 1 ; js = jscq - 1
 
   if (trim(CS%ice_viscosity_compute) == "MODEL") then
     if (CS%visc_qps==1) then
@@ -3274,7 +4472,9 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
     endif
   endif
 
-  n_g = CS%n_glen; eps_min = CS%eps_glen_min
+  n_g = CS%n_glen ; eps_min = CS%eps_glen_min
+  In_g=1./n_g
+  eps_e2_exp=(1.-n_g)/(2.*n_g)
 
   do j=jsc,jec ; do i=isc,iec
 
@@ -3289,11 +4489,11 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
           CS%ice_visc(i,j,1) = (G%areaT(i,j) * max(ISS%h_shelf(i,j),CS%min_h_shelf)) * &
                                max(CS%AGlen_visc(i,j) ,CS%min_ice_visc)
         endif
-        ! Here CS%Aglen_visc(i,j) is the ice viscosity [Pa s ~> R L2 T-1] computed from obs and read from a file
+        ! Here CS%Aglen_visc(i,j) is the ice viscosity [R L2 T-1 ~> Pa s] computed from obs and read from a file
       elseif (model_qp1) then
-        !calculate viscosity at 1 cell-centered quadrature point per cell
+        ! calculate viscosity at 1 cell-centered quadrature point per cell
 
-        Visc_coef = (CS%AGlen_visc(i,j))**(-1./n_g)
+        Visc_coef = (CS%AGlen_visc(i,j))**(-In_g)
         ! Units of Aglen_visc [Pa-(n_g) s-1]
 
         ux = ((u_shlf(I-1,J-1) * CS%PhiC(1,i,j)) + &
@@ -3318,12 +4518,23 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
 
         CS%ice_visc(i,j,1) = (G%areaT(i,j) * max(ISS%h_shelf(i,j),CS%min_h_shelf)) * &
             max(0.5 * Visc_coef * &
-            (US%s_to_T**2 * (((ux**2) + (vy**2)) + ((ux*vy) + 0.25*((uy+vx)**2)) + eps_min**2))**((1.-n_g)/(2.*n_g)) * &
+            (US%s_to_T**2 * (((ux**2) + (vy**2)) + ((ux*vy) + 0.25*((uy+vx)**2)) + eps_min**2))**(eps_e2_exp) * &
             (US%Pa_to_RL2_T2*US%s_to_T),CS%min_ice_visc)  ! Rescale after the fractional power law.
+        ! Store Newton tangent stiffness data: strain rates and coefficient for Newton iterations.
+        ! The Newton correction coefficient is (1/n-1) * ice_visc / eps_e2,
+        ! where eps_e2 = ux^2 + vy^2 + ux*vy + (uy+vx)^2/4 + eps_min^2 [T-2].
+        ! It is zero where ice_visc is limited by min_ice_visc (viscosity is not smooth there).
+        CS%newton_str_ux(i,j,1) = ux ; CS%newton_str_vy(i,j,1) = vy
+        CS%newton_str_sh(i,j,1) = uy + vx
+        CS%newton_visc_factor(i,j,1) = 0.0
+        if (CS%ice_visc(i,j,1) > CS%min_ice_visc * (G%areaT(i,j) * max(ISS%h_shelf(i,j),CS%min_h_shelf))) then
+          CS%newton_visc_factor(i,j,1) = ((In_g - 1.) / &
+              (((ux**2) + (vy**2)) + ((ux*vy) + 0.25*((uy+vx)**2)) + eps_min**2)) * &
+              CS%ice_visc(i,j,1)
+        endif
       elseif (model_qp4) then
         !calculate viscosity at 4 quadrature points per cell
-
-        Visc_coef = (CS%AGlen_visc(i,j))**(-1./n_g)
+        Visc_coef = (CS%AGlen_visc(i,j))**(-In_g)
 
         do iq=1,2 ; do jq=1,2
 
@@ -3349,87 +4560,114 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
 
           CS%ice_visc(i,j,2*(jq-1)+iq) = (G%areaT(i,j) * max(ISS%h_shelf(i,j),CS%min_h_shelf)) * &
               max(0.5 * Visc_coef * &
-              (US%s_to_T**2*(((ux**2) + (vy**2)) + ((ux*vy) + 0.25*((uy+vx)**2)) + eps_min**2))**((1.-n_g)/(2.*n_g)) * &
+              (US%s_to_T**2*(((ux**2) + (vy**2)) + ((ux*vy) + 0.25*((uy+vx)**2)) + eps_min**2))**(eps_e2_exp) * &
               (US%Pa_to_RL2_T2*US%s_to_T),CS%min_ice_visc)  ! Rescale after the fractional power law.
-        enddo; enddo
+          ! Store Newton tangent stiffness data at each quadrature point.
+          CS%newton_str_ux(i,j,2*(jq-1)+iq) = ux ; CS%newton_str_vy(i,j,2*(jq-1)+iq) = vy
+          CS%newton_str_sh(i,j,2*(jq-1)+iq) = (uy + vx)
+          CS%newton_visc_factor(i,j,2*(jq-1)+iq) = 0.0
+          if (CS%ice_visc(i,j,2*(jq-1)+iq) > &
+              CS%min_ice_visc * (G%areaT(i,j) * max(ISS%h_shelf(i,j),CS%min_h_shelf))) then
+            CS%newton_visc_factor(i,j,2*(jq-1)+iq) = ((In_g - 1.) / &
+                (((ux**2) + (vy**2)) + ((ux*vy) + 0.25*((uy+vx)**2)) + eps_min**2)) * &
+                CS%ice_visc(i,j,2*(jq-1)+iq)
+          endif
+        enddo ; enddo
       endif
     endif
   enddo ; enddo
 
 end subroutine calc_shelf_visc
 
+!> Pre-compute element-level basal friction prefactors for quadrature-point evaluation.
+subroutine calc_shelf_basal_prefactors(CS, ISS, G, US)
+  type(ice_shelf_dyn_CS), intent(inout) :: CS  !< Ice shelf dynamics control structure
+  type(ice_shelf_state),  intent(in)    :: ISS !< Ice shelf state (hmask, h_shelf)
+  type(ocean_grid_type),  intent(in)    :: G   !< The grid structure
+  type(unit_scale_type),  intent(in)    :: US  !< Unit conversion factors
 
-!> Update basal shear
-subroutine calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
-  type(ice_shelf_dyn_CS), intent(inout) :: CS !< A pointer to the ice shelf control structure
-  type(ice_shelf_state),  intent(in)    :: ISS !< A structure with elements that describe
-                                               !! the ice-shelf state
-  type(ocean_grid_type),  intent(in)    :: G  !< The grid structure used by the ice shelf.
-  type(unit_scale_type),  intent(in)    :: US !< A structure containing unit conversion factors
-  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), &
-                          intent(inout) :: u_shlf !< The zonal ice shelf velocity [L T-1 ~> m s-1].
-  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), &
-                          intent(inout) :: v_shlf !< The meridional ice shelf velocity [L T-1 ~> m s-1].
+  integer :: i, j, isd, ied, jsd, jed
+  real :: Hf  ! Floatation thickness [Z ~> m]
+  real :: fN  ! Effective pressure for Coulomb friction [R Z L T-2 ~> Pa]
 
-! also this subroutine updates the nonlinear part of the basal traction
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-! this may be subject to change later... to make it "hybrid"
+  do j = jsd, jed ; do i = isd, ied
+    CS%coef_prefactor(i,j) = G%areaT(i,j) * CS%C_basal_friction(i,j) * US%L_T_to_m_s
+    if (CS%CoulombFriction .and. (ISS%hmask(i,j) == 1 .or. ISS%hmask(i,j) == 3)) then
+      Hf = max(CS%rhow_rhoi * CS%bed_elev(i,j), 0.0)
+      fN = max((US%L_to_Z*(CS%density_ice * CS%g_Earth) * &
+                (max(ISS%h_shelf(i,j), CS%min_h_shelf) - Hf)), CS%CF_MinN)
+      CS%fB_elem(i,j) = CS%alpha_coulomb * &
+          (CS%C_basal_friction(i,j) / (CS%CF_Max * fN))**(CS%coulomb_pp_n)
+    else
+      CS%fB_elem(i,j) = 0.0
+    endif
+  enddo ; enddo
 
-  integer :: i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq
-  integer :: giec, gjec, gisc, gjsc, isc, jsc, iec, jec, is, js
-  real :: umid, vmid ! Velocities [L T-1 ~> m s-1]
-  real :: eps_min ! A minimal strain rate used in the Glens flow law expression [T-1 ~> s-1]
-  real :: unorm ! The magnitude of the velocity in mks units for use with fractional powers [m s-1]
-  real :: alpha ! Coulomb coefficient [nondim]
-  real :: Hf !"floatation thickness" for Coulomb friction [Z ~> m]
-  real :: fN ! Effective pressure (ice pressure - ocean pressure) for Coulomb friction [R Z L T-2 ~> Pa]
-  real :: fB !for Coulomb Friction [(T L-1)^CS%CF_PostPeak ~> (s m-1)^CS%CF_PostPeak]
+end subroutine calc_shelf_basal_prefactors
 
-  isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
-  iscq = G%iscB ; iecq = G%iecB ; jscq = G%jscB ; jecq = G%jecB
-  isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
-  iegq = G%iegB ; jegq = G%jegB
-  gisc = G%domain%nihalo+1 ; gjsc = G%domain%njhalo+1
-  giec = G%domain%niglobal+gisc ; gjec = G%domain%njglobal+gjsc
-  is = iscq - 1; js = jscq - 1
+!> Compute area-averaged basal shear stress [R L T-1 ~> Pa s m-1] and return it in basal_tr.
+!! Uses CS%u_shelf and CS%v_shelf for velocities and G%US for unit conversions.
+subroutine calc_shelf_taub(CS, ISS, G, basal_tr)
+  type(ice_shelf_dyn_CS), intent(in)  :: CS  !< Ice shelf dynamics control structure
+  type(ice_shelf_state),  intent(in)  :: ISS !< A structure with elements that describe
+                                             !! the ice-shelf state
+  type(ocean_grid_type),  intent(in)  :: G   !< The grid structure used by the ice shelf.
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(out) :: basal_tr !< Area-averaged basal traction [R L T-1 ~> Pa s m-1]
+
+  integer :: i, j
+  real :: umid, vmid    ! Cell-center velocity averages [L T-1 ~> m s-1]
+  real :: eps_min       ! Minimal strain rate [T-1 ~> s-1]
+  real :: unorm         ! Velocity magnitude in mks units [m s-1]
+  real :: alpha         ! Coulomb coefficient [nondim]
+  real :: Hf            ! Floatation thickness for Coulomb friction [Z ~> m]
+  real :: fN            ! Effective pressure for Coulomb friction [R Z L T-2 ~> Pa]
+  real :: fB            ! Coulomb friction factor [(T L-1)^CS%CF_PostPeak]
+  real :: fBuq          ! fB * unorm^CF_PostPeak [nondim]
+  real :: unorm_code2   ! Squared velocity magnitude in code units [L2 T-2 ~> m2 s-2]
+  real :: basal_trac    ! Area-integrated traction coefficient [R Z L2 T-1 ~> kg s-1]
 
   eps_min = CS%eps_glen_min
 
   if (CS%CoulombFriction) then
-    if (CS%CF_PostPeak/=1.0) THEN
-      alpha = (CS%CF_PostPeak-1.0)**(CS%CF_PostPeak-1.0) / CS%CF_PostPeak**CS%CF_PostPeak ![nondim]
+    if (CS%CF_PostPeak /= 1.0) then
+      alpha = CS%alpha_coulomb
     else
       alpha = 1.0
     endif
   endif
 
-  do j=jsd+1,jed
-    do i=isd+1,ied
-      if ((ISS%hmask(i,j) == 1) .OR. (ISS%hmask(i,j) == 3)) then
-        umid = ((u_shlf(I,J) + u_shlf(I-1,J-1)) + (u_shlf(I,J-1) + u_shlf(I-1,J))) * 0.25
-        vmid = ((v_shlf(I,J) + v_shlf(I-1,J-1)) + (v_shlf(I,J-1) + v_shlf(I-1,J))) * 0.25
-        unorm = US%L_T_to_m_s * sqrt( ((umid**2) + (vmid**2)) + (eps_min**2 * (G%dxT(i,j)**2 + G%dyT(i,j)**2)) )
+  basal_tr(:,:) = 0.0
 
-        !Coulomb friction (Schoof 2005, Gagliardini et al 2007)
-        if (CS%CoulombFriction) then
-          !Effective pressure
-          Hf = max((CS%density_ocean_avg/CS%density_ice) * CS%bed_elev(i,j), 0.0)
-          fN = max((US%L_to_Z*(CS%density_ice * CS%g_Earth) * (max(ISS%h_shelf(i,j),CS%min_h_shelf) - Hf)), CS%CF_MinN)
-          fB = alpha * (CS%C_basal_friction(i,j) / (CS%CF_Max * fN))**(CS%CF_PostPeak/CS%n_basal_fric)
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    if ((ISS%hmask(i,j) == 1) .OR. (ISS%hmask(i,j) == 3)) then
+      umid = ((CS%u_shelf(I,J) + CS%u_shelf(I-1,J-1)) + (CS%u_shelf(I,J-1) + CS%u_shelf(I-1,J))) * 0.25
+      vmid = ((CS%v_shelf(I,J) + CS%v_shelf(I-1,J-1)) + (CS%v_shelf(I,J-1) + CS%v_shelf(I-1,J))) * 0.25
+      unorm_code2 = ((umid**2) + (vmid**2)) + (eps_min**2 * ((G%dxT(i,j)**2) + (G%dyT(i,j)**2)))
+      unorm = G%US%L_T_to_m_s * sqrt(unorm_code2)
 
-          CS%basal_traction(i,j) = ((G%areaT(i,j) * CS%C_basal_friction(i,j)) * &
-              (unorm**(CS%n_basal_fric-1.0) / (1.0 + fB * unorm**CS%CF_PostPeak)**(CS%n_basal_fric))) * &
-              US%L_T_to_m_s   ! Restore the scaling after the fractional power law.
-        else
-          !linear (CS%n_basal_fric=1) or "Weertman"/power-law (CS%n_basal_fric /= 1)
-          CS%basal_traction(i,j) = ((G%areaT(i,j) * CS%C_basal_friction(i,j)) * (unorm**(CS%n_basal_fric-1))) * &
-                                   US%L_T_to_m_s ! Rescale after the fractional power law.
-        endif
-
-        CS%basal_traction(i,j)=max(CS%basal_traction(i,j), CS%min_basal_traction * G%areaT(i,j))
+      !Coulomb friction (Schoof 2005, Gagliardini et al 2007)
+      if (CS%CoulombFriction) then
+        !Effective pressure
+        Hf = max(CS%rhow_rhoi * CS%bed_elev(i,j), 0.0)
+        fN = max((G%US%L_to_Z*(CS%density_ice * CS%g_Earth) * (max(ISS%h_shelf(i,j),CS%min_h_shelf) - Hf)), CS%CF_MinN)
+        fB = alpha * (CS%C_basal_friction(i,j) / (CS%CF_Max * fN))**(CS%coulomb_pp_n)
+        fBuq = fB * unorm**CS%CF_PostPeak
+        basal_trac = ((G%areaT(i,j) * CS%C_basal_friction(i,j)) * &
+            (unorm**(CS%n_basal_fric-1.0) / (1.0 + fBuq)**(CS%n_basal_fric))) * &
+            G%US%L_T_to_m_s   ! Restore the scaling after the fractional power law.
+      else
+        !linear (CS%n_basal_fric = 1) or "Weertman"/power-law (CS%n_basal_fric /= 1)
+        basal_trac = ((G%areaT(i,j) * CS%C_basal_friction(i,j)) * (unorm**(CS%n_basal_fric-1))) * &
+                     G%US%L_T_to_m_s ! Rescale after the fractional power law.
       endif
-    enddo
-  enddo
+
+      basal_trac = max(basal_trac, CS%min_basal_traction * G%areaT(i,j))
+      basal_tr(i,j) = basal_trac * G%IareaT(i,j) * CS%ground_frac(i,j)
+    endif
+  enddo ; enddo
 
 end subroutine calc_shelf_taub
 
@@ -3464,7 +4702,7 @@ subroutine update_OD_ffrac(CS, G, US, ocean_mass, find_avg)
       CS%ground_frac(i,j) = 1.0 - (CS%ground_frac_rt(i,j) * I_counter)
       CS%OD_av(i,j) = CS%OD_rt(i,j) * I_counter
 
-      CS%OD_rt(i,j) = 0.0 ; CS%ground_frac_rt(i,j) = 0.0; CS%OD_rt_counter = 0
+      CS%OD_rt(i,j) = 0.0 ; CS%ground_frac_rt(i,j) = 0.0 ; CS%OD_rt_counter = 0
     enddo ; enddo
 
     call pass_var(CS%ground_frac, G%domain, complete=.false.)
@@ -3480,14 +4718,13 @@ subroutine update_OD_ffrac_uncoupled(CS, G, h_shelf)
                           intent(in)    :: h_shelf !< the thickness of the ice shelf [Z ~> m].
 
   integer :: i, j, isd, ied, jsd, jed
-  real    :: rhoi_rhow, OD
+  real    :: OD
 
-  rhoi_rhow = CS%density_ice / CS%density_ocean_avg
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   do j=jsd,jed
     do i=isd,ied
-      OD = CS%bed_elev(i,j) - rhoi_rhow * max(h_shelf(i,j),CS%min_h_shelf)
+      OD = CS%bed_elev(i,j) - CS%rhoi_rhow * max(h_shelf(i,j),CS%min_h_shelf)
       if (OD >= 0) then
     ! ice thickness does not take up whole ocean column -> floating
         CS%OD_av(i,j) = OD
@@ -3512,32 +4749,31 @@ subroutine change_in_draft(CS, G, h_shelf0, h_shelf1, ddraft)
                           intent(inout)    :: ddraft !< the change in shelf draft thickness
   real :: b0,b1
   integer :: i, j, isc, iec, jsc, jec
-  real    :: rhoi_rhow, OD
+  real    :: OD
 
-  rhoi_rhow = CS%density_ice / CS%density_ocean_avg
   isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
   ddraft = 0.0
 
   do j=jsc,jec
     do i=isc,iec
 
-      b0=0.0; b1=0.0
+      b0 = 0.0 ; b1 = 0.0
 
       if (h_shelf0(i,j)>0.0) then
-        OD = CS%bed_elev(i,j) - rhoi_rhow * h_shelf0(i,j)
+        OD = CS%bed_elev(i,j) - CS%rhoi_rhow * h_shelf0(i,j)
         if (OD >= 0) then
           !floating
-          b0 = rhoi_rhow * h_shelf0(i,j)
+          b0 = CS%rhoi_rhow * h_shelf0(i,j)
         else
           b0 = CS%bed_elev(i,j)
         endif
       endif
 
       if (h_shelf1(i,j)>0.0) then
-        OD = CS%bed_elev(i,j) - rhoi_rhow * h_shelf1(i,j)
+        OD = CS%bed_elev(i,j) - CS%rhoi_rhow * h_shelf1(i,j)
         if (OD >= 0) then
           !floating
-          b1 = rhoi_rhow * h_shelf1(i,j)
+          b1 = CS%rhoi_rhow * h_shelf1(i,j)
         else
           b1 = CS%bed_elev(i,j)
         endif
@@ -3619,12 +4855,14 @@ end subroutine bilinear_shape_functions
 !> This subroutine calculates the gradients of bilinear basis elements that are centered at the
 !! vertices of the cell using a locally orthogoal MOM6 grid.  Values are calculated at
 !! points of gaussian quadrature.
-subroutine bilinear_shape_fn_grid(G, i, j, Phi)
+subroutine bilinear_shape_fn_grid(G, i, j, Phi, Jac)
   type(ocean_grid_type), intent(in)    :: G  !< The grid structure used by the ice shelf.
   integer,               intent(in)    :: i   !< The i-index in the grid to work on.
   integer,               intent(in)    :: j   !< The j-index in the grid to work on.
   real, dimension(8,4),  intent(inout) :: Phi !< The gradients of bilinear basis elements at Gaussian
                                               !! quadrature points surrounding the cell vertices [L-1 ~> m-1].
+  real, dimension(4), optional, intent(out) :: Jac !< Jacobian determinant |J_q| = a_q*d_q at each
+                                              !! Gaussian quadrature point [L2 ~> m2].
 
 ! This subroutine calculates the gradients of bilinear basis elements that
 ! that are centered at the vertices of the cell.  The values are calculated at
@@ -3638,6 +4876,10 @@ subroutine bilinear_shape_fn_grid(G, i, j, Phi)
 ! This should be a one-off; once per nonlinear solve? once per lifetime?
 
   real, dimension(4) :: xquad, yquad ! [nondim]
+  ! Mirror lookups: xquad_m(qp) == 1 - xquad(qp), yquad_m(qp) == 1 - yquad(qp) mathematically,
+  ! but each mirror entry is the stored value at the x- or y-mirrored quadrature point. This
+  ! ensures rotation-paired QPs read bit-identical operand values.
+  real, dimension(4) :: xquad_m, yquad_m ! Mirrors of xquad, yquad [nondim]
   real :: a, d       ! Interpolated grid spacings [L ~> m]
   real :: xexp, yexp ! [nondim]
   integer :: node, qpoint, xnode, ynode
@@ -3645,31 +4887,33 @@ subroutine bilinear_shape_fn_grid(G, i, j, Phi)
   xquad(1:3:2) = .5 * (1-sqrt(1./3)) ; yquad(1:2) = .5 * (1-sqrt(1./3))
   xquad(2:4:2) = .5 * (1+sqrt(1./3)) ; yquad(3:4) = .5 * (1+sqrt(1./3))
 
+  ! x-mirror swaps qp 1<->2 and 3<->4; y-mirror swaps 1<->3 and 2<->4
+  xquad_m(1) = xquad(2) ; xquad_m(2) = xquad(1) ; xquad_m(3) = xquad(4) ; xquad_m(4) = xquad(3)
+  yquad_m(1) = yquad(3) ; yquad_m(2) = yquad(4) ; yquad_m(3) = yquad(1) ; yquad_m(4) = yquad(2)
+
   do qpoint=1,4
     if (J>1) then
-      a = (G%dxCv(i,J-1) * (1-yquad(qpoint))) + (G%dxCv(i,J) * yquad(qpoint)) ! d(x)/d(x*)
+      a = (G%dxCv(i,J-1) * yquad_m(qpoint)) + (G%dxCv(i,J) * yquad(qpoint)) ! d(x)/d(x*)
     else
       a = G%dxCv(i,J) !* yquad(qpoint) ! d(x)/d(x*)
     endif
     if (I>1) then
-      d = (G%dyCu(I-1,j) * (1-xquad(qpoint))) + (G%dyCu(I,j) * xquad(qpoint)) ! d(y)/d(y*)
+      d = (G%dyCu(I-1,j) * xquad_m(qpoint)) + (G%dyCu(I,j) * xquad(qpoint)) ! d(y)/d(y*)
     else
       d = G%dyCu(I,j) !* xquad(qpoint)
     endif
-!    a = G%dxCv(i,J-1) * (1-yquad(qpoint)) + G%dxCv(i,J) * yquad(qpoint) ! d(x)/d(x*)
-!    d = G%dyCu(I-1,j) * (1-xquad(qpoint)) + G%dyCu(I,j) * xquad(qpoint) ! d(y)/d(y*)
 
     do node=1,4
       xnode = 2-mod(node,2) ; ynode = ceiling(REAL(node)/2)
 
       if (ynode == 1) then
-        yexp = 1-yquad(qpoint)
+        yexp = yquad_m(qpoint)
       else
         yexp = yquad(qpoint)
       endif
 
       if (1 == xnode) then
-        xexp = 1-xquad(qpoint)
+        xexp = xquad_m(qpoint)
       else
         xexp = xquad(qpoint)
       endif
@@ -3678,6 +4922,7 @@ subroutine bilinear_shape_fn_grid(G, i, j, Phi)
       Phi(2*node,qpoint)   = ( (a * (2 * ynode - 3)) * xexp ) / (a*d)
 
     enddo
+    if (present(Jac)) Jac(qpoint) = a * d
   enddo
 
 end subroutine bilinear_shape_fn_grid
@@ -3757,21 +5002,27 @@ subroutine bilinear_shape_functions_subgrid(Phisub, nsub)
     !  1 - 2
 
   integer :: i, j, qx, qy
-  real,dimension(2)    :: xquad
-  real                 :: x0, y0, x, y, fracx
+  real,dimension(2)    :: xquad ! [nondim]
+  real                 :: fracx ! The fractional sub-cell area in reference space [nondim]
+  ! Mirror-symmetric per-direction node weights: a_left == 1-x_global, a_right == x_global
+  ! mathematically, but constructed so that a_right(qx,i) is computed by exactly the same
+  ! operand sequence as a_left(3-qx, nsub+1-i). This guarantees bit-exact rotation symmetry.
+  real, dimension(2,nsub) :: a_left, a_right ! [nondim]
 
   xquad(1) = .5 * (1-sqrt(1./3)) ; xquad(2) = .5 * (1+sqrt(1./3))
   fracx = 1.0/real(nsub)
 
+  do i=1,nsub ; do qx=1,2
+    a_left (qx,i) = (real(nsub-i) + xquad(3-qx)) * fracx
+    a_right(qx,i) = (real(i-1)    + xquad(qx))   * fracx
+  enddo ; enddo
+
   do j=1,nsub ; do i=1,nsub
-    x0 = (i-1) * fracx ; y0 = (j-1) * fracx
     do qy=1,2 ; do qx=1,2
-      x = x0 + fracx*xquad(qx)
-      y = y0 + fracx*xquad(qy)
-      Phisub(qx,qy,i,j,1,1) = (1.0-x) * (1.0-y)
-      Phisub(qx,qy,i,j,1,2) = (1.0-x) * y
-      Phisub(qx,qy,i,j,2,1) = x * (1.0-y)
-      Phisub(qx,qy,i,j,2,2) = x * y
+      Phisub(qx,qy,i,j,1,1) = a_left (qx,i) * a_left (qy,j)
+      Phisub(qx,qy,i,j,1,2) = a_left (qx,i) * a_right(qy,j)
+      Phisub(qx,qy,i,j,2,1) = a_right(qx,i) * a_left (qy,j)
+      Phisub(qx,qy,i,j,2,2) = a_right(qx,i) * a_right(qy,j)
     enddo ; enddo
   enddo ; enddo
 
@@ -3818,12 +5069,12 @@ subroutine update_velocity_masks(CS, G, hmask, umask, vmask, u_face_mask, v_face
     is = isd+1 ; js = jsd+1
   endif
 
-  do j=js,G%jed; do i=is,G%ied
+  do j=js,G%jed ; do i=is,G%ied
     if (hmask(i,j) == 1 .or. hmask(i,j)==3) then
       umask(I-1:I,J-1:J)=1
       vmask(I-1:I,J-1:J)=1
     endif
-  enddo; enddo
+  enddo ; enddo
 
   do j=js,G%jed
     do i=is,G%ied
@@ -3958,7 +5209,7 @@ subroutine interpolate_H_to_B(G, h_shelf, hmask, H_node, min_h_shelf)
   do j=jsc-1,jec
     do i=isc-1,iec
       num_h = 0
-      do l=1,2; jc=j-1+l; do k=1,2; ic=i-1+k
+      do l=1,2 ; jc=j-1+l ; do k=1,2 ; ic=i-1+k
         if (hmask(ic,jc) == 1.0 .or. hmask(ic,jc) == 3.0) then
           h_arr(k,l)=max(h_shelf(ic,jc),min_h_shelf)
           num_h = num_h + 1
@@ -3968,7 +5219,7 @@ subroutine interpolate_H_to_B(G, h_shelf, hmask, H_node, min_h_shelf)
         if (num_h > 0) then
           H_node(i,j) = ((h_arr(1,1)+h_arr(2,2))+(h_arr(1,2)+h_arr(2,1))) / num_h
         endif
-      enddo; enddo
+      enddo ; enddo
     enddo
   enddo
 
@@ -3978,25 +5229,43 @@ end subroutine interpolate_H_to_B
 
 !> Deallocates all memory associated with the ice shelf dynamics module
 subroutine ice_shelf_dyn_end(CS)
-  type(ice_shelf_dyn_CS), pointer   :: CS !< A pointer to the ice shelf dynamics control structure
+  type(ice_shelf_dyn_CS), pointer :: CS
+    !< A pointer to the ice shelf dynamics control structure
+
+  logical :: is_open
+    ! True if CS%fileenergy_ascii is open
 
   if (.not.associated(CS)) return
 
   deallocate(CS%u_shelf, CS%v_shelf)
   deallocate(CS%taudx_shelf, CS%taudy_shelf)
+  deallocate(CS%sx_shelf, CS%sy_shelf)
   deallocate(CS%t_shelf, CS%tmask)
   deallocate(CS%u_bdry_val, CS%v_bdry_val)
   deallocate(CS%u_face_mask, CS%v_face_mask)
+  deallocate(CS%u_flux_bdry_val, CS%v_flux_bdry_val)
   deallocate(CS%umask, CS%vmask)
   deallocate(CS%u_face_mask_bdry, CS%v_face_mask_bdry)
   deallocate(CS%h_bdry_val)
   deallocate(CS%float_cond)
+  if (associated(CS%calve_mask)) deallocate(CS%calve_mask)
 
   deallocate(CS%ice_visc, CS%AGlen_visc)
-  deallocate(CS%basal_traction,CS%C_basal_friction)
+  deallocate(CS%newton_visc_factor, CS%newton_str_ux, CS%newton_str_vy, CS%newton_str_sh)
+  deallocate(CS%C_basal_friction)
+  deallocate(CS%coef_prefactor, CS%fB_elem)
   deallocate(CS%OD_rt, CS%OD_av)
   deallocate(CS%t_bdry_val, CS%bed_elev)
   deallocate(CS%ground_frac, CS%ground_frac_rt)
+  if (associated(CS%Jac)) deallocate(CS%Jac)
+  if (associated(CS%Phi)) deallocate(CS%Phi)
+  if (associated(CS%Phisub)) deallocate(CS%Phisub)
+  if (associated(CS%PhiC)) deallocate(CS%PhiC)
+
+  is_open = .false.
+  if (CS%IS_fileenergy_ascii /= -1) &
+    inquire(unit=CS%IS_fileenergy_ascii, opened=is_open)
+  if (is_open) call close_file(CS%IS_fileenergy_ascii)
 
   deallocate(CS)
 

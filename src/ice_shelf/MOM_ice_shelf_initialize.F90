@@ -24,7 +24,7 @@ public initialize_ice_flow_from_file
 public initialize_ice_shelf_boundary_from_file
 public initialize_ice_C_basal_friction
 public initialize_ice_AGlen
-public initialize_ice_SMB
+
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
 ! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
@@ -33,7 +33,7 @@ public initialize_ice_SMB
 contains
 
 !> Initialize ice shelf thickness
-subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, G_in, US, PF, rotate_index, turns)
+subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, melt_mask, G, G_in, US, PF, rotate_index, turns)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(ocean_grid_type), intent(in)    :: G_in    !< The ocean's unrotated grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
@@ -42,7 +42,9 @@ subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, G_in, US, P
                          intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [L2 ~> m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: hmask !< A mask indicating which tracer points are
-                                             !! partly or fully covered by an ice-shelf
+                                             !! partly or fully covered by an ice-shelf [nondim]
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                         intent(inout) :: melt_mask !< A mask indicating where to allow ice-shelf melting [nondim]
   type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
   logical, intent(in), optional        :: rotate_index !< If true, this is a rotation test
@@ -51,9 +53,10 @@ subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, G_in, US, P
   character(len=40)  :: mdl = "initialize_ice_thickness" ! This subroutine's name.
   character(len=200) :: config
   logical :: rotate = .false.
-  real, allocatable, dimension(:,:) :: tmp1_2d ! Temporary array for storing ice shelf input data
-  real, allocatable, dimension(:,:) :: tmp2_2d ! Temporary array for storing ice shelf input data
-  real, allocatable, dimension(:,:) :: tmp3_2d ! Temporary array for storing ice shelf input data
+  real, allocatable, dimension(:,:) :: tmp1_2d ! Temporary array for storing ice shelf input data [Z~>m]
+  real, allocatable, dimension(:,:) :: tmp2_2d ! Temporary array for storing ice shelf input data [L2~>m2]
+  real, allocatable, dimension(:,:) :: tmp3_2d ! Temporary array for storing ice shelf input data [nondim]
+  real, allocatable, dimension(:,:) :: tmp4_2d ! Temporary array for storing ice shelf input data [nondim]
 
   call get_param(PF, mdl, "ICE_PROFILE_CONFIG", config, &
                  "This specifies how the initial ice profile is specified. "//&
@@ -66,20 +69,22 @@ subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, G_in, US, P
     allocate(tmp1_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed), source=0.0)
     allocate(tmp2_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed), source=0.0)
     allocate(tmp3_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed), source=0.0)
+    allocate(tmp4_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed), source=1.0)
     select case ( trim(config) )
       case ("CHANNEL") ; call initialize_ice_thickness_channel (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
-      case ("FILE") ; call initialize_ice_thickness_from_file (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
+      case ("FILE") ; call initialize_ice_thickness_from_file (tmp1_2d, tmp2_2d, tmp3_2d, tmp4_2d, G_in, US, PF)
       case ("USER") ; call USER_init_ice_thickness (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
       case default  ; call MOM_error(FATAL,"MOM_initialize: Unrecognized ice profile setup "//trim(config))
     end select
     call rotate_array(tmp1_2d,turns, h_shelf)
     call rotate_array(tmp2_2d,turns, area_shelf_h)
     call rotate_array(tmp3_2d,turns, hmask)
+    call rotate_array(tmp4_2d,turns, melt_mask)
     deallocate(tmp1_2d,tmp2_2d,tmp3_2d)
   else
     select case ( trim(config) )
       case ("CHANNEL") ; call initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, US, PF)
-      case ("FILE") ; call initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, US, PF)
+      case ("FILE") ; call initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, melt_mask, G, US, PF)
       case ("USER") ; call USER_init_ice_thickness (h_shelf, area_shelf_h, hmask, G, US, PF)
       case default  ; call MOM_error(FATAL,"MOM_initialize: Unrecognized ice profile setup "//trim(config))
     end select
@@ -88,7 +93,7 @@ subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, G_in, US, P
 end subroutine initialize_ice_thickness
 
 !> Initialize ice shelf thickness from file
-subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, US, PF)
+subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, melt_mask, G, US, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
@@ -96,14 +101,16 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
                          intent(inout) :: area_shelf_h !< The area per cell covered by the ice shelf [L2 ~> m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: hmask !< A mask indicating which tracer points are
-                                             !! partly or fully covered by an ice-shelf
+                                             !! partly or fully covered by an ice-shelf [nondim]
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                         intent(inout) :: melt_mask !< A mask indicating where to allow ice-shelf melting [nondim]
   type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
 
   !  This subroutine reads ice thickness and area from a file and puts it into
   !  h_shelf [Z ~> m] and area_shelf_h [L2 ~> m2] (and dimensionless) and updates hmask
   character(len=200) :: filename,thickness_file,inputdir ! Strings for file/path
-  character(len=200) :: thickness_varname, area_varname, hmask_varname  ! Variable name in file
+  character(len=200) :: thickness_varname, area_varname, hmask_varname, melt_mask_varname  ! Variable name in file
   character(len=40)  :: mdl = "initialize_ice_thickness_from_file" ! This subroutine's name.
   integer :: i, j, isc, jsc, iec, jec
   logical :: hmask_set
@@ -129,6 +136,9 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
                  "The name of the area variable in ICE_THICKNESS_FILE.", &
                  default="area_shelf_h")
   hmask_varname="h_mask"
+  call get_param(PF, mdl, "MELT_MASK_VARNAME", melt_mask_varname, &
+                 "The name of the melt mask variable in ICE_THICKNESS_FILE.", &
+                 default="melt_mask")
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " initialize_topography_from_file: Unable to open "//trim(filename))
   call MOM_read_data(filename, trim(thickness_varname), h_shelf, G%Domain, scale=US%m_to_Z)
@@ -141,6 +151,12 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
               "from variable "//trim(hmask_varname)//", which does not exist in "//trim(filename))
     hmask_set = .false.
   endif
+  if (field_exists(filename, trim(melt_mask_varname), MOM_domain=G%Domain)) then
+    call MOM_read_data(filename, trim(melt_mask_varname), melt_mask, G%Domain)
+  else
+    melt_mask(:,:)=1.0
+  endif
+
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
 
   if (.not.hmask_set) then
@@ -222,7 +238,7 @@ subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US,
 !  call get_param(param_file, mdl, "RHO_0", Rho_ocean, &
 !                 "The mean ocean density used with BOUSSINESQ true to "//&
 !                 "calculate accelerations and the mass for conservation "//&
-!                 "properties, or with BOUSSINSEQ false to convert some "//&
+!                 "properties, or with BOUSSINESQ false to convert some "//&
 !                 "parameters from vertical units of m to kg m-2.", &
 !                 units="kg m-3", default=1035.0, scale=US%Z_to_m)
 
@@ -313,7 +329,7 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
   character(len=40)  :: mdl = "initialize_ice_shelf_boundary_channel" ! This subroutine's name.
   integer :: i, j, isd, jsd, giec, gjec, gisc, gjsc,gisd,gjsd, isc, jsc, iec, jec, ied, jed
   real    :: input_thick ! The input ice shelf thickness [Z ~> m]
-  real    :: input_vel  ! The input ice velocity per  [L Z T-1 ~> m s-1]
+  real    :: input_vel  ! The input ice velocity at the upstream boundary [L T-1 ~> m s-1]
   real    :: lenlat, len_stress, westlon, lenlon, southlat ! The input positions of the channel boundarises
 
   lenlat = G%len_lat
@@ -424,7 +440,7 @@ subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,float_cond,&
                  default="ice_shelf_vel.nc")
 
   filename = trim(inputdir)//trim(vel_file)
-  call log_param(PF, mdl, "INPUTDIR/THICKNESS_FILE", filename)
+  call log_param(PF, mdl, "INPUTDIR/ICE_VELOCITY_FILE", filename)
   call get_param(PF, mdl, "ICE_U_VEL_VARNAME", ushelf_varname, &
                  "The name of the u velocity variable in ICE_VELOCITY_FILE.", &
                  default="u_shelf")
@@ -651,58 +667,13 @@ subroutine initialize_ice_AGlen(AGlen, ice_viscosity_compute, G, US, PF)
        " initialize_ice_stiffness_from_file: Unable to open "//trim(filename))
 
     if (trim(ice_viscosity_compute) == "OBS") then
-      !AGlen is the ice viscosity [Pa s ~> R L2 T-1] computed from obs and read from a file
+      ! AGlen is the ice viscosity [R L2 T-1 ~> Pa s] computed from obs and read from a file
       call MOM_read_data(filename, trim(varname), AGlen, G%Domain, scale=US%Pa_to_RL2_T2*US%s_to_T)
     else
-      !AGlen is the ice stiffness parameter [Pa-n_g s-1]
+      ! AGlen is the ice stiffness parameter [Pa-n_g s-1]
       call MOM_read_data(filename, trim(varname), AGlen, G%Domain)
     endif
   endif
 end subroutine initialize_ice_AGlen
 
-!> Initialize ice surface mass balance field that is held constant over time
-subroutine initialize_ice_SMB(SMB, G, US, PF)
-  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
-  real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: SMB !< Ice surface mass balance parameter, often in [R Z T-1 ~> kg m-2 s-1]
-  type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
-  type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
-
-  real :: SMB_val  ! Constant ice surface mass balance parameter, often in [R Z T-1 ~> kg m-2 s-1]
-  character(len=40)  :: mdl = "initialize_ice_SMB" ! This subroutine's name.
-  character(len=200) :: config
-  character(len=200) :: varname
-  character(len=200) :: inputdir, filename, SMB_file
-
-  call get_param(PF, mdl, "ICE_SMB_CONFIG", config, &
-                 "This specifies how the initial ice surface mass balance parameter is specified. "//&
-                 "Valid values are: CONSTANT and FILE.", &
-                 default="CONSTANT")
-
-  if (trim(config)=="CONSTANT") then
-    call get_param(PF, mdl, "SMB", SMB_val, &
-                 "Surface mass balance.", units="kg m-2 s-1", default=0.0, scale=US%kg_m2s_to_RZ_T)
-
-    SMB(:,:) = SMB_val
-
-  elseif (trim(config)=="FILE") then
-    call MOM_mesg("  MOM_ice_shelf.F90, initialize_ice_shelf: reading SMB parameter")
-    call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
-    inputdir = slasher(inputdir)
-
-    call get_param(PF, mdl, "ICE_SMB_FILE", SMB_file, &
-                 "The file from which the ice surface mass balance is read.", &
-                 default="ice_SMB.nc")
-    filename = trim(inputdir)//trim(SMB_file)
-    call log_param(PF, mdl, "INPUTDIR/ICE_SMB_FILE", filename)
-    call get_param(PF, mdl, "ICE_SMB_VARNAME", varname, &
-                   "The variable to use as surface mass balance.", &
-                   default="SMB")
-
-    if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
-       " initialize_ice_SMV_from_file: Unable to open "//trim(filename))
-    call MOM_read_data(filename,trim(varname), SMB, G%Domain, scale=US%kg_m2s_to_RZ_T)
-
-  endif
-end subroutine initialize_ice_SMB
 end module MOM_ice_shelf_initialize

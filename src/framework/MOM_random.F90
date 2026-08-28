@@ -232,7 +232,7 @@ function new_RandomNumberSequence(seed) result(twister)
     twister%state(i) = 1812433253 * ieor(twister%state(i-1), &
                                          ishft(twister%state(i-1), -30)) + i
     twister%state(i) = iand(twister%state(i), -1) ! for >32 bit machines
-  end do
+  enddo
   twister%currentElement = blockSize
 end function new_RandomNumberSequence
 
@@ -261,7 +261,7 @@ double precision function getRandomReal(twister)
     getRandomReal = dble(localInt + 2.0d0**32)/(2.0d0**32 - 1.0d0)
   else
     getRandomReal = dble(localInt            )/(2.0d0**32 - 1.0d0)
-  end if
+  endif
 end function getRandomReal
 
 !> Merge bits of u and v
@@ -292,11 +292,11 @@ subroutine nextState(twister)
   do k = 0, blockSize - M - 1
     twister%state(k) = ieor(twister%state(k + M), &
                             twist(twister%state(k), twister%state(k + 1)))
-  end do
+  enddo
   do k = blockSize - M, blockSize - 2
     twister%state(k) = ieor(twister%state(k + M - blockSize), &
                             twist(twister%state(k), twister%state(k + 1)))
-  end do
+  enddo
   twister%state(blockSize - 1) = ieor(twister%state(M - 1), &
                                       twist(twister%state(blockSize - 1), twister%state(0)))
   twister%currentElement = 0

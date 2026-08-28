@@ -12,7 +12,7 @@ use MOM_hor_index,     only : hor_index_type
 use MOM_io,            only : axis_info, set_axis_info
 use MOM_restart,       only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_tidal_forcing, only : tidal_frequency
-use MOM_time_manager,  only : time_type, time_type_to_real
+use MOM_time_manager,  only : time_type, time_to_real
 use MOM_unit_scaling,  only : unit_scale_type
 
 implicit none ; private
@@ -161,7 +161,7 @@ subroutine Filt_accum(u, u1, Time, US, CS)
              c1, c2              !< Coefficients for the filter equations [nondim]
   integer :: i, j, k
 
-  now = US%s_to_T * time_type_to_real(Time)
+  now = time_to_real(Time, scale=US%s_to_T)
 
   ! Initialize CS%old_time at the first time step
   if (CS%old_time<0.0) CS%old_time = now
@@ -178,7 +178,7 @@ subroutine Filt_accum(u, u1, Time, US, CS)
       do j=CS%js,CS%je ; do i=CS%is,CS%ie
         CS%s1(i,j,k) =  c1 *  CS%u1(i,j,k) + CS%s1(i,j,k)
         CS%u1(i,j,k) = -c1 * (CS%s1(i,j,k) - CS%filter_alpha(k) * u(i,j)) + c2 * CS%u1(i,j,k)
-      enddo; enddo
+      enddo ; enddo
     enddo ! k=1,CS%nf
   endif ! (CS%old_time<now)
 

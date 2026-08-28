@@ -680,8 +680,8 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
         Sbl = ( (hWght*hR)*S_b(i+1,j,k) + (hWght*hL + hR*hL)*S_b(i,j,k) ) * iDenom
         Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i+1,j,k) ) * iDenom
       else
-        Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i+1,j,k); Tbr = T_b(i+1,j,k)
-        Stl = S_t(i,j,k); Sbl = S_b(i,j,k); Str = S_t(i+1,j,k); Sbr = S_b(i+1,j,k)
+        Ttl = T_t(i,j,k) ; Tbl = T_b(i,j,k) ; Ttr = T_t(i+1,j,k) ; Tbr = T_b(i+1,j,k)
+        Stl = S_t(i,j,k) ; Sbl = S_b(i,j,k) ; Str = S_t(i+1,j,k) ; Sbr = S_b(i+1,j,k)
       endif
 
       do m=2,4
@@ -792,8 +792,8 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
         Sbl = ( (hWght*hR)*S_b(i,j+1,k) + (hWght*hL + hR*hL)*S_b(i,j,k) ) * iDenom
         Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i,j+1,k) ) * iDenom
       else
-        Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i,j+1,k); Tbr = T_b(i,j+1,k)
-        Stl = S_t(i,j,k); Sbl = S_b(i,j,k); Str = S_t(i,j+1,k); Sbr = S_b(i,j+1,k)
+        Ttl = T_t(i,j,k) ; Tbl = T_b(i,j,k) ; Ttr = T_t(i,j+1,k) ; Tbr = T_b(i,j+1,k)
+        Stl = S_t(i,j,k) ; Sbl = S_b(i,j,k) ; Str = S_t(i,j+1,k) ; Sbr = S_b(i,j+1,k)
       endif
 
       do m=2,4
@@ -1124,10 +1124,10 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i+1,j,k) ) * iDenom
         Smr = ( (hWght*hL)*tv%S(i,j,k) + (hWght*hR + hR*hL)*tv%S(i+1,j,k) ) * iDenom
       else
-        Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i+1,j,k); Tbr = T_b(i+1,j,k)
-        Tml = tv%T(i,j,k); Tmr = tv%T(i+1,j,k)
-        Stl = S_t(i,j,k); Sbl = S_b(i,j,k); Str = S_t(i+1,j,k); Sbr = S_b(i+1,j,k)
-        Sml = tv%S(i,j,k); Smr = tv%S(i+1,j,k)
+        Ttl = T_t(i,j,k) ; Tbl = T_b(i,j,k) ; Ttr = T_t(i+1,j,k) ; Tbr = T_b(i+1,j,k)
+        Tml = tv%T(i,j,k) ; Tmr = tv%T(i+1,j,k)
+        Stl = S_t(i,j,k) ; Sbl = S_b(i,j,k) ; Str = S_t(i+1,j,k) ; Sbr = S_b(i+1,j,k)
+        Sml = tv%S(i,j,k) ; Smr = tv%S(i+1,j,k)
       endif
 
       do m=2,4
@@ -1236,10 +1236,10 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i,j+1,k) ) * iDenom
         Smr = ( (hWght*hL)*tv%S(i,j,k) + (hWght*hR + hR*hL)*tv%S(i,j+1,k) ) * iDenom
       else
-        Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i,j+1,k); Tbr = T_b(i,j+1,k)
-        Tml = tv%T(i,j,k); Tmr = tv%T(i,j+1,k)
-        Stl = S_t(i,j,k); Sbl = S_b(i,j,k); Str = S_t(i,j+1,k); Sbr = S_b(i,j+1,k)
-        Sml = tv%S(i,j,k); Smr = tv%S(i,j+1,k)
+        Ttl = T_t(i,j,k) ; Tbl = T_b(i,j,k) ; Ttr = T_t(i,j+1,k) ; Tbr = T_b(i,j+1,k)
+        Tml = tv%T(i,j,k) ; Tmr = tv%T(i,j+1,k)
+        Stl = S_t(i,j,k) ; Sbl = S_b(i,j,k) ; Str = S_t(i,j+1,k) ; Sbr = S_b(i,j+1,k)
+        Sml = tv%S(i,j,k) ; Smr = tv%S(i,j+1,k)
       endif
 
       do m=2,4
@@ -1476,8 +1476,8 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
   Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
   halo = 0 ; if (present(halo_size)) halo = MAX(halo_size,0)
   ish = HI%isc-halo ; ieh = HI%iec+halo ; jsh = HI%jsc-halo ; jeh = HI%jec+halo
-  if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif
-  if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh); endif
+  if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh) ; endif
+  if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh) ; endif
 
   do_massWeight = .false. ; massWeight_bug = .false. ; top_massWeight = .false.
   if (present(MassWghtInterp)) then

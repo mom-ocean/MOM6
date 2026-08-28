@@ -19,9 +19,10 @@ use MOM_ensemble_manager, only : get_ensemble_id, get_ensemble_size
 use MOM_ensemble_manager, only : get_ensemble_pelist, get_ensemble_filter_pelist
 use MOM_error_handler, only : stdout, stdlog, MOM_error
 use MOM_io, only : SINGLE_FILE
-use MOM_interp_infra, only : init_extern_field, get_external_field_info
+use MOM_interp_infra, only : init_extern_field
 use MOM_interp_infra, only : time_interp_extern
 use MOM_interpolate, only : external_field
+use MOM_interpolate, only : get_external_field_info
 use MOM_remapping,    only : remappingSchemesDoc
 use MOM_time_manager, only : time_type, real_to_time, get_date
 use MOM_time_manager, only : operator(+), operator(>=), operator(/=)
@@ -129,7 +130,7 @@ type, public :: ODA_CS ; private
   integer :: ensemble_id = 0 !< id of the current ensemble member
   integer, pointer, dimension(:,:) :: ensemble_pelist !< PE list for ensemble members
   integer, pointer, dimension(:) :: filter_pelist !< PE list for ensemble members
-  real :: assim_interval !< analysis interval [ T ~> s]
+  real :: assim_interval !< analysis interval [T ~> s]
   ! Profiles local to the analysis domain
   type(ocean_profile_type), pointer :: Profiles => NULL() !< pointer to linked list of all available profiles
   type(ocean_profile_type), pointer :: CProfiles => NULL()!< pointer to linked list of current profiles
@@ -266,7 +267,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
   call get_param(PF, mdl, "REPRODUCE_2018_NMME_ANSWERS", CS%reproduce_2018_nmme, &
-               "Logical flag needed to reproduce older NMME forecast answers."//&
+               "Logical flag needed to reproduce older NMME forecast answers.  "//&
                "True gives old answers, the default of false gives different answers.", &
                default=.false.)
 
@@ -347,13 +348,13 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   call initialize_remapping(CS%remapCS, remap_scheme, om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
                             h_neglect=h_neglect, h_neglect_edge=h_neglect_edge, answer_date=CS%answer_date)
   call set_regrid_params(CS%regridCS, min_thickness=0.)
-  isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   ! breaking with the MOM6 convention and using global indices
   !call get_domain_extent(G%Domain,is,ie,js,je,isd,ied,jsd,jed,&
   !                       isg,ieg,jsg,jeg,idg_offset,jdg_offset,symmetric)
-  !isd=isd+idg_offset; ied=ied+idg_offset ! using global indexing within the DA module
-  !jsd=jsd+jdg_offset; jed=jed+jdg_offset ! TODO:  switch to local indexing? (mjh)
+  !isd = isd+idg_offset ; ied = ied+idg_offset ! using global indexing within the DA module
+  !jsd = jsd+jdg_offset ; jed = jed+jdg_offset ! TODO:  switch to local indexing? (mjh)
 
   if (.not. associated(CS%h)) then
     allocate(CS%h(isd:ied,jsd:jed,CS%GV%ke), source=CS%GV%Angstrom_H)
@@ -421,7 +422,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
 !  if (CS%write_obs) then
 !    temp_fid = open_profile_file("temp_"//trim(obs_file))
 !    salt_fid = open_profile_file("salt_"//trim(obs_file))
-!  end if
+!  endif
 
 end subroutine init_oda
 
@@ -450,7 +451,7 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   !call MOM_mesg('Setting prior')
 
   ! computational domain for the analysis grid
-  isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
+  isc = CS%Grid%isc ; iec = CS%Grid%iec ; jsc = CS%Grid%jsc ; jec = CS%Grid%jec
   ! array extents for the ensemble member
   !call get_domain_extent(CS%domains(CS%ensemble_id),is,ie,js,je,isd,ied,jsd,jed,&
   !     isg,ieg,jsg,jeg,idg_offset,jdg_offset,symmetric)
@@ -632,7 +633,7 @@ subroutine oda_end(CS)
 end subroutine oda_end
 
 !> Initialize DA module
-subroutine init_ocean_ensemble(CS,Grid,GV,ens_size)
+subroutine init_ocean_ensemble(CS, Grid, GV, ens_size)
   type(ocean_control_struct), pointer :: CS !< Pointer to ODA control structure
   type(ocean_grid_type), pointer :: Grid !< Pointer to ocean analysis grid
   type(verticalGrid_type), pointer :: GV !< Pointer to DA vertical grid
@@ -640,10 +641,10 @@ subroutine init_ocean_ensemble(CS,Grid,GV,ens_size)
 
   integer :: is, ie, js, je, nk
 
-  nk=GV%ke
-  is=Grid%isd;ie=Grid%ied
-  js=Grid%jsd;je=Grid%jed
-  CS%ensemble_size=ens_size
+  nk = GV%ke
+  is = Grid%isd ; ie = Grid%ied
+  js = Grid%jsd ; je = Grid%jed
+  CS%ensemble_size = ens_size
   allocate(CS%T(is:ie,js:je,nk,ens_size))
   allocate(CS%S(is:ie,js:je,nk,ens_size))
   allocate(CS%SSH(is:ie,js:je,ens_size))
@@ -659,7 +660,7 @@ subroutine init_ocean_ensemble(CS,Grid,GV,ens_size)
 end subroutine init_ocean_ensemble
 
 !> Set the next analysis time
-subroutine set_analysis_time(Time,CS)
+subroutine set_analysis_time(Time, CS)
   type(time_type), intent(in) :: Time !< the current model time
   type(ODA_CS), pointer, intent(inout) :: CS !< the DA control structure
 
@@ -668,7 +669,7 @@ subroutine set_analysis_time(Time,CS)
 
   if (Time >= CS%Time) then
     ! increment the analysis time to the next step
-    CS%Time = CS%Time + real_to_time(CS%US%T_to_s*(CS%assim_interval))
+    CS%Time = CS%Time + real_to_time(CS%assim_interval, unscale=CS%US%T_to_s)
 
     call get_date(Time, yr, mon, day, hr, min, sec)
     write(mesg,*) 'Model Time: ', yr, mon, day, hr, min, sec
@@ -715,7 +716,7 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
 
   call cpu_clock_begin(id_clock_apply_increments)
 
-  T_tend_inc(:,:,:) = 0.0; S_tend_inc(:,:,:) = 0.0; T_tend(:,:,:) = 0.0; S_tend(:,:,:) = 0.0
+  T_tend_inc(:,:,:) = 0.0 ; S_tend_inc(:,:,:) = 0.0 ; T_tend(:,:,:) = 0.0 ; S_tend(:,:,:) = 0.0
   if (CS%assim_method > 0 ) then
     T_tend = T_tend + CS%T_tend
     S_tend = S_tend + CS%S_tend
@@ -725,13 +726,13 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
     S_tend = S_tend + CS%S_bc_tend
   endif
 
-  isc=G%isc; iec=G%iec; jsc=G%jsc; jec=G%jec
-  do j=jsc,jec; do i=isc,iec
+  isc=G%isc ; iec=G%iec ; jsc=G%jsc ; jec=G%jec
+  do j=jsc,jec ; do i=isc,iec
     call remapping_core_h(CS%remapCS, CS%nk, CS%h(i,j,:), T_tend(i,j,:), &
                           G%ke, h(i,j,:), T_tend_inc(i,j,:))
     call remapping_core_h(CS%remapCS, CS%nk, CS%h(i,j,:), S_tend(i,j,:), &
                           G%ke, h(i,j,:), S_tend_inc(i,j,:))
-  enddo; enddo
+  enddo ; enddo
 
 
   call pass_var(T_tend_inc, G%Domain)
@@ -798,7 +799,7 @@ end subroutine apply_oda_tracer_increments
         if ( global2D(i,j) > 1 ) then
            T_grid%mask(i,j,k) = 1.0
         endif
-      enddo; enddo
+      enddo ; enddo
       if (k == 1) then
          T_grid%z(:,:,k) = global2D/2
       else

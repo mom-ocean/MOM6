@@ -11,3 +11,5 @@ The complete API documentation is generated with doxygen and can be found at htt
   :maxdepth: 1
 
   api/modules
+  api/functions
+  api/files

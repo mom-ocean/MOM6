@@ -32,7 +32,7 @@ program Shelf_main
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_domains,         only : MOM_domains_init, clone_MOM_domain, pass_var
   use MOM_dyn_horgrid,     only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
-  use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
+  use MOM_error_handler,   only : MOM_set_verbosity, MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
   use MOM_file_parser,     only : read_param, get_param, log_param, log_version, param_file_type
   use MOM_file_parser,     only : close_param_file
@@ -48,7 +48,7 @@ program Shelf_main
   use MOM_shared_initialization, only : write_ocean_geometry_file
   use MOM_string_functions,only : uppercase
   use MOM_time_manager,    only : time_type, set_date, get_date
-  use MOM_time_manager,    only : real_to_time, time_type_to_real
+  use MOM_time_manager,    only : real_to_time, time_to_real
   use MOM_time_manager,    only : operator(+), operator(-), operator(*), operator(/)
   use MOM_time_manager,    only : operator(>), operator(<), operator(>=)
   use MOM_time_manager,    only : increment_date, set_calendar_type, month_name
@@ -59,10 +59,12 @@ program Shelf_main
   use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
   use MOM_write_cputime,   only : write_cputime_start_clock, write_cputime_CS
   use MOM_forcing_type,    only : forcing
-  use MOM_ice_shelf_initialize, only : initialize_ice_SMB
+  use MOM_ice_shelf, only : initialize_ice_SMB
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
-  use MOM_ice_shelf, only : ice_shelf_save_restart, solo_step_ice_shelf
+  use MOM_ice_shelf, only : ice_shelf_save_restart, solo_step_ice_shelf, update_ice_SMB
+  use MOM_interp_infra, only : time_interp_extern_init
+
 
   implicit none
 
@@ -149,7 +151,7 @@ program Shelf_main
   character(len=9)  :: month
   character(len=16) :: calendar = 'noleap'
   integer :: calendar_type=-1
-
+  integer :: verbosity
   integer :: unit, io_status, ierr
   logical :: symmetric
 
@@ -171,6 +173,8 @@ program Shelf_main
   call write_cputime_start_clock(write_CPU_CSp)
 
   call MOM_infra_init() ; call io_infra_init()
+
+  call time_interp_extern_init()
 
   ! These clocks are on the global pelist.
   initClock = cpu_clock_id( 'Initialization' )
@@ -196,6 +200,9 @@ program Shelf_main
   ! Also calls the subroutine that opens run-time parameter files.
   call Get_MOM_Input(param_file, dirs)
 
+  call get_param(param_file, mod_name, "VERBOSITY", verbosity, default=5)
+  call MOM_set_verbosity(verbosity)
+
   ! Read ocean_solo restart, which can override settings from the namelist.
   if (file_exists(trim(dirs%restart_input_dir)//'ice_solo.res')) then
     call open_ASCII_file(unit, trim(dirs%restart_input_dir)//'ice_solo.res', action=READONLY_FILE)
@@ -205,11 +212,11 @@ program Shelf_main
     call close_file(unit)
   else
     calendar = uppercase(calendar)
-    if (calendar(1:6) == 'JULIAN') then ;        calendar_type = JULIAN
-    elseif (calendar(1:9) == 'GREGORIAN') then ; calendar_type = GREGORIAN
-    elseif (calendar(1:6) == 'NOLEAP') then ;    calendar_type = NOLEAP
-    elseif (calendar(1:10)=='THIRTY_DAY') then ; calendar_type = THIRTY_DAY_MONTHS
-    elseif (calendar(1:11)=='NO_CALENDAR') then; calendar_type = NO_CALENDAR
+    if (calendar(1:6) == 'JULIAN') then ;         calendar_type = JULIAN
+    elseif (calendar(1:9) == 'GREGORIAN') then ;  calendar_type = GREGORIAN
+    elseif (calendar(1:6) == 'NOLEAP') then ;     calendar_type = NOLEAP
+    elseif (calendar(1:10)=='THIRTY_DAY') then ;  calendar_type = THIRTY_DAY_MONTHS
+    elseif (calendar(1:11)=='NO_CALENDAR') then ; calendar_type = NO_CALENDAR
     elseif (calendar(1:1) /= ' ') then
       call MOM_error(FATAL,'Shelf_driver: Invalid namelist value '//trim(calendar)//' for calendar')
     else
@@ -220,8 +227,8 @@ program Shelf_main
 
 
   if (sum(date_init) > 0) then
-    Start_time = set_date(date_init(1),date_init(2), date_init(3), &
-         date_init(4),date_init(5),date_init(6))
+    Start_time = set_date(date_init(1), date_init(2), date_init(3), &
+                          date_init(4), date_init(5), date_init(6))
   else
     Start_time = real_to_time(0.0)
   endif
@@ -292,7 +299,8 @@ program Shelf_main
   call initialize_ice_shelf(param_file, ocn_grid, Time, ice_shelf_CSp, diag, &
                             Start_time, dirs%output_directory, fluxes_in=fluxes, solo_ice_sheet_in=.true.)
 
-  call initialize_ice_SMB(fluxes%shelf_sfc_mass_flux, ocn_grid, US, param_file)
+
+  call initialize_ice_SMB(ice_shelf_CSp, fluxes%shelf_sfc_mass_flux, ocn_grid, US, param_file)
 
   ! This is the end of the code that is the counterpart of MOM_initialization.
   call callTree_waypoint("End of ice shelf initialization.")
@@ -303,8 +311,8 @@ program Shelf_main
   segment_start_time = Time
   elapsed_time = 0.0
 
-  Time_step_shelf = real_to_time(US%T_to_s*time_step)
-  elapsed_time_master = (abs(time_step - US%s_to_T*time_type_to_real(Time_step_shelf)) > 1.0e-12*time_step)
+  Time_step_shelf = real_to_time(time_step, unscale=US%T_to_s)
+  elapsed_time_master = (abs(time_step - time_to_real(Time_step_shelf, scale=US%s_to_T)) > 1.0e-12*time_step)
   if (elapsed_time_master) &
     call MOM_mesg("Using real elapsed time for the master clock.", 2)
 
@@ -399,7 +407,7 @@ program Shelf_main
   ns = 1 ; ns_ice = 1
   do while ((ns < nmax) .and. (Time < Time_end))
     call callTree_enter("Main loop, Shelf_driver.F90", ns)
-
+    call update_ice_SMB(ice_shelf_CSp, ocn_grid, fluxes%shelf_sfc_mass_flux, Time)
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
     call solo_step_ice_shelf(ice_shelf_CSp, Time_step_shelf, ns_ice, Time, fluxes_in=fluxes)
@@ -413,12 +421,12 @@ program Shelf_main
       ! does not lose resolution of order the timetype's resolution, provided that the timestep and
       ! tick are larger than 10-5 seconds.  If a clock with a finer resolution is used, a smaller
       ! value would be required.
-      time_chg = real_to_time(US%T_to_s*elapsed_time)
+      time_chg = real_to_time(elapsed_time, unscale=US%T_to_s)
       segment_start_time = segment_start_time + time_chg
-      elapsed_time = elapsed_time - US%s_to_T*time_type_to_real(time_chg)
+      elapsed_time = elapsed_time - time_to_real(time_chg, scale=US%s_to_T)
     endif
     if (elapsed_time_master) then
-      Master_Time = segment_start_time + real_to_time(US%T_to_s*elapsed_time)
+      Master_Time = segment_start_time + real_to_time(elapsed_time, unscale=US%T_to_s)
     else
       Master_Time = Master_Time + Time_step_shelf
     endif

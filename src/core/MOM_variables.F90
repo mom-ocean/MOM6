@@ -91,9 +91,9 @@ type, public :: thermo_var_ptrs
                          !! When conservative temperature is used, this is
                          !! constant and exactly 3991.86795711963 J degC-1 kg-1.
   logical :: T_is_conT = .false. !< If true, the temperature variable tv%T is
-                         !! actually the conservative temperature [degC].
+                         !! actually the conservative temperature [C ~> degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable tv%S is
-                         !! actually the absolute salinity in units of [gSalt kg-1].
+                         !! actually the absolute salinity in units of [S ~> gSalt kg-1].
   real :: min_salinity   !< The minimum value of salinity when BOUND_SALINITY=True [S ~> ppt].
   real, allocatable, dimension(:,:,:) :: SpV_avg
                          !< The layer averaged in situ specific volume [R-1 ~> m3 kg-1].
@@ -292,10 +292,23 @@ type, public :: vertvisc_type
     Ray_v       !< The Rayleigh drag velocity to be applied to each layer at v-points [H T-1 ~> m s-1 or Pa s m-1].
 
   ! The following elements are pointers so they can be used as targets for pointers in the restart registry.
-  real, pointer, dimension(:,:) :: MLD => NULL()  !< Instantaneous active mixing layer depth [Z ~> m].
-  real, pointer, dimension(:,:) :: Lam2 => NULL() !< (Langmuir Number)^-2  [nondim].
-  real, pointer, dimension(:,:) :: h_ML => NULL() !< Instantaneous active mixing layer thickness [H ~> m or kg m-2].
-  real, pointer, dimension(:,:) :: sfc_buoy_flx => NULL() !< Surface buoyancy flux (derived) [Z2 T-3 ~> m2 s-3].
+  real, pointer, dimension(:,:) :: MLD => NULL()
+                !< Instantaneous active mixing layer depth as used by the mixed layer restratification
+                !! parameterization [Z ~> m].
+  real, pointer, dimension(:,:) :: Lam2 => NULL()
+                !< (Langmuir Number)^-2  [nondim].
+  real, pointer, dimension(:,:) :: h_ML => NULL()
+                !< Instantaneous active mixing layer thickness as used by the mixed layer restratification
+                !! parameterization [H ~> m or kg m-2]
+  real, pointer, dimension(:,:) :: MLD_param => NULL()
+                !< Instantaneous active mixed or mixing layer depth as used by the brine plume parameterization.
+                !! It could be coordinated with MLD above but we may want the ability to use different scales
+                !! in different parameterizations [Z ~> m].
+  real, pointer, dimension(:,:) :: h_ML_param => NULL()
+                !< Instantaneous active mixed or mixing layer thickness as used by the brine plume
+                !! parameterization [H ~> m or kg m-2].
+  real, pointer, dimension(:,:) :: sfc_buoy_flx => NULL()
+                !< Surface buoyancy flux (derived) [Z2 T-3 ~> m2 s-3].
   real, pointer, dimension(:,:,:) :: Kd_shear => NULL()
                 !< The shear-driven turbulent diapycnal diffusivity at the interfaces between layers
                 !! in tracer columns [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
@@ -405,7 +418,7 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  isdB = G%isdB ; iedB = G%iedB; jsdB = G%jsdB ; jedB = G%jedB
+  isdB = G%isdB ; iedB = G%iedB ; jsdB = G%jsdB ; jedB = G%jedB
 
   use_temp = .true. ; if (present(use_temperature)) use_temp = use_temperature
   alloc_integ = .true. ; if (present(do_integrals)) alloc_integ = do_integrals

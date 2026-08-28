@@ -473,15 +473,18 @@ ENERGYSAVEDAYS = 3.0            !   [hours] default = 1.44E+04
 DIAG_AS_CHKSUM = True
 DEBUG = True
 OBC_RADIATION_MAX = 10.0        !   [nondim] default = 10.0
-GRID_ROTATION_ANGLE_BUGS = True !   [Boolean] default = True
-USE_GM_WORK_BUG = True          !   [Boolean] default = True
-USE_LAND_MASK_FOR_HVISC = False !   [Boolean] default = False
-KAPPA_SHEAR_ITER_BUG = True     !   [Boolean] default = True
-KAPPA_SHEAR_ALL_LAYER_TKE_BUG = True !   [Boolean] default = True
-GUST_CONST = 0.02               !   [Pa] default = 0.02
-FIX_USTAR_GUSTLESS_BUG = False  !   [Boolean] default = False
 
-! Explicitly use the defaults from early 2025
-VISC_REM_BUG = True
-DRAG_DIFFUSIVITY_ANSWER_DATE = 20250101
-FRICTWORK_BUG = True
+USE_LAND_MASK_FOR_HVISC = False !   [Boolean] default = False
+GUST_CONST = 0.02               !   [Pa] default = 0.02
+
+! Updated defaults reflecting the model status in late 2025
+DRAG_DIFFUSIVITY_ANSWER_DATE = 20251231
+
+! These are no longer necessary, as they are using the default value.
+GRID_ROTATION_ANGLE_BUGS = False !   [Boolean] default = False
+USE_GM_WORK_BUG = False         !   [Boolean] default = False
+USTAR_GUSTLESS_BUG = False      !   [Boolean] default = False
+KAPPA_SHEAR_ITER_BUG = False    !   [Boolean] default = False
+KAPPA_SHEAR_ALL_LAYER_TKE_BUG = False !   [Boolean] default = False
+VISC_REM_BUG = False            !   [Boolean] default = False
+FRICTWORK_BUG = False           !   [Boolean] default = False

@@ -185,7 +185,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     u0xdz, &    ! The initial zonal velocity times dz [H L T-1 ~> m2 s-1 or kg m-1 s-1]
     v0xdz, &    ! The initial meridional velocity times dz [H L T-1 ~> m2 s-1 or kg m-1 s-1]
     T0xdz, &    ! The initial temperature times thickness [C H ~> degC m or degC kg m-2] or if
-                ! temperature is not a state variable, the density times thickness [R H ~> kg m-2 or kg2 m-3]
+                ! temperature is not a state variable, the density times thickness [R H ~> kg m-2 or kg2 m-5]
     S0xdz       ! The initial salinity times dz [S H ~> ppt m or ppt kg m-2].
   real, dimension(SZK_(GV)+1) :: &
     kappa, &    ! The shear-driven diapycnal diffusivity at an interface [H Z T-1 ~> m2 s-1 or Pa s]
@@ -213,7 +213,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                         ! interpolating back to the original index space [nondim].
   integer :: is, ie, js, je, i, j, k, nz, nzc
 
-  is = G%isc ; ie = G%iec; js = G%jsc ; je = G%jec ; nz = GV%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   use_temperature = associated(tv%T)
 
@@ -1009,7 +1009,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, hlay, dz_la
   g_R0 = GV%g_Earth_Z_T2 / GV%Rho0
   k0dt = dt*CS%kappa_0
 
-  I_lz_rescale_sqr = 1.0; if (CS%lz_rescale > 0) I_lz_rescale_sqr = 1/(CS%lz_rescale*CS%lz_rescale)
+  I_lz_rescale_sqr = 1.0 ; if (CS%lz_rescale > 0) I_lz_rescale_sqr = 1/(CS%lz_rescale*CS%lz_rescale)
 
   tol_dksrc = CS%kappa_src_max_chg
   if (tol_dksrc == 10.0) then
@@ -2214,7 +2214,7 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "LZ_RESCALE", CS%lz_rescale, &
                  "A coefficient to rescale the distance to the nearest solid boundary. "//&
                  "This adjustment is to account for regions where 3 dimensional turbulence "//&
-                 "prevents the growth of shear instabilies [nondim].", &
+                 "prevents the growth of shear instabilities [nondim].", &
                  units="nondim", default=1.0)
   call get_param(param_file, mdl, "KAPPA_SHEAR_TOL_ERR", CS%kappa_tol_err, &
                  "The fractional error in kappa that is tolerated. "//&

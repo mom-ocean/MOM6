@@ -437,7 +437,7 @@ subroutine configure_MARBL_tracers(GV, US, param_file, CS)
       CS%sfo_cnt = CS%sfo_cnt + 1
     else if (trim(field_source) == "interior_tendency") then
       CS%ito_cnt = CS%ito_cnt + 1
-    end if
+    endif
 
     ! Total 3D Chlorophyll
     call MARBL_instances%add_output_for_GCM(num_elements=1, num_levels=nz, field_name="total_Chl", &
@@ -446,8 +446,8 @@ subroutine configure_MARBL_tracers(GV, US, param_file, CS)
       CS%sfo_cnt = CS%sfo_cnt + 1
     else if (trim(field_source) == "interior_tendency") then
       CS%ito_cnt = CS%ito_cnt + 1
-    end if
-  end if
+    endif
+  endif
 
   ! (5) Initialize forcing fields
   !     i. store all surface forcing indices
@@ -996,17 +996,17 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
     call MOM_error(NOTE, 'Enforcing consistency across autotroph tracer initial conditions')
     do j=G%jsc, G%jec ; do i=G%isc, G%iec
       ! Copy tracer data into flat array
-      do k=1,GV%ke; do m=1, CS%ntr
+      do k=1,GV%ke ; do m=1, CS%ntr
         MARBL_instances%tracers(m,k) = CS%tracer_data(m)%tr(i,j,k)
-      end do ; end do
+      enddo ; enddo
       ! call consistency enforcement
       call MARBL_instances%autotroph_tracer_consistency_enforce()
       ! Copy tracer data out of flat array
-      do k=1,GV%ke; do m=1, CS%ntr
+      do k=1,GV%ke ; do m=1, CS%ntr
         CS%tracer_data(m)%tr(i,j,k) = MARBL_instances%tracers(m,k)
-      end do ; end do
-    end do ; end do
-  end if
+      enddo ; enddo
+    enddo ; enddo
+  endif
 
   ! Initialize total chlorophyll to get SW Pen correct (if it wasn't initialized from restart file)
   if ((CS%total_Chl_ind > 0) .and. &
@@ -1355,7 +1355,7 @@ subroutine MARBL_tracers_column_physics(h_old, ea, eb, fluxes, dt, G, GV, US, CS
   real, dimension(SZI_(G),SZJ_(G)) :: flux_from_salt_flux ! Surface tracer flux from salt flux
                                                           ! [conc Z T-1 ~> conc m s-1].
   real, dimension(SZI_(G),SZJ_(G)) :: ref_mask ! Mask for 2D MARBL diags using ref_depth [1]
-  real, dimension(SZI_(G),SZJ_(G)) :: riv_flux_loc ! Local copy of CS%RIV_FLUXES*dt [mmol m-2 ~> conc H]
+  real, dimension(SZI_(G),SZJ_(G)) :: riv_flux_loc ! Local copy of CS%RIV_FLUXES*dt [conc H ~> mmol m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: bot_flux_to_tend  ! Conversion factor for bottom tlux -> tend
                                                                 ! [Z-1 ~> m-1]

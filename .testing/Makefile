@@ -75,7 +75,8 @@ MAKEFLAGS += --no-builtin-variables
 .SUFFIXES:
 
 # Determine the MOM6 autoconf srcdir
-AC_SRCDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../ac
+CODEBASE := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))..
+AC_SRCDIR := $(CODEBASE)/ac
 
 # User-defined configuration
 -include config.mk
@@ -147,6 +148,10 @@ WORKSPACE ?= .
 BUILD ?= $(WORKSPACE)/build
 DEPS ?= $(BUILD)/deps
 WORK ?= $(WORKSPACE)/work
+
+# External tools
+MAKEDEP ?= $(abspath $(AC_SRCDIR)/makedep)
+PKG ?= $(abspath $(CODEBASE)/pkg)
 
 # Experiment configuration
 EXECS ?= symmetric/MOM6 asymmetric/MOM6 openmp/MOM6
@@ -262,6 +267,7 @@ $(BUILD)/unit/Makefile: MOM_ENV += $(COV_FCFLAGS) $(COV_LDFLAGS)
 $(BUILD)/timing/Makefile: MOM_ENV += $(OPT_FCFLAGS) $(MOM_LDFLAGS)
 
 # Configure script flags
+MOM_ACFLAGS := --with-gsw --with-cvmix
 $(BUILD)/openmp/Makefile: MOM_ACFLAGS += --enable-openmp
 $(BUILD)/coupled/Makefile: MOM_ACFLAGS += --with-driver=FMS_cap
 $(BUILD)/nuopc/Makefile: MOM_ACFLAGS += --with-driver=nuopc_cap
@@ -303,33 +309,25 @@ $(BUILD)/opt_target: | $(TARGET_CODEBASE)
 .PHONY: FORCE
 
 
-## Use autoconf to construct the Makefile for each target
-# TODO: This could all be moved to a top-level MOM6 Makefile
-.PRECIOUS: $(BUILD)/%/Makefile
-.PRECIOUS: $(BUILD)/%/Makefile.in
-.PRECIOUS: $(BUILD)/%/configure
-.PRECIOUS: $(BUILD)/%/config.status
-.PRECIOUS: $(BUILD)/%/configure.ac
-.PRECIOUS: $(BUILD)/%/m4/
+# Use autoconf to construct the Makefile for each target
 
-$(BUILD)/%/Makefile: $(BUILD)/%/Makefile.in $(BUILD)/%/config.status
+.PRECIOUS: $(BUILD)/%/Makefile
+.PRECIOUS: $(BUILD)/%/config.status
+
+$(BUILD)/%/Makefile: $(BUILD)/%/config.status
 	cd $(@D) && ./config.status
 
-$(BUILD)/%/config.status: $(BUILD)/%/configure $(DEPS)/lib/libFMS.a
-	cd $(@D) && $(MOM_ENV) ./configure -n --srcdir=$(AC_SRCDIR) $(MOM_ACFLAGS) \
+# NOTE: This assumes % is a single directory
+$(BUILD)/%/config.status: \
+  $(DEPS)/lib/libFMS.a \
+  $(DEPS)/lib/libgsw.a \
+  $(DEPS)/lib/libcvmix.a \
+  ../configure | $(BUILD)/%/
+	cd $(@D) && $(MOM_ENV) ../../../configure -n $(MOM_ACFLAGS) \
 	 || (cat config.log && false)
 
-$(BUILD)/%/Makefile.in: ../ac/Makefile.in | $(BUILD)/%/
-	cp ../ac/Makefile.in $(@D)
-
-$(BUILD)/%/configure: $(BUILD)/%/configure.ac $(BUILD)/%/m4/
-	autoreconf -if $(@D)
-
-$(BUILD)/%/configure.ac: ../ac/configure.ac | $(BUILD)/%/
-	cp ../ac/configure.ac $(@D)
-
-$(BUILD)/%/m4/: ../ac/m4/ | $(BUILD)/%/
-	cp -r ../ac/m4 $(@D)
+../configure:
+	$(MAKE) -C ../ configure
 
 ALL_EXECS = symmetric asymmetric repro openmp opt opt_target coupled nuopc \
   cov unit timing
@@ -344,25 +342,51 @@ $(TARGET_CODEBASE):
 endif
 
 
-## FMS
+## Dependencies
 
 # Set up the FMS build environment variables
-FMS_ENV = \
-  PATH="${PATH}:$(realpath ../ac)" \
+DEPS_ENV = \
   FCFLAGS="$(FCFLAGS_FMS)" \
+  MAKEDEP=$(MAKEDEP) \
   REPORT_ERROR_LOGS="$(REPORT_ERROR_LOGS)"
 
-$(DEPS)/lib/libFMS.a: $(DEPS)/Makefile $(DEPS)/Makefile.fms.in $(DEPS)/configure.fms.ac $(DEPS)/m4
-	$(FMS_ENV) $(MAKE) -C $(DEPS) lib/libFMS.a
+# FMS
 
-$(DEPS)/Makefile: ../ac/deps/Makefile | $(DEPS)
-	cp ../ac/deps/Makefile $(DEPS)/Makefile
+$(DEPS)/lib/libFMS.a: $(DEPS)/Makefile $(DEPS)/Makefile.fms.in $(DEPS)/configure.fms.ac $(DEPS)/m4
+	$(DEPS_ENV) $(MAKE) -C $(DEPS) lib/libFMS.a
 
 $(DEPS)/Makefile.fms.in: ../ac/deps/Makefile.fms.in | $(DEPS)
 	cp ../ac/deps/Makefile.fms.in $(DEPS)/Makefile.fms.in
 
 $(DEPS)/configure.fms.ac: ../ac/deps/configure.fms.ac | $(DEPS)
 	cp ../ac/deps/configure.fms.ac $(DEPS)/configure.fms.ac
+
+# GSW
+
+$(DEPS)/lib/libgsw.a: $(DEPS)/Makefile $(DEPS)/Makefile.gsw.in $(DEPS)/configure.gsw.ac $(DEPS)/m4
+	$(DEPS_ENV) PKG=$(PKG) $(MAKE) -C $(DEPS) lib/libgsw.a
+
+$(DEPS)/Makefile.gsw.in: ../ac/deps/Makefile.gsw.in | $(DEPS)
+	cp ../ac/deps/Makefile.gsw.in $(DEPS)/Makefile.gsw.in
+
+$(DEPS)/configure.gsw.ac: ../ac/deps/configure.gsw.ac | $(DEPS)
+	cp ../ac/deps/configure.gsw.ac $(DEPS)/configure.gsw.ac
+
+# CVMix
+
+$(DEPS)/lib/libcvmix.a: $(DEPS)/Makefile $(DEPS)/Makefile.cvmix.in $(DEPS)/configure.cvmix.ac $(DEPS)/m4
+	$(DEPS_ENV) PKG=$(PKG) $(MAKE) -C $(DEPS) lib/libcvmix.a
+
+$(DEPS)/Makefile.cvmix.in: ../ac/deps/Makefile.cvmix.in | $(DEPS)
+	cp ../ac/deps/Makefile.cvmix.in $(DEPS)/Makefile.cvmix.in
+
+$(DEPS)/configure.cvmix.ac: ../ac/deps/configure.cvmix.ac | $(DEPS)
+	cp ../ac/deps/configure.cvmix.ac $(DEPS)/configure.cvmix.ac
+
+# Generic dependency content
+
+$(DEPS)/Makefile: ../ac/deps/Makefile | $(DEPS)
+	cp ../ac/deps/Makefile $(DEPS)/Makefile
 
 $(DEPS)/m4: ../ac/deps/m4 | $(DEPS)
 	cp -r ../ac/deps/m4 $(DEPS)/

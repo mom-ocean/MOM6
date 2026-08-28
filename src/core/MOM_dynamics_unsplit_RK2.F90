@@ -68,7 +68,7 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_get_input, only : directories
-use MOM_time_manager, only : time_type, time_type_to_real, operator(+)
+use MOM_time_manager, only : time_type, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
 
 use MOM_ALE, only : ALE_CS
@@ -260,7 +260,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   dt_pred = dt * CS%BE
   cor_stencil = CoriolisAdv_stencil(CS%CoriolisAdv)
 
-  h_av(:,:,:) = 0; hp(:,:,:) = 0
+  h_av(:,:,:) = 0 ; hp(:,:,:) = 0
   up(:,:,:) = 0
   vp(:,:,:) = 0
 
@@ -609,7 +609,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, tv, Time, G, GV, US, param_file, 
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "BE", CS%be, &
                  "If SPLIT is true, BE determines the relative weighting "//&
-                 "of a  2nd-order Runga-Kutta baroclinic time stepping "//&
+                 "of a 2nd-order Runga-Kutta baroclinic time stepping "//&
                  "scheme (0.5) and a backward Euler scheme (1) that is "//&
                  "used for the Coriolis and inertial terms.  BE may be "//&
                  "from 0.5 to 1, but instability may occur near 0.5. "//&

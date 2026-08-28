@@ -20,10 +20,143 @@ from subprocess import check_output
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
-#sys.path.insert(0, os.path.abspath('.'))
+sys.path.insert(0, os.path.abspath('_ext'))
 
 # -- Custom configuration values and roles -----------------------------------
 from docutils import nodes
+
+# -- Monkey-patch: fix sphinx-fortran's broken parallel-build merge ----------
+#
+# Upstream VACUMM/sphinx-fortran (as of commit reachable from master, 2025-10)
+# ships a FortranDomain.merge_domaindata() that has two bugs which together
+# cause every f-domain object to be lost when sphinx-build is run with -j > 1:
+#
+#   1. The function references a name `outNames` that does not exist
+#      (typo for `ourNames`); accessing it raises NameError, which Sphinx's
+#      parallel worker error path swallows silently.
+#
+#   2. Even with the typo fixed, the unpack `for name, docname in
+#      otherdata['modules'].items()` is wrong, because `modules` values are
+#      4-tuples `(docname, synopsis, platform, deprecated)` and `objects`
+#      values are 2-tuples `(docname, type)`, not bare docnames.
+#
+# Symptom: with `make html` (which passes -j 4), env.domaindata['f'] ends up
+# with 0 modules and 0 objects, every :f:func:/:f:type:/:f:mod: cross-
+# reference fails to resolve, and pages like f-modindex.html disappear.
+#
+# We patch this in-process so the existing -j 4 build still works. The fix
+# is small and obvious; once it lands upstream we should pin sphinx-fortran
+# to a post-fix commit and remove this patch.
+#
+# TODO(piece-2): submit upstream PR to VACUMM/sphinx-fortran with this fix,
+#                then drop this monkey-patch and pin requirements.txt to a
+#                post-fix commit.
+def _patch_sphinx_fortran_merge_domaindata():
+    try:
+        from sphinxfortran.fortran_domain import FortranDomain
+    except ImportError:
+        return
+    def merge_domaindata(self, docnames, otherdata):
+        ourNames = self.data['modules']
+        for name, data in otherdata['modules'].items():
+            # data == (docname, synopsis, platform, deprecated)
+            if data[0] in docnames and name not in ourNames:
+                ourNames[name] = data
+        ourNames = self.data['objects']
+        for name, data in otherdata['objects'].items():
+            # data == (docname, type)
+            if data[0] in docnames and name not in ourNames:
+                ourNames[name] = data
+    FortranDomain.merge_domaindata = merge_domaindata
+_patch_sphinx_fortran_merge_domaindata()
+
+# -- Monkey-patch: stop sphinx.util.math.wrap_displaymath from double-wrapping
+#    LaTeX environments that the source already provides --------------------
+#
+# MOM6's documentation contains a lot of math written directly with explicit
+# LaTeX environments (`\begin{equation}`, `\begin{eqnarray}`, `\begin{align}`)
+# inside `.. math::` directives. By default, Sphinx's wrap_displaymath() takes
+# the body of a single-part `.. math::` directive and wraps it in
+# `\begin{split}...\end{split}` and then again in `\begin{equation}` (or the
+# starred unnumbered form). When the body already contains its own
+# `\begin{equation}` etc., that produces nested LaTeX environments and
+# pdflatex chokes.
+#
+# Sphinx's official workaround is the `:nowrap:` option on every affected
+# `.. math::` directive, which would mean editing every math directive
+# upstream in the MOM6 source tree. The jr3cermak/sphinx fork that the docs
+# build previously depended on instead patched wrap_displaymath() so that any
+# part containing one of these begin-environments is emitted verbatim and the
+# outer wrapping is suppressed. We replicate that behavior here as a
+# function-level monkey-patch on stock upstream Sphinx, so we can build
+# against unmodified Sphinx 8.x.
+#
+# The detection is intentionally a plain substring search, matching the
+# fork's behavior — `begin{equation`, `begin{eqnarray`, and `begin{align` all
+# also match their starred and `aligned`/`equation*` variants. This is the
+# same heuristic the fork shipped and what the existing MOM6 sources expect.
+#
+# Sphinx upstream issue tracking the same problem has been open since 2017
+# (sphinx-doc/sphinx#3785). A faithful upstream PR would be the right
+# long-term fix, but that conversation is much older than this MOM6 upgrade
+# work, so we are not blocking on it.
+#
+# TODO(piece-3): consider submitting a cleaner version upstream and dropping
+#                this patch when/if it lands.
+def _patch_sphinx_wrap_displaymath():
+    import sphinx.util.math as _sm
+
+    def wrap_displaymath(text, label, numbering):
+        def is_equation(part):
+            return part.strip()
+
+        if label is None:
+            labeldef = ''
+        else:
+            labeldef = r'\label{%s}' % label
+            numbering = True
+
+        parts = list(filter(is_equation, text.split('\n\n')))
+
+        # Detect parts that already supply their own LaTeX environment.
+        nowrap = any(
+            ('begin{equation' in p) or
+            ('begin{eqnarray' in p) or
+            ('begin{align'    in p)
+            for p in parts
+        )
+
+        equations = []
+        if len(parts) == 0:
+            return ''
+        elif len(parts) == 1:
+            if numbering:
+                begin = r'\begin{equation}' + labeldef
+                end = r'\end{equation}'
+            else:
+                begin = r'\begin{equation*}' + labeldef
+                end = r'\end{equation*}'
+            if nowrap:
+                equations.append('%s\n' % parts[0])
+            else:
+                equations.append('\\begin{split}%s\\end{split}\n' % parts[0])
+        else:
+            if numbering:
+                begin = r'\begin{align}%s\!\begin{aligned}' % labeldef
+                end = r'\end{aligned}\end{align}'
+            else:
+                begin = r'\begin{align*}%s\!\begin{aligned}' % labeldef
+                end = r'\end{aligned}\end{align*}'
+            equations.extend('%s\\\\\n' % part.strip() for part in parts)
+
+        if nowrap:
+            begin = ''
+            end = ''
+
+        return '%s\n%s%s' % (begin, ''.join(equations), end)
+
+    _sm.wrap_displaymath = wrap_displaymath
+_patch_sphinx_wrap_displaymath()
 
 def setup(app):
     app.add_config_value('sphinx_build_mode', '', 'env')
@@ -137,13 +270,18 @@ if return_code != 0: sys.exit(return_code)
 extensions = [
         'sphinxcontrib.bibtex',
         'sphinx.ext.ifconfig',
-        'sphinxcontrib.autodoc_doxygen',
+        'autodoc_doxygen',
         'sphinxfortran.fortran_domain',
 ]
 bibtex_bibfiles = ['ocean.bib', 'references.bib', 'zotero.bib']
 
 autosummary_generate = ['api/modules.rst', 'api/pages.rst']
-doxygen_xml = 'xml'
+# Absolute path so the autodoc_doxygen extension can find the doxygen XML
+# output regardless of what cwd Sphinx has at builder-inited time. This
+# previously broke on RTD, where `sphinx-build -M html docs ...` runs from
+# the repo root rather than from `docs/`, and the extension's os.path.isdir
+# check resolved "xml" against the wrong directory.
+doxygen_xml = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'xml')
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -182,7 +320,17 @@ release = '0.2a3'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = ['_build', 'details', 'src', 'Thumbs.db', '.DS_Store']
+exclude_patterns = [
+    '_build', '_build.*',
+    'details', 'src', 'Thumbs.db', '.DS_Store',
+    # Local virtualenvs that may sit alongside the docs source. Sphinx walks
+    # the entire source tree by default and otherwise picks up LICENSE.rst,
+    # README.rst, autosummary template files, etc. from inside site-packages
+    # and reports them as "isn't included in any toctree".
+    'venv', 'venv.*', 'venv-*',
+    # Vendored extension's Jinja2 templates are not real .rst documents.
+    '_ext/*/templates', '_ext/*/*/templates',
+]
 
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
@@ -241,7 +389,7 @@ html_theme = 'sphinx_rtd_theme'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-#html_static_path = ['_static']
+html_static_path = ['_static']
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied

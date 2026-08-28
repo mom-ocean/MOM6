@@ -3,7 +3,7 @@
 ! SPDX-License-Identifier: Apache-2.0
 
 !> A module with intrinsic functions that are used by MOM but are not supported
-!!  by some compilers.
+!! by some compilers.
 module MOM_intrinsic_functions
 
 use iso_fortran_env, only : stdout => output_unit, stderr => error_unit
@@ -117,42 +117,65 @@ end function cuberoot
 
 
 !> Rescale `a` to the range [0.125, 1) and compute its cube-root exponent.
+!!
+!! This function decomposes `a` into the form `s * x * 2**e` so that `x` is
+!! in the desired range.  This is accomplished by computing the integral cube
+!! root of `e` (as a division) and applying the residual to `x`.
 pure subroutine rescale_cbrt(a, x, e_r, s_a)
   real, intent(in) :: a
-    !< The real parameter to be rescaled for cube root in abitrary units cubed [A3]
+    !< The number to be rescaled for cube-root computation [A3]
   real, intent(out) :: x
-    !< The rescaled value of a in the range from 0.125 < asx <= 1.0, in ambiguous units cubed [B3]
+    !< The rescaled value of `a` in the range [0.125, 1) [B3]
   integer(kind=int64), intent(out) :: e_r
-    !< Cube root of the exponent of the rescaling of `a`
+    !< The integral component of the cube-root exponent of `a`.
   integer(kind=int64), intent(out) :: s_a
-    !< The sign bit of a
+    !< Sign bit of `a`.  A nonzero value indicates negative sign.
 
   integer(kind=int64) :: xb
-    ! Floating point value of a, bit-packed as an integer
+    ! Floating point integer representation of `a`
   integer(kind=int64) :: e_a
-    ! Unscaled exponent of a
+    ! Exponent of `a`
   integer(kind=int64) :: e_x
-    ! Exponent of x
-  integer(kind=int64) :: e_div, e_mod
-    ! Quotient and remainder of e in e = 3*(e/3) + modulo(e,3).
+    ! Exponent of `x`
 
   ! Pack bits of a into xb and extract its exponent and sign.
   xb = transfer(a, 1_int64)
   s_a = ibits(xb, signbit, 1)
   e_a = ibits(xb, expbit, explen) - bias
 
-  ! Compute terms of exponent decomposition e = 3*(e/3) + modulo(e,3).
-  ! (Fortran division is round-to-zero, so we must emulate floor division.)
-  e_mod = modulo(e_a, 3_int64)
-  e_div = (e_a - e_mod)/3
+  ! The floating-point form of `a` with exponent `e` is
+  !
+  !   a = s * (1 + m) * 2**e
+  !
+  ! where (1+m) ∈ [1,2).  We want to split 2**e so that (1+m) is rescaled to
+  ! the range [0.125, 1); that is, [2**-3, 2**0).
+  !
+  ! First decompose the exponent `e` into quotient-remainder form:
+  !
+  !   e = 3⌊e/3⌋ + modulo(e,3)
+  !
+  ! Since modulo(e,3) ∈ {0,1,2}, the second term of the following expression is
+  ! in {-3,-2,-1}.
+  !
+  !   e = 3 * (⌊e/3⌋ + 1) + (modulo(e,3) - 3).
+  !
+  ! Here, (modulo(e,3) - 3) is in the range [2**-3, 1) and holds the
+  ! floating-point exponent of `x`.
+  !
+  ! Fortran integer division is round-to-zero.  To convert to floor division,
+  ! we use the sign() intrinsic to shift negative values downward.
+  !
+  !   ⌊e/3⌋ = (e + sign(1,e) - 1) / 3
+  !
+  ! ⌊e/3⌋ + 1 reduces to the form below.  This is what we call the integral
+  ! cube-root of `a` in the description above.
 
-  ! Our scaling decomposes e_a into e = {3*(e/3) + 3} + {modulo(e,3) - 3}.
+  e_r = (e_a + sign(1_int64, e_a) + 2) / 3
 
-  ! The first term is a perfect cube, whose cube root is computed below.
-  e_r = e_div + 1
+  ! modulo() is not implemented on all systems, so compute the remainder as
+  ! r = n - 3*q.
 
-  ! The second term ensures that x is shifted to [0.125, 1).
-  e_x = e_mod - 3
+  e_x = e_a - e_r * 3
 
   ! Insert the new 11-bit exponent into xb and write to x and extend the
   ! bitcount to 12, so that the sign bit is zero and x is always positive.
@@ -170,7 +193,7 @@ pure function descale(x, e_a, s_a) result(a)
   integer(kind=int64), intent(in) :: s_a
     !< Sign bit of the unscaled value
   real :: a
-    !< Restored value with the corrected exponent and sign in abitrary units [A]
+    !< Restored value with the corrected exponent and sign in arbitrary units [A]
 
   integer(kind=int64) :: xb
     ! Bit-packed real number into integer form

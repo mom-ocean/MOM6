@@ -372,7 +372,8 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, BFlx_geothermal, halo)
   real,                                      intent(in)    :: dt !< Time increment [T ~> s].
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
   type(geothermal_CS),                       intent(in)    :: CS !< Geothermal heating control struct
-  real, dimension(SZI_(G), SZJ_(G)),         intent(out)   :: BFlx_geothermal !< Geothermal Buoyancy Flux [m2 s-3]
+  real, dimension(SZI_(G), SZJ_(G)),         intent(out)   :: BFlx_geothermal !< Geothermal buoyancy flux
+                                                                 !! in [Z2 T-3 ~> m2 s-3]
   integer,                         optional, intent(in)    :: halo !< Halo width over which to work
 
 
@@ -398,7 +399,7 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, BFlx_geothermal, halo)
   real :: Idt           ! inverse of the timestep [T-1 ~> s-1]
   real :: H_to_Pres     ! A conversion factor from thicknesses to pressure [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1]
   real :: I_Cp          ! 1.0 / C_p [C Q-1 ~> kg degC J-1]
-  real :: I_Rho0Squared ! 1.0 / rho_0^2 (Boussinesq only) [ R-2 ~> kg2 m-6]
+  real :: I_Rho0Squared ! 1.0 / rho_0^2 (Boussinesq only) [R-2 ~> m6 kg-2]
   logical :: do_any     ! True if there is more to be done on the current j-row.
   logical :: calc_diags ! True if diagnostic tendencies are needed.
   logical :: nonBous    ! If true, do not make the Boussinesq approximation.
@@ -442,7 +443,7 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, BFlx_geothermal, halo)
     bottom_pressure(:) = 0.0
     do k=1,nz ; do i=is,ie
       bottom_pressure(i) = bottom_pressure(i) + H_to_pres * h(i,j,k)
-    enddo; enddo
+    enddo ; enddo
     if (nonBous) then
       dSpVdT(:) = 0.0
       dSpVdS(:) = 0.0

@@ -137,7 +137,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, halo_size, use_ebt_mode, mono_N
   real :: I_Hnew   ! The inverse of a new layer thickness [H-1 ~> m-1 or m2 kg-1]
   real :: drxh_sum ! The sum of density differences across interfaces times thicknesses [R H ~> kg m-2 or kg2 m-5]
   real :: dSpVxh_sum ! The sum of specific volume differences across interfaces times
-                   ! thicknesses [R-1 H ~> m4 kg-1 or m], negative for stable stratification.
+                   ! thicknesses [H R-1 ~> m4 kg-1 or m], negative for stable stratification.
   real :: g_Rho0   ! G_Earth/Rho0 [L2 T-2 H-1 R-1 ~> m4 s-2 kg-1 or m7 s-2 kg-2].
   real :: c2_scale ! A scaling factor for wave speeds to help control the growth of the determinant and
                    ! its derivative with lam between rows of the Thomas algorithm solver [L2 s2 T-2 m-2 ~> nondim].
@@ -552,8 +552,9 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, halo_size, use_ebt_mode, mono_N
                 ! Determine whether N2 estimates should not be allowed to increase with depth.
                 if (l_mono_N2_column_fraction>0.) then
                   if (GV%Boussinesq .or. GV%semi_Boussinesq) then
-                    below_mono_N2_frac = ((G%bathyT(i,j)+G%Z_ref) - GV%H_to_Z*sum_hc < &
-                                          l_mono_N2_column_fraction*(G%bathyT(i,j)+G%Z_ref))
+                    below_mono_N2_frac = &
+                        (max(G%meanSL(i,j) + G%bathyT(i,j), 0.0) - GV%H_to_Z * sum_hc < &
+                         l_mono_N2_column_fraction * max(G%meanSL(i,j) + G%bathyT(i,j), 0.0))
                   else
                     below_mono_N2_frac = (htot(i) - sum_hc < l_mono_N2_column_fraction*htot(i))
                   endif
@@ -854,7 +855,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
   real :: I_Hnew     ! The inverse of a new layer thickness [H-1 ~> m-1 or m2 kg-1]
   real :: drxh_sum   ! The sum of density differences across interfaces times thicknesses [R H ~> kg m-2 or kg2 m-5]
   real :: dSpVxh_sum ! The sum of specific volume differences across interfaces times
-                     ! thicknesses [R-1 H ~> m4 kg-1 or m], negative for stable stratification.
+                     ! thicknesses [H R-1 ~> m4 kg-1 or m], negative for stable stratification.
   real :: g_Rho0     ! G_Earth/Rho0 [L2 T-2 H-1 R-1 ~> m4 s-2 kg-1 or m7 s-2 kg-2].
   real :: tol_Hfrac  ! Layers that together are smaller than this fraction of
                      ! the total water column can be merged for efficiency [nondim].
@@ -881,13 +882,10 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
   real :: mode_struct(SZK_(GV)+1) ! The mode structure [nondim], but it is also temporarily
                          ! in units of [L2 T-2 ~> m2 s-2] after it is modified inside of tdma6.
   real :: mode_struct_fder(SZK_(GV)) ! The mode structure 1st derivative [Z-1 ~> m-1], but it is also temporarily
-                         ! in units of [Z-1 L2 T-2 ~> m s-2] after it is modified inside of tdma6.
+                         ! in units of [L2 Z-1 T-2 ~> m s-2] after it is modified inside of tdma6.
   real :: mode_struct_sq(SZK_(GV)+1) ! The square of mode structure [nondim]
   real :: mode_struct_fder_sq(SZK_(GV)) ! The square of mode structure 1st derivative [Z-2 ~> m-2]
 
-
-  real :: ms_min, ms_max ! The minimum and maximum mode structure values returned from tdma6 [L2 T-2 ~> m2 s-2]
-  real :: ms_sq          ! The sum of the square of the values returned from tdma6 [L4 T-4 ~> m4 s-4]
   real :: w2avg          ! A total for renormalization [H L4 T-4 ~> m5 s-4 or kg m2 s-4]
   real, parameter :: a_int = 0.5 ! Integral total for normalization [nondim]
   real :: renorm         ! Normalization factor [T2 L-2 ~> s2 m-2]
@@ -1374,7 +1372,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
             ! Find other eigen values if c1 is of significant magnitude, > cn_thresh
             nrootsfound = 0    ! number of extra roots found (not including 1st root)
             if ((nmodes > 1) .and. (kc >= nmodes+1) .and. (cn(i,j,1) > CS%c1_thresh)) then
-              ! Set the the range to look for the other desired eigen values
+              ! Set the range to look for the other desired eigen values
               ! set min value just greater than the 1st root (found above)
               lamMin = lam_1*(1.0 + tol_solve)
               ! set max value based on a low guess at wavespeed for highest mode
@@ -1404,15 +1402,15 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
                     !   function changes sign but has a local max/min in interval,
                     ! try subdividing interval as many times as necessary (or sub_it_max).
                     ! loop that increases number of subintervals:
-                    !call MOM_error(WARNING, "determinant changes sign"// &
-                    !            "but has a local max/min in interval;"//&
-                    !            " reduce increment in lam.")
+                    !call MOM_error(WARNING, "determinant changes sign "// &
+                    !            "but has a local max/min in interval; "//&
+                    !            "reduce increment in lam.")
                     ! begin subdivision loop -------------------------------------------
                     sub_rootfound = .false. ! initialize
                     do sub_it=1,sub_it_max
                       nsub = 2**sub_it ! number of subintervals; nsub=2,4,8,...
                       ! loop over each subinterval:
-                      do sub=1,nsub-1,2 ! only check odds; sub = 1; 1,3; 1,3,5,7;...
+                      do sub=1,nsub-1,2 ! only check odds; sub = 1; 1,3; 1,3,5,7; ...
                         xl_sub = xl + lamInc/(nsub)*sub
                         call tridiag_det(Igu, Igl, 2, kc, xl_sub, det_sub, ddet_sub, &
                                          row_scale=c2_scale)
@@ -1431,8 +1429,8 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
                       ! sub intervals, try subdividing again unless sub_it_max has been reached.
                       if (sub_it == sub_it_max) then
                         call MOM_error(WARNING, "wave_speed: root not found "// &
-                                       " after sub_it_max subdivisions of original"// &
-                                       " interval.")
+                                       "after sub_it_max subdivisions of original "// &
+                                       "interval.")
                       endif ! sub_it == sub_it_max
                     enddo ! sub_it-loop-------------------------------------------------
                   endif ! det_l*ddet_l < 0.0

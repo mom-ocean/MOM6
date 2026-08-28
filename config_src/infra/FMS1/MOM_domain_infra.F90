@@ -135,7 +135,7 @@ type, public :: MOM_domain_type
   character(len=64) :: name     !< The name of this domain
   type(domain2D), pointer :: mpp_domain => NULL() !< The FMS domain with halos
                                 !! on this processor, centered at h points.
-  type(domain2D), pointer :: mpp_domain_d2 => NULL() !< A coarse FMS domain with halos
+  type(domain2D), pointer :: mpp_domain_d(:) => NULL() !< A coarse FMS domain with halos
                                 !! on this processor, centered at h points.
   integer :: niglobal           !< The total horizontal i-domain size.
   integer :: njglobal           !< The total horizontal j-domain size.
@@ -1215,7 +1215,7 @@ subroutine redistribute_array_2d(Domain1, array1, Domain2, array2, complete)
   ! Local variables
   logical :: do_complete
 
-  do_complete=.true.;if (PRESENT(complete)) do_complete = complete
+  do_complete=.true. ; if (PRESENT(complete)) do_complete = complete
 
   call mpp_redistribute(Domain1, array1, Domain2, array2, do_complete)
 
@@ -1234,7 +1234,7 @@ subroutine redistribute_array_3d(Domain1, array1, Domain2, array2, complete)
   ! Local variables
   logical :: do_complete
 
-  do_complete=.true.;if (PRESENT(complete)) do_complete = complete
+  do_complete=.true. ; if (PRESENT(complete)) do_complete = complete
 
   call mpp_redistribute(Domain1, array1, Domain2, array2, do_complete)
 
@@ -1253,7 +1253,7 @@ subroutine redistribute_array_4d(Domain1, array1, Domain2, array2, complete)
   ! Local variables
   logical :: do_complete
 
-  do_complete=.true.;if (PRESENT(complete)) do_complete = complete
+  do_complete=.true. ; if (PRESENT(complete)) do_complete = complete
 
   call mpp_redistribute(Domain1, array1, Domain2, array2, do_complete)
 
@@ -1377,7 +1377,6 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
   if (.not.associated(MOM_dom)) then
     allocate(MOM_dom)
     allocate(MOM_dom%mpp_domain)
-    allocate(MOM_dom%mpp_domain_d2)
   endif
 
   MOM_dom%name = "MOM" ; if (present(domain_name)) MOM_dom%name = trim(domain_name)
@@ -1445,12 +1444,6 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
 
   call clone_MD_to_d2D(MOM_dom, MOM_dom%mpp_domain)
 
-  !For downsampled domain, recommend a halo of 1 (or 0?) since we're not doing wide-stencil computations.
-  !But that does not work because the downsampled field would not have the correct size to pass the checks, e.g., we get
-  !error: downsample_diag_indices_get: peculiar size 28 in i-direction\ndoes not match one of 24 25 26 27
-  ! call clone_MD_to_d2D(MOM_dom, MOM_dom%mpp_domain_d2, halo_size=(MOM_dom%nihalo/2), coarsen=2)
-  call clone_MD_to_d2D(MOM_dom, MOM_dom%mpp_domain_d2, coarsen=2)
-
 end subroutine create_MOM_domain
 
 !> dealloc_MOM_domain deallocates memory associated with a pointer to a MOM_domain_type
@@ -1460,6 +1453,7 @@ subroutine deallocate_MOM_domain(MOM_domain, cursory)
   logical,  optional, intent(in) :: cursory    !< If true do not deallocate fields associated
                                                !! with the underlying infrastructure
   logical :: invasive  ! If true, deallocate fields associated with the underlying infrastructure
+  integer :: n
 
   invasive = .true. ; if (present(cursory)) invasive = .not.cursory
 
@@ -1468,9 +1462,11 @@ subroutine deallocate_MOM_domain(MOM_domain, cursory)
       if (invasive) call mpp_deallocate_domain(MOM_domain%mpp_domain)
       deallocate(MOM_domain%mpp_domain)
     endif
-    if (associated(MOM_domain%mpp_domain_d2)) then
-      if (invasive) call mpp_deallocate_domain(MOM_domain%mpp_domain_d2)
-      deallocate(MOM_domain%mpp_domain_d2)
+    if (associated(MOM_domain%mpp_domain_d)) then
+      if (invasive) then ; do n=1,size(MOM_domain%mpp_domain_d)
+       call mpp_deallocate_domain(MOM_domain%mpp_domain_d(n))
+      enddo ; endif
+      deallocate(MOM_domain%mpp_domain_d)
     endif
     if (associated(MOM_domain%maskmap)) deallocate(MOM_domain%maskmap)
     deallocate(MOM_domain)
@@ -1580,7 +1576,6 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
   if (.not.associated(MOM_dom)) then
     allocate(MOM_dom)
     allocate(MOM_dom%mpp_domain)
-    allocate(MOM_dom%mpp_domain_d2)
   endif
 
 ! Save the extra data for creating other domains of different resolution that overlay this domain
@@ -1702,7 +1697,6 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
   endif
 
   call clone_MD_to_d2D(MOM_dom, MOM_dom%mpp_domain, xextent=exni, yextent=exnj)
-  call clone_MD_to_d2D(MOM_dom, MOM_dom%mpp_domain_d2, domain_name=MOM_dom%name, coarsen=2)
 
 end subroutine clone_MD_to_MD
 
@@ -1823,8 +1817,8 @@ subroutine get_domain_extent_MD(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, 
   integer, optional, intent(in)  :: index_offset   !< A fixed additional offset to all indices. This
                                            !! can be useful for some types of debugging with
                                            !! dynamic memory allocation.  The default is 0.
-  integer, optional, intent(in)  :: coarsen !< A factor by which the grid is coarsened.
-                                           !!  The default is 1, for no coarsening.
+  integer, optional, intent(in)  :: coarsen !< The index of the factor by which the grid is coarsened.
+                                           !!  The default is 0, for no coarsening.
 
   ! Local variables
   integer :: isg_, ieg_, jsg_, jeg_
@@ -1834,20 +1828,18 @@ subroutine get_domain_extent_MD(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, 
   local = .true. ; if (present(local_indexing)) local = local_indexing
   ind_off = 0 ; if (present(index_offset)) ind_off = index_offset
 
-  coarsen_lev = 1 ; if (present(coarsen)) coarsen_lev = coarsen
+  coarsen_lev = 0 ; if (present(coarsen)) coarsen_lev = coarsen
 
-  if (coarsen_lev == 1) then
+  if (coarsen_lev == 0) then
     call mpp_get_compute_domain(Domain%mpp_domain, isc, iec, jsc, jec)
     call mpp_get_data_domain(Domain%mpp_domain, isd, ied, jsd, jed)
     call mpp_get_global_domain(Domain%mpp_domain, isg_, ieg_, jsg_, jeg_)
-  elseif (coarsen_lev == 2) then
-    if (.not.associated(Domain%mpp_domain_d2)) call MOM_error(FATAL, &
-            "get_domain_extent called with coarsen=2, but Domain%mpp_domain_d2 is not associated.")
-    call mpp_get_compute_domain(Domain%mpp_domain_d2, isc, iec, jsc, jec)
-    call mpp_get_data_domain(Domain%mpp_domain_d2, isd, ied, jsd, jed)
-    call mpp_get_global_domain(Domain%mpp_domain_d2, isg_, ieg_, jsg_, jeg_)
   else
-    call MOM_error(FATAL, "get_domain_extent called with an unsupported level of coarsening.")
+    if (.not.associated(Domain%mpp_domain_d)) call MOM_error(FATAL, &
+            "get_domain_extent called with coarsen_lev, but Domain%mpp_domain_d(coarsen_lev) is not associated.")
+    call mpp_get_compute_domain(Domain%mpp_domain_d(coarsen_lev), isc, iec, jsc, jec)
+    call mpp_get_data_domain(Domain%mpp_domain_d(coarsen_lev), isd, ied, jsd, jed)
+    call mpp_get_global_domain(Domain%mpp_domain_d(coarsen_lev), isg_, ieg_, jsg_, jeg_)
   endif
 
   if (local) then

@@ -298,7 +298,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     m_u2 = periodic_int(m_st - 3.0, CS%num_cycle)
     m_u3 = periodic_int(m_st - 2.0, CS%num_cycle)
 
-    ! These loops restore the units of the CS%avg variables to [degC] or [ppt]
+    ! These loops restore the units of the CS%avg variables to [C ~> degC] or [S ~> ppt]
     if (CS%avg_time(m_u1) > 0.0) then
       do j=js,je ; do i=is,ie
         CS%avg_SST_anom(i,j,m_u1) = CS%avg_SST_anom(i,j,m_u1) / CS%avg_time(m_u1)

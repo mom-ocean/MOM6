@@ -520,7 +520,7 @@ subroutine apply_sponge(h, tv, dt, G, GV, US, ea, eb, CS, Rcv_ml)
         enddo
       enddo
 
-      wpb = 0.0; wb = 0.0
+      wpb = 0.0 ; wb = 0.0
       do k=nz,nkmb+1,-1
         if (GV%Rlay(k) > Rcv_ml(i,j)) then
           w = MIN((((e(K)-e0) - e_str*CS%Ref_eta(K,c)) * damp)*dz_to_h(K), &

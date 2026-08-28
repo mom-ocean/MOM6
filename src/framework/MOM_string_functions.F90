@@ -19,6 +19,8 @@ public extract_integer
 public extract_real
 public remove_spaces
 public slasher
+public trim_trailing_commas
+public ints_to_string
 
 contains
 
@@ -216,7 +218,7 @@ character(len=120) function extract_word(string, separators, n)
   extract_word = ''
   lastCharIsSeperator = .true.
   ns = len_trim(string)
-  i = 0; b=0; e=0; nw=0
+  i = 0 ; b=0 ; e=0 ; nw=0
   do while (i<ns)
     i = i+1
     if (lastCharIsSeperator) then ! search for end of word
@@ -296,7 +298,7 @@ character(len=120) function remove_spaces(string)
   logical :: lastCharIsSeperator
   lastCharIsSeperator = .true.
   ns = len_trim(string)
-  i = 0; o = 0
+  i = 0 ; o = 0
   do while (i<ns)
     i = i+1
     if (string(i:i) /= ' ') then ! Copy character to output string
@@ -328,6 +330,10 @@ logical function string_functions_unit_tests(verbose)
   fail = fail .or. localTestS(v,left_reals(r(:)),'0.0, 1.0, -2.0, 1.3, 3*3.0E-11, -5.1E+12')
   fail = fail .or. localTestS(v,left_reals(r(:),sep=' '),'0.0 1.0 -2.0 1.3 3*3.0E-11 -5.1E+12')
   fail = fail .or. localTestS(v,left_reals(r(:),sep=','),'0.0,1.0,-2.0,1.3,3*3.0E-11,-5.1E+12')
+  fail = fail .or. localTestS(v,ints_to_string(i(:),5),'_-0001_0001_0003_0003_0000')
+  fail = fail .or. localTestS(v,ints_to_string(i(2:),2),'_0001_0003')
+  fail = fail .or. localTestS(v,ints_to_string(i(:)),'_-0001_0001_0003')
+  fail = fail .or. localTestS(v,trim_trailing_commas("One, Two, Three, "), "One, Two, Three")
   fail = fail .or. localTestS(v,extractWord("One Two,Three",1),"One")
   fail = fail .or. localTestS(v,extractWord("One Two,Three",2),"Two")
   fail = fail .or. localTestS(v,extractWord("One Two,Three",3),"Three")
@@ -418,6 +424,49 @@ function slasher(dir)
     slasher = trim(dir)//"/"
   endif
 end function slasher
+
+!> Returns a left-adjusted string with trailing blanks and commas removed.
+function trim_trailing_commas(in_str) result(out_str)
+  character(len=*), intent(in) :: in_str  !< A string that is to be left adjusted and have
+                                          !! its trailing commas and white space removed.
+  character(len=len(in_str))   :: out_str !< A left-adjusted version of in_str with
+                                          !! trailing commas and white space removed
+
+  out_str = trim(adjustl(in_str))
+  if (len_trim(out_str) > 0) then
+    if (out_str(len_trim(out_str):len_trim(out_str)) == ",") then
+      out_str = out_str(1:len_trim(out_str) - 1)
+    endif
+    out_str = trim(out_str)
+  endif
+
+end function trim_trailing_commas
+
+!> Convert the first n elements (3 by default) of an integer array into an underscore delimited string.
+function ints_to_string(a, n) result(i2s)
+  integer, dimension(:), intent(in) :: a !< The array of integers to translate
+  integer, optional    , intent(in) :: n !< The number of elements to translate, by default the lesser
+                                         !! of 3 or all of the integers
+  character(len=5*size(a)+1) :: i2s !< The returned underscore delimited string of integers
+
+  character(len=8) :: i2s_temp
+  integer :: i, n_max
+
+  n_max = 3
+  if (present(n)) n_max = n
+
+  i2s = ''
+  do i=1,min(size(a), n_max)
+    if (a(i) < 0) then
+      write (i2s_temp, '(I5.4)') a(i)
+    else
+      write (i2s_temp, '(I4.4)') a(i)
+    endif
+    i2s = trim(i2s) //'_'// trim(i2s_temp)
+  enddo
+  i2s = adjustl(i2s)
+end function ints_to_string
+
 
 !> \namespace mom_string_functions
 !!

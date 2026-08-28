@@ -429,7 +429,7 @@ subroutine hybgen_regrid(G, GV, US, dp, nom_depth_H, tv, CS, dzInterface, PCM_ce
   real :: dilate            ! A factor by which to dilate the target positions from z to z* [nondim]
   integer :: fixlay         ! Deepest fixed coordinate layer
   integer, dimension(0:CS%nk) :: k_end ! The index of the deepest source layer that contributes to
-                            ! each target layer, in the unusual case where the the input grid is
+                            ! each target layer, in the unusual case where the input grid is
                             ! larger than the new grid.  This situation only occurs during certain
                             ! types of initialization or when generating output diagnostics.
   integer :: i, j, k, nk, k2, nk_in

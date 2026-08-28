@@ -801,7 +801,7 @@ subroutine check_netcdf_call(ncerr, header, message)
   character(len=:), allocatable :: errmsg
     ! Full error message, including netCDF message
 
-  if (ncerr /= nf90_noerr) then
+  if (ncerr /= NF90_NOERR) then
     errmsg = trim(header) // ": " // trim(message) // new_line('/') &
       // trim(nf90_strerror(ncerr))
     call MOM_error(FATAL, errmsg)

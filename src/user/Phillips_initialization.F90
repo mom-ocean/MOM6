@@ -283,7 +283,7 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read)
 
 end subroutine Phillips_initialize_velocity
 
-!> Sets up the the inverse restoration time (Idamp), and the values towards which the interface
+!> Sets up the inverse restoration time (Idamp), and the values towards which the interface
 !! heights and an arbitrary number of tracers should be restored within each sponge for the Phillips
 !! model test case
 subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)

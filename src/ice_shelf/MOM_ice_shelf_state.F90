@@ -26,6 +26,7 @@ type, public :: ice_shelf_state
   real, pointer, dimension(:,:) :: &
     mass_shelf => NULL(), &    !< The mass per unit area of the ice shelf or sheet [R Z ~> kg m-2].
     area_shelf_h => NULL(), &  !< The area per cell covered by the ice shelf [L2 ~> m2].
+    melt_mask => NULL(), &     !< Mask is > 0 where melting is allowed [nondim]
     h_shelf => NULL(), &       !< the thickness of the shelf [Z ~> m], redundant with mass but may
                                !! make the code more readable
     dhdt_shelf => NULL(), &       !< the change in thickness of the shelf over time [Z T-1 ~> m s-1]
@@ -47,10 +48,10 @@ type, public :: ice_shelf_state
                                !! ocean-ice interface [R Z T-1 ~> kg m-2 s-1].
     tflux_shelf => NULL(), &   !< The downward diffusive heat flux in the ice
                                !! shelf at the ice-ocean interface [Q R Z T-1 ~> W m-2].
-
     tfreeze => NULL(), &       !< The freezing point potential temperature
                                !! at the ice-ocean interface [C ~> degC].
-
+    frazil => NULL(), &        !< Accumulated heating [J m-2] from frazil formation in the ocean
+                               !! under ice-shelf cells
     !only active when calve_ice_shelf_bergs=true:
     calving => NULL(), &       !< The mass flux per unit area of the ice shelf to convert to
                                !! bergs [R Z T-1 ~> kg m-2 s-1].
@@ -76,6 +77,7 @@ subroutine ice_shelf_state_init(ISS, G)
 
   allocate(ISS%mass_shelf(isd:ied,jsd:jed), source=0.0 )
   allocate(ISS%area_shelf_h(isd:ied,jsd:jed), source=0.0 )
+  allocate(ISS%melt_mask(isd:ied,jsd:jed), source=1.0 )
   allocate(ISS%h_shelf(isd:ied,jsd:jed), source=0.0 )
   allocate(ISS%dhdt_shelf(isd:ied,jsd:jed), source=0.0 )
   allocate(ISS%hmask(isd:ied,jsd:jed), source=-2.0 )
@@ -86,6 +88,7 @@ subroutine ice_shelf_state_init(ISS, G)
   allocate(ISS%tflux_shelf(isd:ied,jsd:jed), source=0.0 )
   allocate(ISS%tfreeze(isd:ied,jsd:jed), source=0.0 )
 
+  allocate(ISS%frazil(isd:ied,jsd:jed), source=0.0 )
   allocate(ISS%calving(isd:ied,jsd:jed), source=0.0 )
   allocate(ISS%calving_hflx(isd:ied,jsd:jed), source=0.0 )
 end subroutine ice_shelf_state_init
@@ -100,7 +103,7 @@ subroutine ice_shelf_state_end(ISS)
   deallocate(ISS%mass_shelf, ISS%area_shelf_h, ISS%h_shelf, ISS%dhdt_shelf, ISS%hmask)
 
   deallocate(ISS%tflux_ocn, ISS%water_flux, ISS%salt_flux, ISS%tflux_shelf)
-  deallocate(ISS%tfreeze)
+  deallocate(ISS%tfreeze, ISS%frazil)
 
   deallocate(ISS%calving, ISS%calving_hflx)
 

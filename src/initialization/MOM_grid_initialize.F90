@@ -748,7 +748,7 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
     fnRef = Int_dj_dy((GP%south_lat*PI/180.0), GP)
   endif
 
-  ! These calculations no longer depend on the the order in which they
+  ! These calculations no longer depend on the order in which they
   ! are performed because they all use the same (poor) starting guess and
   ! iterate to convergence.
   ! Note that the dynamic grid always uses symmetric memory for the global
@@ -788,7 +788,7 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
   iRef = (G%isg-1) + GP%niglobal
   fnRef = Int_di_dx(((GP%west_lon+GP%len_lon)*PI/180.0), GP)
 
-  ! These calculations no longer depend on the the order in which they
+  ! These calculations no longer depend on the order in which they
   ! are performed because they all use the same (poor) starting guess and
   ! iterate to convergence.
   do I=G%isg-1,G%ieg
@@ -855,7 +855,7 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
           (dL(xq(I-1,J),xq(I,J),yq(I-1,J),yq(I,J)) +          &
           (dL(xq(I,J),xq(I,J-1),yq(I,J),yq(I,J-1)) +          &
            dL(xq(I,J-1),xq(I-1,J-1),yq(I,J-1),yq(I-1,J-1)))))
-    enddo ;enddo
+    enddo ; enddo
     if ((IsdB == isd) .or. (JsdB == jsq)) then
       ! Fill in row and column 1 to calculate the area in the southernmost
       ! and westernmost land cells when we are not using symmetric memory.
@@ -1137,11 +1137,11 @@ end function Int_dj_dy
 
 !> Extrapolates missing metric data into all the halo regions.
 subroutine extrapolate_metric(var, jh, missing)
-  real, dimension(:,:), intent(inout) :: var     !< The array in which to fill in halos [abitrary]
+  real, dimension(:,:), intent(inout) :: var     !< The array in which to fill in halos in arbitrary units [A]
   integer,              intent(in)    :: jh      !< The size of the halos to be filled
-  real,       optional, intent(in)    :: missing !< The missing data fill value, 0 by default [abitrary]
+  real,       optional, intent(in)    :: missing !< The missing data fill value, 0 by default [A]
   ! Local variables
-  real :: badval ! A bad data value [abitrary]
+  real :: badval ! A bad data value [A]
   integer :: i, j
 
   badval = 0.0 ; if (present(missing)) badval = missing
@@ -1171,8 +1171,8 @@ end subroutine extrapolate_metric
 !> This function implements Adcroft's rule for reciprocals, namely that
 !!   Adcroft_Inv(x) = 1/x for |x|>0 or 0 for x=0.
 function Adcroft_reciprocal(val) result(I_val)
-  real, intent(in) :: val  !< The value being inverted [abitrary]
-  real :: I_val            !< The Adcroft reciprocal of val [abitrary-1]
+  real, intent(in) :: val  !< The value being inverted in arbitrary units [A]
+  real :: I_val            !< The Adcroft reciprocal of val [A-1]
 
   I_val = 0.0
   if (val /= 0.0) I_val = 1.0/val
@@ -1186,7 +1186,7 @@ end function Adcroft_reciprocal
 !! are 0.0 at any points adjacent to a land point.  mask2dBu is 0.0 at
 !! any land or boundary point.  For points in the ocean interior or at open boundary
 !! condition points, mask2dCu, mask2dCv, and mask2dBu are all 1.0.
-subroutine initialize_masks(G, PF, US, OBC_dir_u, OBC_dir_v, open_corner_OBCs)
+subroutine initialize_masks(G, PF, US, OBC_dir_u, OBC_dir_v, open_corner_OBCs, maskT)
   type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid type
   type(param_file_type),  intent(in)    :: PF !< Parameter file structure
   type(unit_scale_type),  intent(in)    :: US !< A dimensional unit scaling type
@@ -1205,6 +1205,10 @@ subroutine initialize_masks(G, PF, US, OBC_dir_u, OBC_dir_v, open_corner_OBCs)
   logical,      optional, intent(in)   :: open_corner_OBCs  !< If present and true, the bay-like corner
                                               !! between two orthogonal open boundary segments is open,
                                               !! otherwise it is closed.
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                optional, intent(in)   :: maskT !< If present, this array is used to set the
+                                              !! the mask at tracer points instead of using the
+                                              !! bathymetry to determine the masks [nondim]
 
   ! Local variables
   real :: Dmask      ! The depth for masking in the same units as G%bathyT [Z ~> m].
@@ -1226,40 +1230,40 @@ subroutine initialize_masks(G, PF, US, OBC_dir_u, OBC_dir_v, open_corner_OBCs)
                  "The depth below which to mask points as land points, for which all "//&
                  "fluxes are zeroed out. MASKING_DEPTH is ignored if it has the special "//&
                  "default value.", &
-                 units="m", default=-9999.0, scale=US%m_to_Z)
+                 units="m", default=-9999.0, scale=US%m_to_Z, do_not_log=present(maskT))
 
   Dmask = mask_depth
   if (mask_depth == -9999.0*US%m_to_Z) Dmask = min_depth
 
   open_corners = .false. ; if (present(open_corner_OBCs)) open_corners = open_corner_OBCs
 
-  G%mask2dCu(:,:) = 0.0 ; G%mask2dCv(:,:) = 0.0 ; G%mask2dBu(:,:) = 0.0
+  G%mask2dT(:,:) = 0.0 ; G%mask2dCu(:,:) = 0.0 ; G%mask2dCv(:,:) = 0.0 ; G%mask2dBu(:,:) = 0.0
 
   ! Construct the h-point or T-point mask
-  do j=G%jsd,G%jed ; do i=G%isd,G%ied
-    if (G%bathyT(i,j) <= Dmask) then
-      G%mask2dT(i,j) = 0.0
-    else
-      G%mask2dT(i,j) = 1.0
-    endif
-  enddo ; enddo
+  if (present(maskT)) then
+    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      G%mask2dT(i,j) = max(min(maskT(i,j), 1.0), 0.0)
+    enddo ; enddo
+  else
+    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      if (G%bathyT(i,j) <= Dmask) then
+        G%mask2dT(i,j) = 0.0
+      else
+        G%mask2dT(i,j) = 1.0
+      endif
+    enddo ; enddo
+  endif
+
+  call pass_var(G%mask2dT, G%Domain)
 
   do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-    if ((G%bathyT(i,j) <= Dmask) .or. (G%bathyT(i+1,j) <= Dmask)) then
-      G%mask2dCu(I,j) = 0.0
-    else
-      G%mask2dCu(I,j) = 1.0
-    endif
+    G%mask2dCu(I,j) = G%mask2dT(i,j) * G%mask2dT(i+1,j)
   enddo ; enddo
 
   if (present(OBC_dir_u)) then
     do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-      if (OBC_dir_u(I,j) > 0) then
-        if (G%bathyT(i,j) > Dmask) G%mask2dCu(I,j) = 1.0
-      endif
-      if (OBC_dir_u(I,j) < 0) then
-        if (G%bathyT(i+1,j) > Dmask) G%mask2dCu(I,j) = 1.0
-      endif
+      if (OBC_dir_u(I,j) > 0) G%mask2dCu(I,j) = G%mask2dT(i,j)
+      if (OBC_dir_u(I,j) < 0) G%mask2dCu(I,j) = G%mask2dT(i+1,j)
     enddo ; enddo
   endif
 
@@ -1269,21 +1273,13 @@ subroutine initialize_masks(G, PF, US, OBC_dir_u, OBC_dir_v, open_corner_OBCs)
   enddo ; enddo
 
   do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-    if ((G%bathyT(i,j) <= Dmask) .or. (G%bathyT(i,j+1) <= Dmask)) then
-      G%mask2dCv(i,J) = 0.0
-    else
-      G%mask2dCv(i,J) = 1.0
-    endif
+    G%mask2dCv(i,J) = G%mask2dT(i,j) * G%mask2dT(i,j+1)
   enddo ; enddo
 
   if (present(OBC_dir_v)) then
     do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-      if (OBC_dir_v(i,J) > 0) then
-        if (G%bathyT(i,j) > Dmask) G%mask2dCv(i,J) = 1.0
-      endif
-      if (OBC_dir_v(i,J) < 0) then
-        if (G%bathyT(i,j+1) > Dmask) G%mask2dCv(i,J) = 1.0
-      endif
+      if (OBC_dir_v(i,J) > 0) G%mask2dCv(i,J) = G%mask2dT(i,j)
+      if (OBC_dir_v(i,J) < 0) G%mask2dCv(i,J) = G%mask2dT(i,j+1)
     enddo ; enddo
   endif
 
@@ -1334,6 +1330,7 @@ subroutine initialize_masks(G, PF, US, OBC_dir_u, OBC_dir_v, open_corner_OBCs)
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
     ! This open face length may be revised later.
     G%dy_Cu(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)
+    G%IdxCu_OBCmask(I,j) = G%OBCmaskCu(I,j) * G%IdxCu(I,j)
     G%areaCu(I,j) = G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = G%mask2dCu(I,j) * Adcroft_reciprocal(G%areaCu(I,j))
   enddo ; enddo
@@ -1341,6 +1338,7 @@ subroutine initialize_masks(G, PF, US, OBC_dir_u, OBC_dir_v, open_corner_OBCs)
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
     ! This open face length may be revised later.
     G%dx_Cv(i,J) = G%mask2dCv(i,J) * G%dxCv(i,J)
+    G%IdyCv_OBCmask(i,J) = G%OBCmaskCv(i,J) * G%IdyCv(i,J)
     G%areaCv(i,J) = G%dyCv(i,J) * G%dx_Cv(i,J)
     G%IareaCv(i,J) = G%mask2dCv(i,J) * Adcroft_reciprocal(G%areaCv(i,J))
   enddo ; enddo

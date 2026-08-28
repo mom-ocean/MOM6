@@ -23,7 +23,9 @@ use MOM_thickness_diffuse,     only : thickness_diffuse_CS, thickness_diffuse_ge
 use MOM_io,                    only : MOM_read_data, slasher
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
-use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_NONE
+use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S
+use MOM_open_boundary,         only : OBC_STRAIN_NONE, OBC_STRAIN_ZERO, OBC_STRAIN_FREESLIP
+use MOM_open_boundary,         only : OBC_STRAIN_COMPUTED, OBC_STRAIN_SPECIFIED
 use MOM_stochastics,           only : stochastic_CS
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
@@ -103,8 +105,10 @@ type, public :: hor_visc_CS ; private
                              !! in setting the corner-point viscosities when USE_KH_BG_2D=True.
   real    :: Kh_bg_min       !< The minimum value allowed for Laplacian horizontal
                              !! viscosity [L2 T-1 ~> m2 s-1]. The default is 0.0.
-  logical :: FrictWork_bug    !< If true, retain an answer-changing bug in calculating FrictWork,
+  logical :: FrictWork_bug   !< If true, retain an answer-changing bug in calculating FrictWork,
                              !! which cancels the h in thickness flux and the h at velocity point.
+  logical :: OBC_strain_bug  !< If true, recover a bug that specified shear strain option at open
+                             !! boundaries cannot be applied.
   logical :: use_land_mask   !< Use the land mask for the computation of thicknesses
                              !! at velocity locations. This eliminates the dependence on
                              !! arbitrary values over land or outside of the domain.
@@ -450,6 +454,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   logical :: rescale_Kh
   logical :: find_FrictWork
   logical :: apply_OBC = .false.
+  logical :: apply_OBC_strain
   logical :: use_MEKE_Ku
   logical :: use_MEKE_Au
   logical :: skeb_use_frict
@@ -509,6 +514,12 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     apply_OBC = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
     apply_OBC = .true.
   endif ; endif ; endif
+
+  apply_OBC_strain = .false.
+  if (present(OBC)) then ; if (associated(OBC)) then
+    apply_OBC_strain = (OBC%strain_config /= OBC_STRAIN_NONE) &
+      .and. ((.not. CS%OBC_strain_bug) .or. (OBC%strain_config /= OBC_STRAIN_SPECIFIED))
+  endif ; endif
 
   if (.not.CS%initialized) call MOM_error(FATAL, &
          "MOM_hor_visc: Module must be initialized before it is used.")
@@ -693,7 +704,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$OMP   is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, &
   !$OMP   is_vort, ie_vort, js_vort, je_vort, &
   !$OMP   is_Kh, ie_Kh, js_Kh, je_Kh, &
-  !$OMP   apply_OBC, rescale_Kh, find_FrictWork, use_kh_struct, skeb_use_frict, &
+  !$OMP   apply_OBC, apply_OBC_strain, rescale_Kh, find_FrictWork, use_kh_struct, skeb_use_frict, &
   !$OMP   use_MEKE_Ku, use_MEKE_Au, u_smooth, v_smooth, use_cont_huv, slope_x, slope_y, dz, &
   !$OMP   backscat_subround, GME_effic_h, GME_effic_q, &
   !$OMP   h_neglect, h_neglect3, inv_PI3, inv_PI6, &
@@ -809,28 +820,29 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     ! thicknesses on open boundaries.
     if (apply_OBC) then ; do n=1,OBC%number_of_segments
       J = OBC%segment(n)%HI%JsdB ; I = OBC%segment(n)%HI%IsdB
-      if (OBC%zero_strain .or. OBC%freeslip_strain .or. OBC%computed_strain) then
+      if (apply_OBC_strain) then
         if (OBC%segment(n)%is_N_or_S .and. (J >= Js_vort) .and. (J <= Je_vort)) then
           do I = max(OBC%segment(n)%HI%IsdB,Is_vort), min(OBC%segment(n)%HI%IedB,Ie_vort)
-            if (OBC%zero_strain) then
-              dvdx(I,J) = 0. ; dudy(I,J) = 0.
-            elseif (OBC%freeslip_strain) then
-              dudy(I,J) = 0.
-            elseif (OBC%computed_strain) then
-              if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-                dudy(I,J) = 2.0*CS%DX_dyBu(I,J)* &
-                            (OBC%segment(n)%tangential_vel(I,J,k) - u(I,j,k))*G%IdxCu(I,j)
-              else
-                dudy(I,J) = 2.0*CS%DX_dyBu(I,J)* &
-                            (u(I,j+1,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%IdxCu(I,j+1)
-              endif
-            elseif (OBC%specified_strain) then
-              if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j)*G%dxBu(I,J)
-              else
-                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j+1)*G%dxBu(I,J)
-              endif
-            endif
+            select case (OBC%strain_config)
+              case (OBC_STRAIN_ZERO)
+                dvdx(I,J) = 0. ; dudy(I,J) = 0.
+              case (OBC_STRAIN_FREESLIP)
+                dudy(I,J) = 0.
+              case (OBC_STRAIN_COMPUTED)
+                if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+                  dudy(I,J) = 2.0*CS%DX_dyBu(I,J)* &
+                              (OBC%segment(n)%tangential_vel(I,J,k) - u(I,j,k))*G%IdxCu(I,j)
+                else
+                  dudy(I,J) = 2.0*CS%DX_dyBu(I,J)* &
+                              (u(I,j+1,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%IdxCu(I,j+1)
+                endif
+              case (OBC_STRAIN_SPECIFIED)
+                if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+                  dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j)*G%dxBu(I,J)
+                else
+                  dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j+1)*G%dxBu(I,J)
+                endif
+            end select
             if (CS%use_Leithy) then
               dvdx_smooth(I,J) = dvdx(I,J)
               dudy_smooth(I,J) = dudy(I,J)
@@ -838,25 +850,26 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           enddo
         elseif (OBC%segment(n)%is_E_or_W .and. (I >= is_vort) .and. (I <= ie_vort)) then
           do J = max(OBC%segment(n)%HI%JsdB,js_vort), min(OBC%segment(n)%HI%JedB,je_vort)
-            if (OBC%zero_strain) then
-              dvdx(I,J) = 0. ; dudy(I,J) = 0.
-            elseif (OBC%freeslip_strain) then
-              dvdx(I,J) = 0.
-            elseif (OBC%computed_strain) then
-              if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-                dvdx(I,J) = 2.0*CS%DY_dxBu(I,J)* &
-                            (OBC%segment(n)%tangential_vel(I,J,k) - v(i,J,k))*G%IdyCv(i,J)
-              else
-                dvdx(I,J) = 2.0*CS%DY_dxBu(I,J)* &
-                            (v(i+1,J,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%IdyCv(i+1,J)
-              endif
-            elseif (OBC%specified_strain) then
-              if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i,J)*G%dxBu(I,J)
-              else
-                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i+1,J)*G%dxBu(I,J)
-              endif
-            endif
+            select case (OBC%strain_config)
+              case (OBC_STRAIN_ZERO)
+                dvdx(I,J) = 0. ; dudy(I,J) = 0.
+              case (OBC_STRAIN_FREESLIP)
+                dvdx(I,J) = 0.
+              case (OBC_STRAIN_COMPUTED)
+                if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+                  dvdx(I,J) = 2.0*CS%DY_dxBu(I,J)* &
+                              (OBC%segment(n)%tangential_vel(I,J,k) - v(i,J,k))*G%IdyCv(i,J)
+                else
+                  dvdx(I,J) = 2.0*CS%DY_dxBu(I,J)* &
+                              (v(i+1,J,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%IdyCv(i+1,J)
+                endif
+              case (OBC_STRAIN_SPECIFIED)
+                if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+                  dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i,J)*G%dxBu(I,J)
+                else
+                  dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i+1,J)*G%dxBu(I,J)
+                endif
+            end select
             if (CS%use_Leithy) then
               dvdx_smooth(I,J) = dvdx(I,J)
               dudy_smooth(I,J) = dudy(I,J)
@@ -1507,22 +1520,23 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         dDel2udy(I,J) = CS%DX_dyBu(I,J)*((Del2u(I,j+1)*G%IdxCu(I,j+1)) - (Del2u(I,j)*G%IdxCu(I,j)))
       enddo ; enddo
       ! Adjust contributions to shearing strain on open boundaries.
-      if (apply_OBC) then ; if (OBC%zero_strain .or. OBC%freeslip_strain) then
+      if (apply_OBC) then ; if ((OBC%strain_config == OBC_STRAIN_ZERO) .or. &
+                                (OBC%strain_config == OBC_STRAIN_FREESLIP)) then
         do n=1,OBC%number_of_segments
           J = OBC%segment(n)%HI%JsdB ; I = OBC%segment(n)%HI%IsdB
           if (OBC%segment(n)%is_N_or_S .and. (J >= js-1) .and. (J <= Jeq)) then
             do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
-              if (OBC%zero_strain) then
+              if (OBC%strain_config == OBC_STRAIN_ZERO) then
                 dDel2vdx(I,J) = 0. ; dDel2udy(I,J) = 0.
-              elseif (OBC%freeslip_strain) then
+              elseif (OBC%strain_config == OBC_STRAIN_FREESLIP) then
                 dDel2udy(I,J) = 0.
               endif
             enddo
           elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= Ieq)) then
             do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
-              if (OBC%zero_strain) then
+              if (OBC%strain_config == OBC_STRAIN_ZERO) then
                 dDel2vdx(I,J) = 0. ; dDel2udy(I,J) = 0.
-              elseif (OBC%freeslip_strain) then
+              elseif (OBC%strain_config == OBC_STRAIN_FREESLIP) then
                 dDel2vdx(I,J) = 0.
               endif
             enddo
@@ -1697,12 +1711,12 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           Kh_BS(I,J) = 0.25 * ((BS_coeff_h(i,j  ,k) + BS_coeff_h(i+1,j+1,k)) + &
                                (BS_coeff_h(i,j+1,k) + BS_coeff_h(i+1,j  ,k)))
         enddo ; enddo
-      endif
 
-      if (CS%id_BS_coeff_q>0) then
-        do J=js-1,Jeq ; do I=is-1,Ieq
-          BS_coeff_q(I,J,k) = Kh_BS(I,J)
-        enddo ; enddo
+        if (CS%id_BS_coeff_q > 0) then
+          do J=js-1,Jeq ; do I=is-1,Ieq
+            BS_coeff_q(I,J,k) = Kh_BS(I,J)
+          enddo ; enddo
+        endif
       endif
 
       if (CS%id_Kh_q > 0 .or. CS%debug) then
@@ -1822,7 +1836,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         do J=js-1,Jeq ; do I=is-1,Ieq
           Ah(I,J) = 0.25 * ((Ah_h(i,j,k) + Ah_h(i+1,j+1,k)) + (Ah_h(i,j+1,k) + Ah_h(i+1,j,k)))
         enddo ; enddo
-      end if
+      endif
 
       if (CS%id_Ah_q>0 .or. CS%debug) then
         do J=js-1,Jeq ; do I=is-1,Ieq
@@ -2034,7 +2048,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
     endif
 
-    if (CS%id_FrictWork_bh>0 .or. CS%id_FrictWorkIntz_bh > 0 .or. allocated(MEKE%mom_src_bh)) then
+    if (CS%id_FrictWork_bh>0 .or. CS%id_FrictWorkIntz_bh > 0 .or. allocated(MEKE%mom_src_bh) &
+        .or. (allocated(MEKE%mom_src) .and. MEKE%backscatter_Ro_c /= 0.)) then
       if (CS%FrictWork_bug) then
         ! Diagnose   bhstr_xx*d_x u - bhstr_yy*d_y v + bhstr_xy*(d_y u + d_x v)
         ! This is the old formulation that includes energy diffusion !cyc
@@ -2501,7 +2516,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "If true, the Laplacian coefficient is locally limited "//&
                  "to be stable.", default=.true., do_not_log=.not.CS%Laplacian)
   call get_param(param_file, mdl, "EY24_EBT_BS", CS%EY24_EBT_BS, &
-                 "If true, use the the backscatter scheme (EBT mode with kill switch)"//&
+                 "If true, use the backscatter scheme (EBT mode with kill switch) "//&
                  "developed by Yankovsky et al. (2024). ", &
                  default=.false., do_not_log=.not.CS%Laplacian)
   if (.not.CS%Laplacian) CS%bound_Kh = .false.
@@ -2618,7 +2633,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
 !          "set or allocated.  See github.com/mom-ocean/MOM6/issues/1590 for a discussion.")
 !  endif
   if (CS%use_QG_Leith_visc .and. .not. (CS%Leith_Kh .or. CS%Leith_Ah) ) then
-    call MOM_error(FATAL, "MOM_hor_visc.F90, hor_visc_init:"//&
+    call MOM_error(FATAL, "MOM_hor_visc.F90, hor_visc_init: "//&
                  "LEITH_KH or LEITH_AH must be True when USE_QG_LEITH_VISC=True.")
   endif
 
@@ -2678,9 +2693,11 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(param_file, mdl, "FRICTWORK_BUG", CS%FrictWork_bug, &
                  "If true, retain an answer-changing bug in calculating the FrictWork, "//&
-                 "which cancels the h in thickness flux and the h at velocity point. This is"//&
+                 "which cancels the h in thickness flux and the h at velocity point. This is "//&
                  "not recommended.", default=.false.)
-
+  call get_param(param_file, mdl, "OBC_SPECIFIED_STRAIN_BUG", CS%OBC_strain_bug, &
+                 "If true, recover a bug that specified shear strain option at open boundaries "//&
+                 "cannot be applied.", default=.true.)
   call get_param(param_file, mdl, "USE_GME", CS%use_GME, &
                  "If true, use the GM+E backscatter scheme in association \n"//&
                  "with the Gent and McWilliams parameterization.", default=.false.)

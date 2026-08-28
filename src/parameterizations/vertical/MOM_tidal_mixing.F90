@@ -509,16 +509,16 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
                  units="nondim", default=0.1)
 
     do j=js,je ; do i=is,ie
-      if (G%bathyT(i,j)+G%Z_ref < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
+      if (max(G%meanSL(i,j) + G%bathyT(i,j), 0.0) < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
       CS%tideamp(i,j) = CS%tideamp(i,j) * CS%mask_itidal(i,j) * G%mask2dT(i,j)
 
       ! Restrict rms topo to a fraction (often 10 percent) of the column depth.
       if ((CS%tidal_answer_date < 20190101) .and. (max_frac_rough >= 0.0)) then
-        hamp = min(max_frac_rough*(G%bathyT(i,j)+G%Z_ref), sqrt(CS%h2(i,j)))
+        hamp = min(max_frac_rough * max(G%meanSL(i,j) + G%bathyT(i,j), 0.0), sqrt(CS%h2(i,j)))
         CS%h2(i,j) = hamp*hamp
       else
         if (max_frac_rough >= 0.0) &
-          CS%h2(i,j) = min((max_frac_rough*(G%bathyT(i,j)+G%Z_ref))**2, CS%h2(i,j))
+          CS%h2(i,j) = min((max_frac_rough * max(G%meanSL(i,j) + G%bathyT(i,j), 0.0))**2, CS%h2(i,j))
       endif
 
       utide = CS%tideamp(i,j)
@@ -715,7 +715,7 @@ subroutine calculate_tidal_mixing(dz, j, N2_bot, Rho_bot, N2_lay, N2_int, TKE_to
                                                             !! dissipated within a layer and the
                                                             !! diapycnal diffusivity within that layer,
                                                             !! usually (~Rho_0 / (G_Earth * dRho_lay))
-                                                            !! [H Z T-1 / H Z2 T-3 = T2 Z-1 ~> s2 m-1]
+                                                            !! [T2 Z-1 ~> s2 m-1]
   real, dimension(SZI_(G),SZK_(GV)), intent(in)   :: max_TKE !< The energy required for a layer to
                                                             !! entrain to its maximum realizable
                                                             !! thickness [H Z2 T-3 ~> m3 s-3 or W m-2]
@@ -1011,7 +1011,7 @@ subroutine add_int_tide_diffusivity(dz, j, N2_bot, Rho_bot, N2_lay, TKE_to_Kd, m
                                                              !! dissipated within a layer and the
                                                              !! diapycnal diffusivity within that layer,
                                                              !! usually (~Rho_0 / (G_Earth * dRho_lay))
-                                                             !! [H Z T-1 / H Z2 T-3 = T2 Z-1 ~> s2 m-1]
+                                                             !! [T2 Z-1 ~> s2 m-1]
   real, dimension(SZI_(G),SZK_(GV)), intent(in)    :: max_TKE !< The energy required for a layer
                                                              !! to entrain to its maximum realizable
                                                              !! thickness [H Z2 T-3 ~> m3 s-3 or W m-2]
@@ -1490,7 +1490,7 @@ subroutine setup_tidal_diagnostics(G, GV, CS)
   ! local
   integer :: isd, ied, jsd, jed, nz
 
-  isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed; nz = GV%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   if ((CS%id_Kd_itidal > 0) .or. (CS%id_Kd_Itidal_work > 0)) &
     allocate(CS%dd%Kd_itidal(isd:ied,jsd:jed,nz+1), source=0.0)

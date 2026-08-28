@@ -728,7 +728,7 @@ subroutine int_spec_vol_dp_wright_red(T, S, p_t, p_b, spv_ref, HI, dza, &
   real :: al0        ! A term in the Wright EOS [R-1 ~> m3 kg-1]
   real :: p0         ! A term in the Wright EOS [R L2 T-2 ~> Pa]
   real :: lambda     ! A term in the Wright EOS [L2 T-2 ~> m2 s-2]
-  real :: al0_scale  ! Scaling factor to convert al0 from MKS units [R-1 kg m-3 ~> 1]
+  real :: al0_scale  ! Scaling factor to convert al0 from MKS units [kg m-3 R-1 ~> 1]
   real :: p0_scale   ! Scaling factor to convert p0 from MKS units [R L2 T-2 Pa-1 ~> 1]
   real :: lam_scale  ! Scaling factor to convert lambda from MKS units [L2 s2 T-2 m-2 ~> 1]
   real :: p_ave      ! The layer average pressure [R L2 T-2 ~> Pa]

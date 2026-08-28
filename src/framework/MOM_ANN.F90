@@ -30,7 +30,7 @@ end interface ANN_apply
 !! i.e. stores the matrix A and bias b
 !! for matrix-vector multiplication
 !! y = A*x + b.
-type, private :: layer_type; private
+type, private :: layer_type ; private
   integer :: output_width        !< Number of rows in matrix A
   integer :: input_width         !< Number of columns in matrix A
   logical :: activation = .True. !< If true, apply the default activation function
@@ -723,7 +723,7 @@ end function ANN_unit_tests
 !! y_{l,j} = f_l( b_{l,j} + A_{l,j,i} x_{l-1,i} )
 !! \f]
 !! where \f$ f(x) = max(0, x) \f$ is the ReLU activation function, \f$b_{l,j}\f$ is a bias for each neuron,
-!! $\f$A_{l,j,i}\f$ are a rectangular matrix of weights for each layer, and \f$x_{l-1,i}\f$ are the outputs
+!! \f$A_{l,j,i}\f$ are a rectangular matrix of weights for each layer, and \f$x_{l-1,i}\f$ are the outputs
 !! of the previous layer, \f$l-1\f$. The subscript on \f$ f_l() \f$ indicates the activation function is
 !! optional for each layer.
 !!

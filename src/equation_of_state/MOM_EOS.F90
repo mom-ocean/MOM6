@@ -52,7 +52,9 @@ public calculate_specific_vol_derivs
 public calculate_TFreeze
 public convert_temp_salt_for_TEOS10
 public cons_temp_to_pot_temp
+public pot_temp_to_cons_temp
 public abs_saln_to_prac_saln
+public prac_saln_to_abs_saln
 public gsw_sp_from_sr
 public gsw_sr_from_sp
 public gsw_pt_from_ct
@@ -418,7 +420,6 @@ subroutine calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, s
   real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale specific
                                                 !! volume in combination with scaling stored in EOS [various]
 
-  real, dimension(size(specvol))  :: rho   ! Density [kg m-3]
   integer :: j
 
   if (.not. allocated(EOS%type)) call MOM_error(FATAL, &
@@ -853,8 +854,6 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
   real :: pres(1)  ! Pressure converted to [Pa]
   real :: Ta(1)    ! Temperature converted to [degC]
   real :: Sa(1)    ! Salinity converted to [ppt]
-  real :: dR_dT(1) ! A copy of drho_dT in mks units [kg m-3 degC-1]
-  real :: dR_dS(1) ! A copy of drho_dS in mks units [kg m-3 ppt-1]
 
   pres(1) = EOS%RL2_T2_to_Pa*pressure
   Ta(1) = EOS%C_to_degC * T
@@ -1958,7 +1957,6 @@ subroutine abs_saln_to_prac_saln(S, prSaln, EOS, dom, scale)
                                                 !! while the default is equivalent to EOS%ppt_to_S.
 
   ! Local variables
-  real, dimension(size(S)) :: Sa    ! Salinity converted to [ppt]
   real :: S_scale ! A factor to convert practical salinity from ppt to the desired units [S PSU-1 ~> 1]
   real, parameter :: Sprac_Sref = (35.0/35.16504) ! The TEOS 10 conversion factor to go from
                                     ! reference salinity to practical salinity [PSU ppt-1]
@@ -1999,7 +1997,6 @@ subroutine prac_saln_to_abs_saln(S, absSaln, EOS, dom, scale)
                                                 !! while the default is equivalent to EOS%ppt_to_S.
 
   ! Local variables
-  real, dimension(size(S)) :: Sp    ! Salinity converted to [ppt]
   real :: S_scale ! A factor to convert absolute salinity from ppt to the desired units [S ppt-1 ~> 1]
   real, parameter :: Sref_Sprac = (35.16504/35.0) ! The TEOS 10 conversion factor to go from
                                     ! practical salinity to reference salinity [PSU ppt-1]
@@ -2188,7 +2185,6 @@ logical function test_TS_conversion_consistency(T_cons, S_abs, T_pot, S_prac, EO
   real :: Ttol     ! Roundoff error on a typical value of temperatures [degC]
   logical :: test_OK ! True if a particular test is consistent.
   logical :: OK      ! True if all checks so far are consistent.
-  integer :: i, j, n
 
   OK = .true.
 
@@ -2236,7 +2232,6 @@ logical function test_TFr_consistency(S_test, p_test, EOS, verbose, EOS_name, TF
   real, dimension(-3:3,-3:3) :: S ! Salinities at the test value and perturbed points [S ~> ppt]
   real, dimension(-3:3,-3:3) :: P ! Pressures at the test value and perturbed points [R L2 T-2 ~> Pa]
   real, dimension(-3:3,-3:3,2) :: TFr ! Freezing point at the test value and perturbed points [C ~> degC]
-  character(len=200) :: mesg
   real :: dS         ! Magnitude of salinity perturbations [S ~> ppt]
   real :: dp         ! Magnitude of pressure perturbations [R L2 T-2 ~> Pa]
   ! real :: tol        ! The nondimensional tolerance from roundoff [nondim]

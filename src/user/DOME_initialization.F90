@@ -208,7 +208,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
                  "The largest damping rate in the DOME sponges.", &
                  default=10.0, units="day-1", scale=1.0/(86400.0*US%s_to_T))
   call get_param(PF, mdl, "DOME_SPONGE_WIDTH", sponge_width, &
-                 "The width of the the DOME sponges.", &
+                 "The width of the DOME sponges.", &
                  default=200.0, units="km", scale=1.0e3*US%m_to_L)
 
   ! Here the inverse damping time [T-1 ~> s-1], is set. Set Idamp to 0 wherever
@@ -261,8 +261,8 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
   !  The remaining calls to set_up_sponge_field can be in any order.
   if ( associated(tv%T) ) then
     temp(:,:,:) = 0.0
-    call MOM_error(FATAL,"DOME_initialize_sponges is not set up for use with"//&
-                         " a temperatures defined.")
+    call MOM_error(FATAL, "DOME_initialize_sponges is not set up for use with "//&
+                          "temperatures defined.")
     ! This should use the target values of T in temp.
     call set_up_sponge_field(temp, tv%T, G, GV, nz, CSp)
     ! This should use the target values of S in temp.
@@ -488,7 +488,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
     enddo ; enddo ; enddo
     name = 'temp'
     call tracer_name_lookup(tr_Reg, ntr_id, tr_ptr, name)
-    call register_segment_tracer(tr_ptr, ntr_id, PF, GV, segment, OBC_array=.true., scale=US%degC_to_C)
+    call register_segment_tracer(tr_ptr, ntr_id, PF, GV, segment, scale=US%degC_to_C)
   endif
 
   ! Set up dye tracers
@@ -501,7 +501,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
   enddo ; enddo ; enddo
   name = 'tr_D1'
   call tracer_name_lookup(tr_Reg, ntr_id, tr_ptr, name)
-  call register_segment_tracer(tr_ptr, ntr_id, PF, GV, OBC%segment(1), OBC_array=.true.)
+  call register_segment_tracer(tr_ptr, ntr_id, PF, GV, OBC%segment(1))
 
   ! All tracers but the first have 0 concentration in their inflows. As 0 is the
   ! default value for the inflow concentrations, the following calls are unnecessary.

@@ -13,7 +13,6 @@ implicit none ; private
 type, public :: tracer_type
 
   real, dimension(:,:,:), pointer :: t              => NULL() !< tracer concentration array [CU ~> conc]
-! real                            :: OBC_inflow_conc=  0.0    !< tracer concentration for generic inflows [CU ~> conc]
 ! real, dimension(:,:,:), pointer :: OBC_in_u       => NULL() !< structured values for flow into the domain
 !                                                             !! specified in OBCs through u-face of cell
 ! real, dimension(:,:,:), pointer :: OBC_in_v       => NULL() !< structured values for flow into the domain

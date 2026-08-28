@@ -28,6 +28,7 @@ public PPM_CW, testing
 !! - average()                 *locally defined
 !! - f()                       *locally defined
 !! - dfdx()                    *locally defined
+!! - x()                       *locally defined
 !! - check_reconstruction()    *locally defined
 !! - unit_tests()              *locally defined
 !! - destroy()                 *locally defined
@@ -51,6 +52,8 @@ contains
   procedure :: f => f
   !> Implementation of the derivative of the PPM_CW reconstruction at a point [A]
   procedure :: dfdx => dfdx
+  !> Implementation of solver for x: f(x)=t
+! procedure :: x => x
   !> Implementation of deallocation for PPM_CW
   procedure :: destroy => destroy
   !> Implementation of check reconstruction for the PPM_CW reconstruction
@@ -154,13 +157,13 @@ subroutine reconstruct(this, h, u)
   this%ur(n) = u(n) ! PCM
   this%ul(n) = u(n) ! PCM
 
-  do K = 2, n ! K=2 is interface between cells 1 and 2
+  do K = 2, n-1 ! K=2 is interface between cells 1 and 2
     u0 = u(k-1)
     u1 = u(k)
     u2 = u(k+1)
     a6 = 3.0 * ( ( u1 - this%ul(k) ) + ( u1 - this%ur(k) ) )
     du = this%ur(k) - this%ul(k)
-    if ( ( u2 - u1 ) * ( u1 - u0 ) <- 0.0 ) then ! Large scale extrema
+    if ( ( u2 - u1 ) * ( u1 - u0 ) <= 0.0 ) then ! Large scale extrema
       this%ul(k) = u1
       this%ur(k) = u1
     elseif ( du * a6 > du * du ) then ! Extrema on right
@@ -335,6 +338,7 @@ logical function unit_tests(this, verbose, stdout, stderr)
   call test%set( stdout=stdout ) ! Sets the stdout channel in test
   call test%set( stderr=stderr ) ! Sets the stderr channel in test
   call test%set( verbose=verbose ) ! Sets the verbosity flag in test
+call test%set( stop_instantly=.true. )
 
   if (verbose) write(stdout,'(a)') 'PPM_CW:unit_tests testing with linear fn'
 
@@ -368,6 +372,10 @@ logical function unit_tests(this, verbose, stdout, stderr)
   call test%real_arr(5, um, (/0.,3.,3.,3.,0./), 'dfdx in center')
   call test%real_arr(5, ur, (/0.,3.,3.,3.,0./), 'dfdx on right edge')
 
+  call test%real_scalar( this%x(2,1.), 0., 'f-1(2,1)=0')
+  call test%real_scalar( this%x(2,4.), 0.5, 'f-1(2,4)=0.5')
+  call test%real_scalar( this%x(2,5.5), 1., 'f-1(2,5.5)=1')
+
   do k = 1, 5
     um(k) = this%average(k, 0.5, 0.75) ! Average from x=0.25 to 0.75 in each cell
   enddo
@@ -393,6 +401,10 @@ logical function unit_tests(this, verbose, stdout, stderr)
   call test%real_arr(5, ul, (/1.,3.,12.,27.,61./), 'Return left edge')
   call test%real_arr(5, um, (/1.,6.75,18.75,36.75,61./), 'Return center')
   call test%real_arr(5, ur, (/1.,12.,27.,48.,61./), 'Return right edge')
+
+  call test%real_scalar( this%x(3,12.), 0., 'f-1(3,12)=0')
+  call test%real_scalar( this%x(3,18.75), 0.5, 'f-1(3,18.75)=0.5', robits=1)
+  call test%real_scalar( this%x(3,27.), 1., 'f-1(3,27)=1')
 
   ! x = 3 i   i=0 at origin
   ! f(x) = x^2 / 3   = 3 i^2

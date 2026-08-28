@@ -248,9 +248,9 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   dt_pred = dt / 3.0
   cor_stencil = CoriolisAdv_stencil(CS%CoriolisAdv)
 
-  h_av(:,:,:) = 0; hp(:,:,:) = 0
-  up(:,:,:) = 0; upp(:,:,:) = 0
-  vp(:,:,:) = 0; vpp(:,:,:) = 0
+  h_av(:,:,:) = 0 ; hp(:,:,:) = 0
+  up(:,:,:) = 0 ; upp(:,:,:) = 0
+  vp(:,:,:) = 0 ; vpp(:,:,:) = 0
 
   dyn_p_surf = associated(p_surf_begin) .and. associated(p_surf_end)
   if (dyn_p_surf) then
@@ -282,7 +282,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call pass_var(hp, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
 
-  call enable_averages(0.5*dt, Time_local-real_to_time(0.5*US%T_to_s*dt), CS%diag)
+  call enable_averages(0.5*dt, Time_local-real_to_time(0.5*dt, unscale=US%T_to_s), CS%diag)
 !   Here the first half of the thickness fluxes are offered for averaging.
   if (CS%id_uh > 0) call post_data(CS%id_uh, uh, CS%diag)
   if (CS%id_vh > 0) call post_data(CS%id_vh, vh, CS%diag)

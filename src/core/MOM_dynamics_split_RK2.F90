@@ -36,7 +36,7 @@ use MOM_restart,           only : register_restart_field, register_restart_pair
 use MOM_restart,           only : query_initialized, set_initialized, save_restart
 use MOM_restart,           only : only_read_from_restarts
 use MOM_restart,           only : restart_init, is_new_run, MOM_restart_CS
-use MOM_time_manager,      only : time_type, time_type_to_real, operator(+)
+use MOM_time_manager,      only : time_type, real_to_time, operator(+)
 use MOM_time_manager,      only : operator(-), operator(>), operator(*), operator(/)
 
 use MOM_ALE,                   only : ALE_CS, ALE_remap_velocities
@@ -62,7 +62,6 @@ use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, radiation_open_bdry_conds
 use MOM_open_boundary,         only : open_boundary_zero_normal_flow, open_boundary_query
 use MOM_open_boundary,         only : open_boundary_test_extern_h, update_OBC_ramp
-use MOM_open_boundary,         only : copy_thickness_reservoirs
 use MOM_open_boundary,         only : update_segment_thickness_reservoirs
 use MOM_PressureForce,         only : PressureForce, PressureForce_CS
 use MOM_PressureForce,         only : PressureForce_init
@@ -651,9 +650,6 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   if (G%nonblocking_updates) &
     call complete_group_pass(CS%pass_visc_rem, G%Domain, clock=id_clock_pass)
 
-  if (associated(CS%OBC)) &
-    call copy_thickness_reservoirs(CS%OBC, G, GV)
-
 ! u_accel_bt = layer accelerations due to barotropic solver
   if (associated(CS%BT_cont) .or. CS%BT_use_layer_fluxes) then
     call cpu_clock_begin(id_clock_continuity)
@@ -668,17 +664,19 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   endif
 
   if (CS%BT_use_layer_fluxes) then
-    uh_ptr => uh_in ; vh_ptr => vh_in; u_ptr => u_inst ; v_ptr => v_inst
+    uh_ptr => uh_in ; vh_ptr => vh_in ; u_ptr => u_inst ; v_ptr => v_inst
   endif
 
   call cpu_clock_begin(id_clock_btstep)
   if (calc_dtbt) then
     if (CS%dtbt_use_bt_cont .and. associated(CS%BT_cont)) then
-      call set_dtbt(G, GV, US, CS%barotropic_CSp, CS%pbce, BT_cont=CS%BT_cont)
+      call set_dtbt(G, GV, US, CS%barotropic_CSp, CS%pbce, BT_cont=CS%BT_cont, &
+                    Time=Time_local - real_to_time(dt, unscale=US%T_to_s))
     else
       ! In the following call, eta is only used when NONLINEAR_BT_CONTINUITY is True. Otherwise, dtbt is effectively
       ! calculated with eta=0. Note that NONLINEAR_BT_CONTINUITY is False if BT_CONT is used, which is the default.
-      call set_dtbt(G, GV, US, CS%barotropic_CSp, CS%pbce, eta=eta)
+      call set_dtbt(G, GV, US, CS%barotropic_CSp, CS%pbce, eta=eta, &
+                    Time=Time_local - real_to_time(dt, unscale=US%T_to_s))
     endif
   endif
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
@@ -1265,6 +1263,9 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, US, param_file, CS, restart_C
   ALLOC_(CS%v_av(isd:ied,JsdB:JedB,nz)) ; CS%v_av(:,:,:) = 0.0
   ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = GV%Angstrom_H
 
+  allocate(CS%taux_bot(IsdB:IedB,jsd:jed), source = 0.0)
+  allocate(CS%tauy_bot(isd:ied,JsdB:JedB), source = 0.0)
+
   thickness_units = get_thickness_units(GV)
   flux_units = get_flux_units(GV)
 
@@ -1310,6 +1311,18 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, US, param_file, CS, restart_C
 
   call register_barotropic_restarts(HI, GV, US, param_file, CS%barotropic_CSp, restart_CS)
 
+  call get_param(param_file, mdl, "SPLIT_BOTTOM_STRESS", CS%split_bottom_stress, &
+                 "If true, provide the bottom stress calculated by the "//&
+                 "vertical viscosity to the barotropic solver.", default=.false.,&
+                 do_not_log=.true.)
+
+  if (CS%split_bottom_stress) then
+    vd(1) = var_desc("taux_bot", "kg m-1 s-2", "Zonal bottom stress", 'u', '1')
+    vd(2) = var_desc("tauy_bot", "kg m-1 s-2", "Meridional bottom stress", 'v', '1')
+    call register_restart_pair(CS%taux_bot, CS%tauy_bot, vd(1), vd(2), .false., restart_CS, &
+                             conversion=US%RLZ_T2_to_Pa)
+  endif
+
 end subroutine register_restarts_dyn_split_RK2
 
 !> This subroutine does remapping for the auxiliary restart variables that are used
@@ -1338,10 +1351,11 @@ subroutine remap_dyn_split_RK2_aux_vars(G, GV, CS, h_old_u, h_old_v, h_new_u, h_
     call ALE_remap_velocities(ALE_CSp, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, CS%u_av, CS%v_av)
     call pass_vector(CS%u_av, CS%v_av, G%Domain, complete=.false.)
     call ALE_remap_velocities(ALE_CSp, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, CS%CAu_pred, CS%CAv_pred)
-    call pass_vector(CS%CAu_pred, CS%CAv_pred, G%Domain, complete=.true.)
+    call pass_vector(CS%CAu_pred, CS%CAv_pred, G%Domain, complete=.false.)
   endif
 
   call ALE_remap_velocities(ALE_CSp, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, CS%diffu, CS%diffv)
+  call pass_vector(CS%diffu, CS%diffv, G%Domain, complete=.true.)
 
 end subroutine remap_dyn_split_RK2_aux_vars
 
@@ -1457,7 +1471,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   if (nc<=0) CS%use_HA = .false.
   call get_param(param_file, mdl, "BE", CS%be, &
                  "If SPLIT is true, BE determines the relative weighting "//&
-                 "of a  2nd-order Runga-Kutta baroclinic time stepping "//&
+                 "of a 2nd-order Runga-Kutta baroclinic time stepping "//&
                  "scheme (0.5) and a backward Euler scheme (1) that is "//&
                  "used for the Coriolis and inertial terms.  BE may be "//&
                  "from 0.5 to 1, but instability may occur near 0.5. "//&
@@ -1525,9 +1539,6 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
                  "vertvisc_remnant() at the end of predictor stage for the following "//&
                  "continuity() and btstep() calls in the corrector step. Default of this flag "//&
                  "is set by VISC_REM_BUG", default=visc_rem_bug)
-
-  allocate(CS%taux_bot(IsdB:IedB,jsd:jed), source=0.0)
-  allocate(CS%tauy_bot(isd:ied,JsdB:JedB), source=0.0)
 
   ALLOC_(CS%uhbt(IsdB:IedB,jsd:jed))          ; CS%uhbt(:,:)         = 0.0
   ALLOC_(CS%vhbt(isd:ied,JsdB:JedB))          ; CS%vhbt(:,:)         = 0.0
@@ -1936,6 +1947,7 @@ subroutine end_dyn_split_RK2(CS)
 
   if (associated(CS%taux_bot)) deallocate(CS%taux_bot)
   if (associated(CS%tauy_bot)) deallocate(CS%tauy_bot)
+
   DEALLOC_(CS%uhbt) ; DEALLOC_(CS%vhbt)
   DEALLOC_(CS%u_accel_bt) ; DEALLOC_(CS%v_accel_bt)
   DEALLOC_(CS%visc_rem_u) ; DEALLOC_(CS%visc_rem_v)

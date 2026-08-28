@@ -19,7 +19,7 @@ use MOM_variables,        only : thermo_var_ptrs
 use MOM_verticalGrid,     only : verticalGrid_type
 !use random_numbers_mod,  only : getRandomNumbers, initializeRandomNumberStream, randomNumberStream
 
-implicit none; private
+implicit none ; private
 #include <MOM_memory.h>
 
 public MOM_stoch_eos_init
@@ -33,9 +33,9 @@ public MOM_calc_varT
 type, public :: MOM_stoch_eos_CS ; private
   real, allocatable :: l2_inv(:,:)  !< One over sum of the T cell side side lengths squared [L-2 ~> m-2]
   real, allocatable :: rgauss(:,:)  !< nondimensional random Gaussian [nondim]
-  real        :: tfac=0.27          !< Nondimensional decorrelation time factor, ~1/3.7 [nondim]
-  real        :: amplitude=0.624499 !< Nondimensional standard deviation of Gaussian [nondim]
-  integer     :: seed               !< PRNG seed
+  real      :: tfac = 0.27          !< Nondimensional decorrelation time factor, ~1/3.7 [nondim]
+  real      :: amplitude = 0.624499 !< Nondimensional standard deviation of Gaussian [nondim]
+  integer   :: seed                 !< PRNG seed
   type(PRNG)  ::  rn_CS             !< PRNG control structure
   real, allocatable :: pattern(:,:) !< Random pattern for stochastic EOS [nondim]
   real, allocatable :: phi(:,:)     !< temporal correlation stochastic EOS [nondim]

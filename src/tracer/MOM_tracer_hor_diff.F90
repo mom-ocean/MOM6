@@ -383,7 +383,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
     call cpu_clock_end(id_clock_sync)
     num_itts = max(1, ceiling(max_CFL - 4.0*EPSILON(max_CFL)))
     I_numitts = 1.0 / (real(num_itts))
-    if (CS%id_CFL > 0) call post_data(CS%id_CFL, CFL, CS%diag, mask=G%mask2dT)
+    if (CS%id_CFL > 0) call post_data(CS%id_CFL, CFL, CS%diag)
   elseif (CS%max_diff_CFL > 0.0) then
     num_itts = max(1, ceiling(CS%max_diff_CFL - 4.0*EPSILON(CS%max_diff_CFL)))
     I_numitts = 1.0 / (real(num_itts))
@@ -676,7 +676,6 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
         enddo
       endif
     endif
-    !call post_data(CS%id_KhTr_u, Kh_u, CS%diag, is_static=.false., mask=G%mask2dCu)
     call post_data(CS%id_KhTr_u, Kh_u, CS%diag)
   endif
   if (CS%id_KhTr_v > 0) then
@@ -703,7 +702,6 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
         enddo
       endif
     endif
-    !call post_data(CS%id_KhTr_v, Kh_v, CS%diag, is_static=.false., mask=G%mask2dCv)
     call post_data(CS%id_KhTr_v, Kh_v, CS%diag)
   endif
   if (CS%id_KhTr_h > 0) then
@@ -736,7 +734,6 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
         endif
       endif
     enddo ; enddo
-    !call post_data(CS%id_KhTr_h, Kh_h, CS%diag, is_static=.false., mask=G%mask2dT)
     call post_data(CS%id_KhTr_h, Kh_h, CS%diag)
   endif
 
@@ -1595,7 +1592,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
         ! this loop with those that precede it and thereby eliminate the need for three 3-d arrays.
         if (CS%answer_date <= 20240330) then
           do k=1,nPv(i,J)
-            kLb = k0b_Lv(J)%p(i,k); kRb = k0b_Rv(J)%p(i,k)
+            kLb = k0b_Lv(J)%p(i,k) ; kRb = k0b_Rv(J)%p(i,k)
             if (deep_wt_Lv(J)%p(i,k) >= 1.0) then
               tr_flux_conv(i,j,kLb) = tr_flux_conv(i,j,kLb) - Tr_flux_3d(i,J,k)
             else
@@ -1617,7 +1614,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
           enddo
         else
           do k=1,nPv(i,J)
-            kLb = k0b_Lv(J)%p(i,k); kRb = k0b_Rv(J)%p(i,k)
+            kLb = k0b_Lv(J)%p(i,k) ; kRb = k0b_Rv(J)%p(i,k)
             if (deep_wt_Lv(J)%p(i,k) >= 1.0) then
               tr_flux_N(i,j,kLb) = tr_flux_N(i,j,kLb) + Tr_flux_3d(i,J,k)
             else

@@ -4,46 +4,37 @@
 
 # Autoconf configuration
 
-# NOTE:
-# - We currently do not use a MOM6 version tag, but this would be one option in
-#   the future:
-#     [m4_esyscmd_s([git describe])]
-# - Another option is `git rev-parse HEAD` for the full hash.
-# - We would probably run this inside of a script to avoid the explicit
-#   dependency on git.
-
 AC_PREREQ([2.63])
 
 AC_INIT(
   [MOM6],
-  [ ],
+  [],
   [https://github.com/NOAA-GFDL/MOM6/issues],
   [],
-  [https://github.com/NOAA-GFDL/MOM6])
+  [https://github.com/NOAA-GFDL/MOM6]
+)
 
-#---
-# NOTE: For the autoconf-adverse, the configuration files and autoreconf output
-#   are kept in the `ac` directory.
-#
-# This breaks the convention where configure.ac resides in the top directory.
-#
-# As a result, $srcdir initially points to the `ac` directory, rather than the
-# top directory of the codebase.
-#
-# In order to balance this, we up-path (../) srcdir and point AC_CONFIG_SRCDIR
-# to srcdir and point AC_CONFIG_SRCDIR to the parent directory.
-#
-# Someday we may revert this and work from the top-level directory.  But for
-# now we will isolate autoconf to a subdirectory.
-#---
 
-# Validate srdcir and configure input
-AC_CONFIG_SRCDIR([../src/core/MOM.F90])
+# Validate srcdir
+AC_CONFIG_SRCDIR([src/core/MOM.F90])
+
+# Prevent builds in the top directory ($srcdir)
+AS_IF([test "${srcdir}" = '.'], [
+  AC_MSG_ERROR([Build directory cannot be set to the top directory])
+])
+
+# Prevent builds in .testing/
+testdir=$(cd "${srcdir}/.testing" && pwd)
+AS_IF([test "$(pwd)" = "${testdir}"], [
+  AC_MSG_ERROR([Build directory cannot be set to .testing/])
+])
+
+
+# Macro configuration
 AC_CONFIG_MACRO_DIR([m4])
-srcdir=$srcdir/..
 
 
-# Configure the memory layout header
+# MOM6 memory layout configuration
 
 AC_ARG_VAR([MOM_MEMORY],
   [Path to MOM_memory.h header, describing the field memory layout: dynamic
@@ -55,7 +46,7 @@ AS_VAR_IF([MOM_MEMORY], [],
 )
 
 # Confirm that MOM_MEMORY is named 'MOM_memory.h'
-AS_IF([test $(basename "${MOM_MEMORY}") == "MOM_memory.h"], [],
+AS_IF([test $(basename "${MOM_MEMORY}") = "MOM_memory.h"], [],
  [AC_MSG_ERROR([MOM_MEMORY header ${MOM_MEMORY} must be named 'MOM_memory.h'])]
 )
 
@@ -68,16 +59,33 @@ MOM_MEMORY_DIR=$(AS_DIRNAME(["${MOM_MEMORY}"]))
 AC_SUBST([MOM_MEMORY_DIR])
 
 
-# Default to solo_driver
+# Driver configuration
 DRIVER_DIR=${srcdir}/config_src/drivers/solo_driver
 AC_ARG_WITH([driver],
   AS_HELP_STRING(
-    [--with-driver=coupled_driver|solo_driver|unit_tests],
+    [--with-driver=FMS_cap|solo_driver|unit_tests],
     [Select directory for driver source code]
   )
 )
-AS_IF([test "x$with_driver" != "x"],
-  [DRIVER_DIR=${srcdir}/config_src/drivers/${with_driver}])
+AS_IF([test -n "$with_driver"],
+  [DRIVER_DIR=${srcdir}/config_src/drivers/${with_driver}]
+)
+
+# External library configuration
+AC_ARG_WITH([gsw],
+  [AS_HELP_STRING(
+    [--with-gsw],
+    [use external Gibbs Sea Water library instead of linked source]
+  )], [], [with_gsw=no]
+)
+
+AC_ARG_WITH([cvmix],
+  [AS_HELP_STRING(
+    [--with-cvmix],
+    [use external CVMix library instead of linked source]
+  )], [], [with_cvmix=no]
+)
+
 
 # TODO: Rather than point to a pre-configured header file, autoconf could be
 # used to configure a header based on a template.
@@ -142,31 +150,37 @@ AX_FC_CHECK_C_LIB([netcdf], [nc_create], [], [
 ])
 
 # Confirm that the Fortran compiler can link to the netCDF Fortran library.
-# NOTE:
-#   - We test nf_create, rather than nf90_create, since AX_FC_CHECK_LIB can
-#     not currently probe the Fortran 90 interfaces.
-#   - nf-config does not have --libdir, so we parse the --flibs output.
-AX_FC_CHECK_LIB([netcdff], [nf_create], [], [], [
-  AS_UNSET([ax_fc_cv_lib_netcdff_nf_create])
-  AC_PATH_PROG([NF_CONFIG], [nf-config])
-  AS_IF([test -n "$NF_CONFIG"], [
-    AC_SUBST([LDFLAGS],
-      ["$LDFLAGS $($NF_CONFIG --flibs | xargs -n1 | grep "^-L" | sort -u | xargs)"]
+# NOTE: nf-config does not have --libdir, so we parse the --flibs output.
+MOM6_FC_CHECK_LIB([netcdff], [nf90_create], [netcdf], [path,cmode,ncid], [rc], [
+        character :: path
+        integer :: cmode, ncid, rc],
+  [], [
+    AS_UNSET([mom6_fc_cv_lib_netcdff_nf90_create])
+    AC_PATH_PROG([NF_CONFIG], [nf-config])
+    AS_IF([test -n "$NF_CONFIG"], [
+      AC_SUBST([LDFLAGS],
+        ["$LDFLAGS $($NF_CONFIG --flibs | xargs -n1 | grep "^-L" | sort -u | xargs)"]
+      )
+    ], [
+      AC_MSG_ERROR([Could not find nf-config.])
+    ])
+    MOM6_FC_CHECK_LIB([netcdff], [nf90_create], [netcdf], [path,cmode,ncid], [rc], [
+        character :: path
+        integer :: cmode, ncid, rc],
+      [], [
+        AC_MSG_ERROR([Could not find netCDF Fortran library.])
+      ]
     )
-  ], [
-    AC_MSG_ERROR([Could not find nf-config.])
-  ])
-  AX_FC_CHECK_LIB([netcdff], [nf_create], [], [], [
-    AC_MSG_ERROR([Could not find netCDF Fortran library.])
-  ])
-])
+  ]
+)
 
 
 # Force 8-byte reals
 AX_FC_REAL8
 AS_IF(
   [test "$enable_real8" != no],
-  [FCFLAGS="$FCFLAGS $REAL8_FCFLAGS"])
+  [FCFLAGS="$FCFLAGS $REAL8_FCFLAGS"]
+)
 
 
 # OpenMP configuration
@@ -196,19 +210,22 @@ AX_FC_CHECK_MODULE([fms_mod], [], [
   AX_FC_CHECK_MODULE([fms_mod],
     [AC_SUBST([FCFLAGS], ["-I${srcdir}/ac/deps/include $FCFLAGS"])],
     [AC_MSG_ERROR([Could not find fms_mod Fortran module.])],
-    [-I${srcdir}/ac/deps/include])
+    [-I${srcdir}/ac/deps/include]
+  )
 ])
 
 # Test for fms_init to verify FMS library linking
-AX_FC_CHECK_LIB([FMS], [fms_init], [fms_mod],
+MOM6_FC_CHECK_LIB([FMS], [fms_init], [fms_mod], [], [], [],
   [], [
-    AS_UNSET([ax_fc_cv_lib_FMS_fms_init])
-    AX_FC_CHECK_LIB([FMS], [fms_init], [fms_mod], [
-      AC_SUBST([LDFLAGS], ["-L${srcdir}/ac/deps/lib $LDFLAGS"])
-      AC_SUBST([LIBS], ["-lFMS $LIBS"])
-    ],
-    [AC_MSG_ERROR([Could not find FMS library.])],
-    [-L${srcdir}/ac/deps/lib])
+    AS_UNSET([mom6_fc_cv_lib_FMS_fms_init])
+    MOM6_FC_CHECK_LIB([FMS], [fms_init], [fms_mod], [], [], [],
+      [
+        AC_SUBST([LDFLAGS], ["-L${srcdir}/ac/deps/lib $LDFLAGS"])
+        AC_SUBST([LIBS], ["-lFMS $LIBS"])
+      ], [
+        AC_MSG_ERROR([Could not find FMS library.])
+      ], [-L${srcdir}/ac/deps/lib]
+    )
   ]
 )
 
@@ -235,7 +252,33 @@ AX_FC_CHECK_MODULE([fms2_io_mod], [
 ])
 
 
-# Python interpreter test
+# GSW configuration
+AS_IF([test "$with_gsw" = yes], [
+  AX_FC_CHECK_MODULE([gsw_mod_toolbox], [], [
+    AC_MSG_ERROR([Could not find module gsw_mod_toolbox.])
+  ])
+  MOM6_FC_CHECK_LIB([gsw], [gsw_rho], [gsw_mod_toolbox], [sa,ct,p], [rho], [],
+    [], [
+      AC_MSG_ERROR([Could not find gsw_rho in gsw_mod_toolbox.])
+    ]
+  )
+])
+
+
+# CVMix configuration
+AS_IF([test "$with_cvmix" = yes], [
+  AX_FC_CHECK_MODULE([cvmix_kpp], [], [
+    AC_MSG_ERROR([Could not find module cvmix_kpp.])
+  ])
+  MOM6_FC_CHECK_LIB([cvmix], [cvmix_init_kpp], [cvmix_kpp], [], [], [],
+    [], [
+      AC_MSG_ERROR([Could not find cvmix_update_wrap in cvmix_utils.])
+    ]
+  )
+])
+
+
+# Python configuration
 
 # Declare the Python interpreter variable
 AC_ARG_VAR([PYTHON], [Python interpreter command])
@@ -254,19 +297,38 @@ AS_VAR_IF([PYTHON], [none], [
 ])
 
 
-# Makedep test
+# Makedep configuration
 AC_PATH_PROG([MAKEDEP], [makedep], [${srcdir}/ac/makedep])
 AC_SUBST([MAKEDEP])
 
+# Generate Makedep source list and configure dependency command
+MAKEDEP_FLAGS="-e"
 
-# Generate source list and configure dependency command
-AC_SUBST([SRC_DIRS], ["\\
+# Exclude linked source files from makedep search
+AS_IF([test "$with_gsw" = yes], [
+  MAKEDEP_FLAGS="${MAKEDEP_FLAGS} \\
+    -s ${srcdir}/src/equation_of_state/TEOS10"
+])
+
+AS_IF([test "$with_cvmix" = yes], [
+  MAKEDEP_FLAGS="${MAKEDEP_FLAGS} \\
+    -s ${srcdir}/src/parameterizations/CVmix"
+])
+
+MAKEDEP_FLAGS="${MAKEDEP_FLAGS}"
+
+MAKEDEP_FLAGS="${MAKEDEP_FLAGS# }"
+AC_SUBST([MAKEDEP_FLAGS])
+
+MAKEDEP_DIRS="\\
   ${srcdir}/src \\
   ${MODEL_FRAMEWORK} \\
   ${srcdir}/config_src/external \\
   ${DRIVER_DIR} \\
-  ${MOM_MEMORY_DIR}"]
-)
+  ${MOM_MEMORY_DIR}"
+AC_SUBST([MAKEDEP_DIRS])
+
+# Add makedep to config.status
 AC_CONFIG_COMMANDS(Makefile.dep, [make depend])
 
 
@@ -307,7 +369,7 @@ AC_DEFINE_UNQUOTED([SIGSETJMP_NAME], ["${SIGSETJMP}"])
 
 # Validate the siglongjmp symbol
 AX_FC_CHECK_BIND_C([siglongjmp],
-  [SIGLONGJMP="siglongjmp"], [SETJMP="siglongjmp_missing"]
+  [SIGLONGJMP="siglongjmp"], [SIGLONGJMP="siglongjmp_missing"]
 )
 AC_DEFINE_UNQUOTED([SIGLONGJMP_NAME], ["${SIGLONGJMP}"])
 
@@ -327,5 +389,5 @@ AC_LANG_POP([C])
 
 # Prepare output
 AC_SUBST([CPPFLAGS])
-AC_CONFIG_FILES([Makefile:${srcdir}/ac/Makefile.in])
+AC_CONFIG_FILES([Makefile:ac/Makefile.in])
 AC_OUTPUT

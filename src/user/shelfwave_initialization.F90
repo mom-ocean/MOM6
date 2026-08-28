@@ -13,7 +13,7 @@ use MOM_grid,           only : ocean_grid_type
 use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE, OBC_DIRECTION_W
 use MOM_open_boundary,  only : OBC_segment_type, register_OBC
 use MOM_open_boundary,  only : OBC_registry_type, rotate_OBC_segment_direction
-use MOM_time_manager,   only : time_type, time_type_to_real
+use MOM_time_manager,   only : time_type, time_to_real
 use MOM_unit_scaling,   only : unit_scale_type
 use MOM_verticalGrid,   only : verticalGrid_type
 
@@ -169,7 +169,7 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   turns = modulo(G%HI%turns, 4)
   my_amp = CS%my_amp ; if ((turns==2) .or. (turns==3)) my_amp = -CS%my_amp
 
-  time_sec = US%s_to_T*time_type_to_real(Time)
+  time_sec = time_to_real(Time, scale=US%s_to_T)
   if (CS%shelfwave_correct_amplitude) then
     ! This makes the units and edge value of normal_vel_bt the same as my_amp.
     I_yscale = 1.0 / CS%kk

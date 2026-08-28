@@ -13,6 +13,9 @@ import sys
 # Fortran tokenization
 
 re_module = re.compile(r"^ *module +([a-z_0-9]+)")
+re_submodule = re.compile(
+    r"^ *submodule *\( *([a-z_0-9]+) *(?:: *([a-z_0-9]+) *)?\) +([a-z_0-9]+)"
+)
 re_use = re.compile(r"^ *use +([a-z_0-9]+)")
 re_cpp_define = re.compile(r"^ *# *define +[_a-zA-Z][_a-zA-Z0-9]")
 re_cpp_undef = re.compile(r"^ *# *undef +[_a-zA-Z][_a-zA-Z0-9]")
@@ -150,17 +153,24 @@ def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
     # maps object file to C source
     o2c = dict(zip([object_file(f) for f in c_files], c_files))
 
-    o2mods, o2uses, o2h, o2inc, o2prg, prg2o, mod2o = {}, {}, {}, {}, {}, {}, {}
+    o2mods, o2uses, o2subdeps = {}, {}, {}
+    o2h, o2inc, o2prg, prg2o, mod2o = {}, {}, {}, {}, {}
     externals, all_modules = [], []
+    parent2subobjs = {}
     for f in F90_files:
-        mods, used, cpp, inc, prg, has_externals = scan_fortran_file(f, defines)
+        mods, used, subdeps, cpp, inc, prg, has_externals = scan_fortran_file(f, defines)
+        obj = object_file(f)
         # maps object file to modules produced
-        o2mods[object_file(f)] = mods
+        o2mods[obj] = mods
         # maps module produced to object file
         for m in mods:
-            mod2o[m] = object_file(f)
+            mod2o[m] = obj
         # maps object file to modules used
-        o2uses[object_file(f)] = used
+        o2uses[obj] = used
+        # maps object file to ancestor modules/submodules
+        o2subdeps[obj] = subdeps
+        for m in subdeps:
+            parent2subobjs.setdefault(m, []).append(obj)
         # maps object file to .h files included
         o2h[object_file(f)] = cpp
         # maps object file to .inc files included
@@ -184,8 +194,20 @@ def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
             externals.append(object_file(f))
         all_modules += mods
 
+    for smod in list(parent2subobjs.keys()):
+        if '@' in smod:
+            continue
+
+        parent_mod = smod[:-5] + '.mod'
+        if parent_mod in mod2o:
+            parent_obj = mod2o[parent_mod]
+            if smod not in o2mods[parent_obj]:
+                o2mods[parent_obj].append(smod)
+            mod2o[smod] = parent_obj
+            all_modules.append(smod)
+
     for f in c_files:
-        _, _, cpp, inc, _, _ = scan_fortran_file(f, defines)
+        _, _, _, cpp, inc, _, _ = scan_fortran_file(f, defines)
         # maps object file to .h files included
         o2h[object_file(f)] = cpp
         externals.append(object_file(f))
@@ -235,6 +257,9 @@ def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
             found_deps = [
                 dep for pair in zip(found_mods, found_objs) for dep in pair
             ]
+            subdep_objs = sorted(set([
+                mod2o[m] for m in o2subdeps[obj] if m in mod2o
+            ]))
             missing_mods = [m for m in o2uses[obj] if m not in all_modules]
 
             incs, inc_used = nested_inc(o2h[obj] + o2inc[obj], f2F, defines)
@@ -254,6 +279,7 @@ def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
                 print("#   uses:", ' '.join(o2uses[obj]), file=file)
                 print("#   found mods:", ' '.join(found_mods), file=file)
                 print("#   found objs:", ' '.join(found_objs), file=file)
+                print("#   submodule objs:", ' '.join(subdep_objs), file=file)
                 print("#   missing:", ' '.join(missing_mods), file=file)
                 print("#   includes_all:", ' '.join(incs), file=file)
                 print("#   includes_pth:", ' '.join(incdeps), file=file)
@@ -265,7 +291,7 @@ def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
                 print(' '.join(o2mods[obj]) + ':', obj, file=file)
 
             # Fortran object dependencies
-            obj_incs = ' '.join(inc_mods + incdeps + found_deps)
+            obj_incs = ' '.join(inc_mods + incdeps + found_deps + subdep_objs)
             print(obj + ':', o2F90[obj], obj_incs, file=file)
 
             # Fortran object build rule
@@ -310,7 +336,7 @@ def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
         for p in sorted(prg2o.keys()):
             o = prg2o[p]
             print(file=file)
-            print(p+':', ' '.join(link_obj(o, o2uses, mod2o, all_modules) + externals), file=file)
+            print(p+':', ' '.join(link_obj(o, o2uses, mod2o, all_modules, parent2subobjs, o2mods) + externals), file=file)
             print('\t$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)', file=file)
 
         # Write rules for building libraries
@@ -322,7 +348,7 @@ def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
         # Write cleanup rules
         print(file=file)
         print("clean:", file=file)
-        print('\trm -f *.mod *.o', ' '.join(list(prg2o.keys()) + targ_libs), file=file)
+        print('\trm -f *.mod *.smod *.o', ' '.join(list(prg2o.keys()) + targ_libs), file=file)
 
         # Write re-generation rules
         print(file=file)
@@ -330,11 +356,16 @@ def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
         print('\t'+' '.join(sys.argv), file=file)
 
 
-def link_obj(obj, o2uses, mod2o, all_modules):
+def link_obj(obj, o2uses, mod2o, all_modules, parent2subobjs, o2mods):
     """List of all objects needed to link "obj","""
     def recur(obj, depth=0):
         if obj not in olst:
             olst.append(obj)
+            # If this object defines modules, add their submodules
+            for m in o2mods.get(obj, []):
+                if m in parent2subobjs:
+                    for subobj in parent2subobjs[m]:
+                        recur(subobj, depth=depth+1)
         else:
             return
         uses = [m for m in o2uses[obj] if m in all_modules]
@@ -343,9 +374,6 @@ def link_obj(obj, o2uses, mod2o, all_modules):
             for m in uses:
                 o = mod2o[m]
                 recur(o, depth=depth+1)
-                # if o not in olst:
-                #    recur(o, depth=depth+1)
-                #    olst.append(o)
             return
         return
     olst = []
@@ -363,7 +391,7 @@ def nested_inc(inc_files, f2F, defines):
         if hfile not in f2F.keys():
             return
 
-        _, used, cpp, inc, _, _ = scan_fortran_file(f2F[hfile], defines)
+        _, used, _, cpp, inc, _, _ = scan_fortran_file(f2F[hfile], defines)
 
         # Record any module updates inside of include files
         used_mods.update(used)
@@ -385,11 +413,14 @@ def nested_inc(inc_files, f2F, defines):
 def scan_fortran_file(src_file, defines=None):
     """Scan the Fortran file "src_file" and return lists of module defined,
     module used, and files included."""
-    module_decl, used_modules, cpp_includes, f90_includes, programs = [], [], [], [], []
+    module_decl, used_modules = [], []
+    submodule_deps, cpp_includes, f90_includes, programs = [], [], [], []
 
     cpp_defines = defines if defines is not None else []
 
-    cpp_macros = dict([t.split('=') for t in cpp_defines])
+    cpp_macros = dict(
+        [t.split('=') if '=' in t else (t, None) for t in cpp_defines]
+    )
     cpp_group_stack = []
 
     with io.open(src_file, 'r', errors='replace') as file:
@@ -454,13 +485,14 @@ def scan_fortran_file(src_file, defines=None):
             # Activate a new macro (ignoring the value)
             match = re_cpp_define.match(line)
             if match:
+                # TODO: Tokenize this, don't hunt for `(` in `macro`.
                 tokens = line.strip()[1:].split(maxsplit=2)
                 macro = tokens[1]
                 value = tokens[2] if tokens[2:] else None
                 if '(' in macro:
                     # TODO: Actual handling of function macros
                     macro, arg = macro.split('(', maxsplit=1)
-                    value = '(' + arg + value
+                    value = '(' + arg + value if value else '(' + arg
                 cpp_macros[macro] = value
 
             # Deactivate a macro
@@ -476,14 +508,24 @@ def scan_fortran_file(src_file, defines=None):
 
             match = re_module.match(line.lower())
             if match:
-                # Avoid "module procedure" statements
-                if match.group(1) not in 'procedure':
-                    module_decl.append(match.group(1))
+                # Avoid "module procedure", "module subroutine", "module function" statements
+                if match.group(1) not in ['procedure', 'subroutine', 'function']:
+                    module_decl.append(module_file(match.group(1)))
                     external_namespace = False
+
+            match = re_submodule.match(line.lower())
+            if match:
+                # Submodule declaration: submodule (ancestor[:parent]) name
+                ancestor = match.group(1)
+                parent = match.group(2)
+                name = match.group(3)
+                module_decl.extend(submodule_files(ancestor, name))
+                submodule_deps.extend(submodule_parent_files(ancestor, parent))
+                external_namespace = False
 
             match = re_use.match(line.lower())
             if match:
-                used_modules.append(match.group(1))
+                used_modules.append(module_file(match.group(1)))
 
             match = re_cpp_include.match(line)
             if match:
@@ -511,14 +553,31 @@ def scan_fortran_file(src_file, defines=None):
                     file_has_externals = True
 
     used_modules = [m for m in sorted(set(used_modules)) if m not in module_decl]
-    return add_suff(module_decl, '.mod'), add_suff(used_modules, '.mod'), cpp_includes, f90_includes, programs, file_has_externals
-    # return add_suff(module_decl, '.mod'), add_suff(sorted(set(used_modules)), '.mod'), cpp_includes, f90_includes, programs
+    submodule_deps = sorted(set(submodule_deps))
+    return module_decl, used_modules, submodule_deps, cpp_includes, f90_includes, programs, file_has_externals
 
 
 def object_file(src_file):
     """Return the name of an object file that results from compiling
     src_file."""
     return os.path.splitext(os.path.basename(src_file))[0] + '.o'
+
+
+def module_file(name):
+    """Return the compiler sidecar file for a Fortran module."""
+    return name + '.mod'
+
+
+def submodule_files(ancestor, name):
+    """Return known compiler sidecar files for a Fortran submodule."""
+    return [ancestor + '@' + name + '.smod', ancestor + '-' + name + '.mod']
+
+
+def submodule_parent_files(ancestor, parent=None):
+    """Return known sidecar files needed by a descendant submodule."""
+    if parent:
+        return submodule_files(ancestor, parent)
+    return [ancestor + '.smod', module_file(ancestor)]
 
 
 def find_files(src_dirs, skip_dirs):
@@ -545,11 +604,6 @@ def find_files(src_dirs, skip_dirs):
                 if any(file.lower().endswith(ext) for ext in extensions):
                     files.append(p+'/'+file)
     return sorted(set(files))
-
-
-def add_suff(lst, suff):
-    """Add "suff" to each item in the list"""
-    return [f + suff for f in lst]
 
 
 def cpp_expr_eval(expr, macros=None):

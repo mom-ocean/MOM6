@@ -1,0 +1,94 @@
+/* Source browser styling for autodoxysource directive.
+   Font stack and sizes match the sphinx_rtd_theme's code-block rules
+   so source listings look consistent with fenced code blocks. */
+
+.autodoxysource {
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+               "Courier New", Courier, monospace;
+  font-size: 12px;
+  line-height: 1.2;
+  background: #f8f8f8;
+  border: 1px solid #e1e4e5;
+  border-radius: 4px;
+  padding: 12px 0;
+  overflow-x: auto;
+  min-width: fit-content;
+  max-width: calc(6.5em + 120ch + 24px);
+}
+
+.autodoxysource .source-line {
+  display: block;
+  white-space: nowrap;
+  margin: 0;
+  padding: 0 12px 0 0;
+  line-height: 1.2;
+}
+
+.autodoxysource .source-code {
+  white-space: pre;
+}
+
+.autodoxysource .source-line:target {
+  background-color: #ffffcc;
+}
+
+.autodoxysource .source-lineno {
+  display: inline-block;
+  width: 4.5em;
+  text-align: right;
+  padding-right: 0.8em;
+  margin-right: 0.8em;
+  color: #858585;
+  border-right: 1px solid #e6e9ea;
+  text-decoration: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.autodoxysource .source-lineno:hover {
+  color: #333;
+}
+
+/* Doxygen highlight classes */
+.f-hl-comment {
+  color: #408080;
+  font-style: italic;
+}
+
+.f-hl-keyword {
+  color: #008000;
+  font-weight: bold;
+}
+
+.f-hl-keywordtype {
+  color: #b00040;
+}
+
+.f-hl-keywordflow {
+  color: #008000;
+  font-weight: bold;
+}
+
+.f-hl-stringliteral {
+  color: #ba2121;
+}
+
+.f-hl-preprocessor {
+  color: #bc7a00;
+}
+
+.f-hl-normal {
+  color: #333;
+}
+
+/* Make xref links within source subtle */
+.autodoxysource a.reference {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px dotted #999;
+}
+
+.autodoxysource a.reference:hover {
+  border-bottom: 1px solid #333;
+  color: #2980b9;
+}

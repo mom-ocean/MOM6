@@ -92,10 +92,6 @@ ROTATION = "betaplane"          ! default = "2omegasinlat"
                                 !     USER - call a user modified routine.
 F_0 = 1.0E-04                   !   [s-1] default = 0.0
                                 ! The reference value of the Coriolis parameter with the betaplane option.
-GRID_ROTATION_ANGLE_BUGS = True !   [Boolean] default = False
-                                ! If true, use an older algorithm to calculate the sine and cosines needed
-                                ! rotate between grid-oriented directions and true north and east.  Differences
-                                ! arise at the tripolar fold.
 
 ! === module MOM_tracer_registry ===
 
@@ -234,9 +230,6 @@ KV = 1.0E-04                    !   [m2 s-1]
 ! === module MOM_thickness_diffuse ===
 KHTH = 500.0                    !   [m2 s-1] default = 0.0
                                 ! The background horizontal thickness diffusivity.
-USE_GM_WORK_BUG = True          !   [Boolean] default = False
-                                ! If true, compute the top-layer work tendency on the u-grid with the incorrect
-                                ! sign, for legacy reproducibility.
 
 ! === module MOM_porous_barriers ===
 
@@ -381,9 +374,6 @@ WIND_CONFIG = "zero"            !
                                 ! options include (file), (2gyre), (1gyre), (gyres), (zero), and (USER).
 GUST_CONST = 0.02               !   [Pa] default = 0.0
                                 ! The background gustiness in the winds.
-FIX_USTAR_GUSTLESS_BUG = False  !   [Boolean] default = True
-                                ! If true correct a bug in the time-averaging of the gustless wind friction
-                                ! velocity
 
 ! === module MOM_main (MOM_driver) ===
 DAYMAX = 0.25                   !   [days]
@@ -412,11 +402,15 @@ DEBUG = True
 INTERPOLATE_RES_FN = True       !   [Boolean] default = True
 GILL_EQUATORIAL_LD = False      !   [Boolean] default = False
 USE_LAND_MASK_FOR_HVISC = False !   [Boolean] default = False
-KAPPA_SHEAR_ITER_BUG = True     !   [Boolean] default = True
-KAPPA_SHEAR_ALL_LAYER_TKE_BUG = True !   [Boolean] default = True
 USE_MLD_ITERATION = False       !   [Boolean] default = False
 
-! Explicitly use the defaults from early 2025
-VISC_REM_BUG = True
-FRICTWORK_BUG = True
-MASS_WEIGHT_IN_PRESSURE_GRADIENT_TOP = False
+MASS_WEIGHT_IN_PRESSURE_GRADIENT_TOP = True !   [Boolean] default = True
+
+! These are no longer necessary, as they are using the default value.
+GRID_ROTATION_ANGLE_BUGS = False !   [Boolean] default = False
+USE_GM_WORK_BUG = False         !   [Boolean] default = False
+USTAR_GUSTLESS_BUG = False      !   [Boolean] default = False
+KAPPA_SHEAR_ITER_BUG = False    !   [Boolean] default = False
+KAPPA_SHEAR_ALL_LAYER_TKE_BUG = False !   [Boolean] default = False
+VISC_REM_BUG = False            !   [Boolean] default = False
+FRICTWORK_BUG = False           !   [Boolean] default = False

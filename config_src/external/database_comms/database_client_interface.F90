@@ -6,7 +6,7 @@ module database_client_interface
 
   use iso_fortran_env, only : int8, int16, int32, int64, real32, real64
 
-  implicit none; private
+  implicit none ; private
 
   !> Dummy type for dataset
   type, public :: dataset_type

@@ -17,9 +17,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
+    - uses: actions/checkout@v7
 
     - name: Check white space (non-blocking)
       run: |
@@ -53,14 +51,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup/
 
-      - name: Compile FMS
-        run: make -C .testing -j build/deps/lib/libFMS.a
+      - name: Compile dependencies
+        run: |
+          make -C .testing -j build/deps/lib/libFMS.a
+          make -C .testing -j PKG= build/deps/lib/libgsw.a
+          make -C .testing -j PKG= build/deps/lib/libcvmix.a
 
       - name: Compile MOM6 with symmetric indexing
         run: make -C .testing -j build/symmetric/MOM6
@@ -68,7 +67,7 @@ jobs:
       - name: Prepare artifact
         run: tar -cf mom6-symmetric.tar .testing/build/symmetric/MOM6
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mom6-symmetric-artifact
           path: mom6-symmetric.tar
@@ -78,14 +77,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup/
 
-      - name: Compile FMS
-        run: make -C .testing -j build/deps/lib/libFMS.a
+      - name: Compile dependencies
+        run: |
+          make -C .testing -j build/deps/lib/libFMS.a
+          make -C .testing -j PKG= build/deps/lib/libgsw.a
+          make -C .testing -j PKG= build/deps/lib/libcvmix.a
 
       - name: Compile MOM6 with asymmetric indexing
         run: make -C .testing -j build/asymmetric/MOM6
@@ -93,7 +93,7 @@ jobs:
       - name: Prepare artifact
         run: tar -cf mom6-asymmetric.tar .testing/build/asymmetric/MOM6
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mom6-asymmetric-artifact
           path: mom6-asymmetric.tar
@@ -103,14 +103,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup/
 
-      - name: Compile FMS
-        run: make -C .testing -j build/deps/lib/libFMS.a
+      - name: Compile dependencies
+        run: |
+          make -C .testing -j build/deps/lib/libFMS.a
+          make -C .testing -j PKG= build/deps/lib/libgsw.a
+          make -C .testing -j PKG= build/deps/lib/libcvmix.a
 
       - name: Compile MOM6 with bit-reproducible optimization
         run: make -C .testing -j build/repro/MOM6
@@ -118,7 +119,7 @@ jobs:
       - name: Prepare artifact
         run: tar -cf mom6-repro.tar .testing/build/repro/MOM6
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mom6-repro-artifact
           path: mom6-repro.tar
@@ -128,14 +129,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup/
 
-      - name: Compile FMS
-        run: make -C .testing -j build/deps/lib/libFMS.a
+      - name: Compile dependencies
+        run: |
+          make -C .testing -j build/deps/lib/libFMS.a
+          make -C .testing -j PKG= build/deps/lib/libgsw.a
+          make -C .testing -j PKG= build/deps/lib/libcvmix.a
 
       - name: Compile MOM6 supporting OpenMP
         run: make -C .testing -j build/openmp/MOM6
@@ -143,7 +145,7 @@ jobs:
       - name: Prepare artifact
         run: tar -cf mom6-openmp.tar .testing/build/openmp/MOM6
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mom6-openmp-artifact
           path: mom6-openmp.tar
@@ -154,13 +156,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup/
 
-      - name: Compile target FMS
+      - name: Compile target depedencies
         run: |
           make -C .testing \
           DO_REGRESSION_TESTS=1 \
@@ -177,7 +177,7 @@ jobs:
       - name: Prepare artifact
         run: tar -cf mom6-target.tar .testing/build/target/MOM6
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mom6-target-artifact
           path: mom6-target.tar
@@ -187,14 +187,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup/
 
-      - name: Compile FMS
-        run: make -C .testing -j build/deps/lib/libFMS.a
+      - name: Compile dependencies
+        run: |
+          make -C .testing -j build/deps/lib/libFMS.a
+          make -C .testing -j PKG= build/deps/lib/libgsw.a
+          make -C .testing -j PKG= build/deps/lib/libcvmix.a
 
       - name: Compile MOM6 with aggressive optimization
         run: make -C .testing -j build/opt/MOM6
@@ -209,7 +210,7 @@ jobs:
           .testing/build/opt/MOM6 \
           .testing/build/timing/time_*
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mom6-opt-artifact
           path: mom6-opt.tar
@@ -220,13 +221,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup/
 
-      - name: Compile target FMS
+      - name: Compile target dependencies
         run: |
           make -C .testing \
           DO_REGRESSION_TESTS=1 \
@@ -253,7 +252,7 @@ jobs:
           .testing/build/opt_target/MOM6 \
           .testing/build/target_codebase/.testing/build/timing/time_*
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mom6-opt-target-artifact
           path: mom6-opt-target.tar
@@ -263,14 +262,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup/
 
-      - name: Compile FMS
-        run: make -C .testing -j build/deps/lib/libFMS.a
+      - name: Compile dependencies
+        run: |
+          make -C .testing -j build/deps/lib/libFMS.a
+          make -C .testing -j PKG= build/deps/lib/libgsw.a
+          make -C .testing -j PKG= build/deps/lib/libcvmix.a
 
       - name: Compile MOM6 with code coverage
         run: make -C .testing -j build/cov/MOM6
@@ -289,7 +289,7 @@ jobs:
           .testing/build/unit/test_* \
           .testing/build/unit/*.gcno
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mom6-coverage-artifact
           path: mom6-coverage.tar
@@ -299,14 +299,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup/
 
-      - name: Compile FMS
-        run: make -C .testing -j build/deps/lib/libFMS.a
+      - name: Compile dependencies
+        run: |
+          make -C .testing -j build/deps/lib/libFMS.a
+          make -C .testing -j PKG= build/deps/lib/libgsw.a
+          make -C .testing -j PKG= build/deps/lib/libcvmix.a
 
       - name: Compile MOM6 for the GFDL coupled driver
         run: make -C .testing -j check_mom6_api_coupled
@@ -320,19 +321,17 @@ jobs:
       - build-asymmetric
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup
 
       - name: Download symmetric MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
       - name: Download asymmetric MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-asymmetric-artifact
 
@@ -353,14 +352,12 @@ jobs:
     needs: build-symmetric
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup
 
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
@@ -378,14 +375,12 @@ jobs:
     needs: build-symmetric
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup
 
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
@@ -403,14 +398,12 @@ jobs:
     needs: build-symmetric
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup
 
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
@@ -428,14 +421,12 @@ jobs:
     needs: build-symmetric
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup
 
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
@@ -463,14 +454,12 @@ jobs:
           - {id: r, desc: "density"}
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup
 
       - name: Download symmetric MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
@@ -490,19 +479,17 @@ jobs:
       - build-openmp
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup
 
       - name: Download symmetric MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
       - name: Download OpenMP MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-openmp-artifact
 
@@ -525,19 +512,17 @@ jobs:
       - build-repro
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup
 
       - name: Download DEBUG MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
       - name: Download REPRO MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-repro-artifact
 
@@ -561,19 +546,17 @@ jobs:
       - build-target
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup
 
       - name: Download symmetric MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
       - name: Download target MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-target-artifact
 
@@ -595,14 +578,12 @@ jobs:
     needs: build-coverage
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup
 
       - name: Download unit coverage tests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-coverage-artifact
 
@@ -641,14 +622,12 @@ jobs:
       - build-opt
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup
 
       - name: Download timing tests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-opt-artifact
 
@@ -673,9 +652,7 @@ jobs:
       - build-opt-target
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/ubuntu-setup
 
@@ -690,12 +667,12 @@ jobs:
           build/target_codebase
 
       - name: Download optimized MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-opt-artifact
 
       - name: Download optimized target MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-opt-target-artifact
 
@@ -756,7 +733,7 @@ jobs:
       - run-coverage
 
     steps:
-      - uses: geekyeggo/delete-artifact@v5
+      - uses: geekyeggo/delete-artifact@v6
         with:
           name: |
             mom6-asymmetric-artifact
@@ -784,7 +761,7 @@ jobs:
       - run-timings
 
     steps:
-      - uses: geekyeggo/delete-artifact@v5
+      - uses: geekyeggo/delete-artifact@v6
         with:
           name: |
             mom6-symmetric-artifact
@@ -808,7 +785,7 @@ jobs:
       - compare-timings
 
     steps:
-      - uses: geekyeggo/delete-artifact@v5
+      - uses: geekyeggo/delete-artifact@v6
         with:
           name: |
             mom6-symmetric-artifact

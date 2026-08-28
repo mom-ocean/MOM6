@@ -26,9 +26,9 @@ integer :: nsamp ! Number of measurements
 integer :: nits ! Number of calls to time
 integer :: nxy ! Spatial dimension
 
-nlayers = 7; nin = 4; layer_width = 16; nout = 1 ! Deep network
-!nlayers = 4; nin = 4; layer_width = 48; nout = 1 ! Shallow-wide network
-!nlayers = 3; nin = 4; layer_width = 20; nout = 1 ! Small network
+nlayers = 7 ; nin = 4 ; layer_width = 16 ; nout = 1 ! Deep network
+!nlayers = 4 ; nin = 4 ; layer_width = 48 ; nout = 1 ! Shallow-wide network
+!nlayers = 3 ; nin = 4 ; layer_width = 20 ; nout = 1 ! Small network
 
 nsamp = 100
 nits = 20000

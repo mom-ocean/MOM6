@@ -518,7 +518,7 @@ subroutine CFC_cap_set_forcing(sfc_state, fluxes, day_start, day_interval, G, US
   !     Gas exchange/piston velocity parameter
   !---------------------------------------------------------------------
   ! From a = 0.251 cm/hr s^2/m^2 in Wannikhof 2014
-  !        = 6.97e-7 [m/s s^2/m^2] [Z T-1 T2 L-2] = [Z T L-2 ~> s / m]
+  !        = 6.97e-7 [m/s s^2/m^2] [Z T-1 T2 L-2] = [Z T L-2 ~> s m-1]
   kw_coeff = (US%m_to_Z*US%s_to_T*US%L_to_m**2) * 6.97e-7
 
   ! set unit conversion factors
@@ -692,7 +692,7 @@ logical function CFC_cap_unit_tests(verbose)
   if (.not. CFC_cap_unit_tests) write(stdout,'(2x,a)') "Passed "//test_name
 
   test_name = 'Solubility function, SST = 1.0 C, and SSS = 10 psu'
-  ta = max(0.01, (1.0 + 273.15) * 0.01); sal = 10.
+  ta = max(0.01, (1.0 + 273.15) * 0.01) ; sal = 10.
   ! cfc1 = 3.238 10-2 mol kg-1 atm-1
   ! cfc2 = 7.943 10-3 mol kg-1 atm-1
   call get_solubility(dummy1, dummy2, ta, sal , 1.0)
@@ -704,7 +704,7 @@ logical function CFC_cap_unit_tests(verbose)
   if (.not. CFC_cap_unit_tests) write(stdout,'(2x,a)')"Passed "//test_name
 
   test_name = 'Solubility function, SST = 20.0 C, and SSS = 35 psu'
-  ta = max(0.01, (20.0 + 273.15) * 0.01); sal = 35.
+  ta = max(0.01, (20.0 + 273.15) * 0.01) ; sal = 35.
   ! cfc1 = 0.881 10-2 mol kg-1 atm-1
   ! cfc2 = 2.446 10-3 mol kg-1 atm-1
   call get_solubility(dummy1, dummy2, ta, sal , 1.0)
@@ -721,7 +721,7 @@ end function CFC_cap_unit_tests
 logical function compare_values(verbose, test_name, calc, ans, limit)
   logical,             intent(in) :: verbose   !< If true, write results to stdout
   character(len=80),   intent(in) :: test_name !< Brief description of the unit test
-  real,                intent(in) :: calc      !< computed value in abitrary units [A]
+  real,                intent(in) :: calc      !< computed value in arbitrary units [A]
   real,                intent(in) :: ans       !< correct value [A]
   real,                intent(in) :: limit     !< value above which test fails [A]
 

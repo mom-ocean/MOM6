@@ -111,6 +111,7 @@ type, public :: surface_forcing_CS ; private
   real    :: rigid_sea_ice_mass !< A mass per unit area of sea-ice beyond which sea-ice viscosity
                                 !! becomes effective [R Z ~> kg m-2], typically of order 1000 kg m-2.
   logical :: allow_flux_adjustments !< If true, use data_override to obtain flux adjustments
+  logical :: allow_carbon_flux_exchange !< If true, allows fluxes and diagnostics of carbon in runoff.
 
   logical :: restore_salt       !< If true, the coupled MOM driver adds a term to restore surface
                                 !! salinity to a specified value.
@@ -133,7 +134,14 @@ type, public :: surface_forcing_CS ; private
                                             !! for salinity restoring.
   real    :: ice_salt_concentration         !< Salt concentration for sea ice [kg/kg]
   logical :: mask_srestore_marginal_seas    !< If true, then mask SSS restoring in marginal seas
+  logical :: max_delta_srestore_file        !< If true, apply a 2-dimensional maximum delta salinity
+                                            !! when restoring. The file should be
+                                            !! in inputdir/max_delta_srestore.nc and the field
+                                            !! should be named 'max_delta_srestore'
+  real, pointer, dimension(:,:) :: max_delta_srestore_2d => NULL()
+                                            !< Maximum delta salinity used for restoring [S ~> ppt]
   real    :: max_delta_srestore             !< Maximum delta salinity used for restoring [S ~> ppt]
+  real    :: min_ratio_srestore             !< Minimum fraction of restoring salinity to preserve [nondim]
   real    :: max_delta_trestore             !< Maximum delta sst used for restoring [C ~> degC]
   real, pointer, dimension(:,:) :: basin_mask => NULL() !< Mask for surface salinity restoring by basin [nondim]
   integer :: answer_date        !< The vintage of the order of arithmetic and expressions in the
@@ -191,6 +199,7 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: lprec           =>NULL() !< mass flux of liquid precip [kg m-2 s-1]
   real, pointer, dimension(:,:) :: fprec           =>NULL() !< mass flux of frozen precip [kg m-2 s-1]
   real, pointer, dimension(:,:) :: runoff          =>NULL() !< mass flux of liquid runoff [kg m-2 s-1]
+  real, pointer, dimension(:,:) :: runoff_carbon   =>NULL() !< mass flux of carbon in liquid runoff [kg m-2 s-1]
   real, pointer, dimension(:,:) :: calving         =>NULL() !< mass flux of frozen runoff [kg m-2 s-1]
   real, pointer, dimension(:,:) :: stress_mag      =>NULL() !< The time-mean magnitude of the stress on the ocean [Pa]
   real, pointer, dimension(:,:) :: ustar_berg      =>NULL() !< frictional velocity beneath icebergs [m s-1]
@@ -289,7 +298,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   ! flux type has been used.
   if (fluxes%dt_buoy_accum < 0) then
     call allocate_forcing_type(G, fluxes, water=.true., heat=.true., ustar=.not.CS%nonBous, press=.true., &
-                               fix_accum_bug=.not.CS%ustar_gustless_bug, tau_mag=CS%nonBous)
+                               fix_accum_bug=.not.CS%ustar_gustless_bug, tau_mag=CS%nonBous,&
+                               carbon=CS%allow_carbon_flux_exchange)
 
     call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)
@@ -378,7 +388,19 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     if (CS%salt_restore_as_sflux) then
       do j=js,je ; do i=is,ie
         delta_sss = data_restore(i,j) - sfc_state%SSS(i,j)
-        delta_sss = sign(1.0,delta_sss) * min(abs(delta_sss), CS%max_delta_srestore)
+        if (sfc_state%SSS(i,j) >= data_restore(i,j)*CS%min_ratio_srestore) then
+          if (.not. CS%max_delta_srestore_file) then
+            delta_sss = sign(1.0,delta_sss) * min(abs(delta_sss), CS%max_delta_srestore)
+          else
+            if (abs(delta_sss) > abs(CS%max_delta_srestore_2d(i,j))) then
+              if (CS%max_delta_srestore_2d(i,j) < 0.0) then
+                delta_sss = 0.0  !turn off restoring
+              else !clip restoring
+                delta_sss = sign(1.0,delta_sss) * min(abs(delta_sss), CS%max_delta_srestore_2d(i,j))
+              endif
+            endif
+          endif !max_delta_srestore_file
+        endif !min_ratio_srestore
         fluxes%salt_flux(i,j) = 1.e-3*US%S_to_ppt*G%mask2dT(i,j) * (CS%rho_restore*CS%Flux_const_salt)* &
              (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j)) * delta_sss  ! R Z T-1 ~> kg Salt m-2 s-1
       enddo ; enddo
@@ -400,7 +422,19 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0.0) then
           delta_sss = sfc_state%SSS(i,j) - data_restore(i,j)
-          delta_sss = sign(1.0,delta_sss) * min(abs(delta_sss), CS%max_delta_srestore)
+          if (sfc_state%SSS(i,j) >= data_restore(i,j)*CS%min_ratio_srestore) then
+            if (.not. CS%max_delta_srestore_file) then
+              delta_sss = sign(1.0,delta_sss) * min(abs(delta_sss), CS%max_delta_srestore)
+            else
+              if (abs(delta_sss) > abs(CS%max_delta_srestore_2d(i,j))) then
+                if (CS%max_delta_srestore_2d(i,j) < 0.0) then
+                  delta_sss = 0.0  !turn off restoring
+                else !clip restoring
+                  delta_sss = sign(1.0,delta_sss) * min(abs(delta_sss), CS%max_delta_srestore_2d(i,j))
+                endif
+              endif
+            endif !max_delta_srestore_file
+          endif !min_ratio_srestore
           fluxes%vprec(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j))* &
                       (CS%rho_restore*CS%Flux_const_salt) * &
                       delta_sss / (0.5*(sfc_state%SSS(i,j) + data_restore(i,j)))
@@ -503,6 +537,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       fluxes%heat_content_lrunoff(i,j) = US%W_m2_to_QRZ_T * IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%runoff_hflx(i-i0,j-j0), G%mask2dT(i,j), i, j, 'runoff_hflx', G)
+    endif
+
+    if (associated(IOB%runoff_carbon) .and. CS%allow_carbon_flux_exchange) then
+      fluxes%carbon_content_lrunoff(i,j) = US%kg_m2s_to_RZ_T * IOB%runoff_carbon(i-i0,j-j0) * G%mask2dT(i,j)
+      if (CS%check_no_land_fluxes) &
+        call check_mask_val_consistency(IOB%runoff_carbon(i-i0,j-j0), G%mask2dT(i,j), i, j, 'runoff_carbon', G)
     endif
 
     if (associated(IOB%calving_hflx)) then
@@ -1198,7 +1238,7 @@ subroutine apply_flux_adjustments(G, US, CS, Time, fluxes)
   integer :: isc, iec, jsc, jec, i, j
   logical :: overrode_h
 
-  isc = G%isc; iec = G%iec ; jsc = G%jsc; jec = G%jec
+  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
 
   call data_override(G%Domain, 'hflx_adj', temp_at_h, Time, override=overrode_h, &
                      scale=US%W_m2_to_QRZ_T)
@@ -1248,7 +1288,7 @@ subroutine apply_force_adjustments(G, US, CS, Time, forces)
   real :: zonal_tau, merid_tau ! True zonal and meridional wind stresses [R Z L T-2 ~> Pa]
   logical :: overrode_x, overrode_y
 
-  isc = G%isc; iec = G%iec ; jsc = G%jsc; jec = G%jec
+  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
 
   tempx_at_h(:,:) = 0.0 ; tempy_at_h(:,:) = 0.0
   ! Either reads data or leaves contents unchanged
@@ -1341,13 +1381,14 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   logical :: explicit_bug, explicit_fix ! These indicate which parameters are set explicitly.
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   type(time_type)    :: Time_frc
-  type(directories)  :: dirs      ! A structure containing relevant directory paths and input filenames.
+ type(directories)  :: dirs      ! A structure containing relevant directory paths and input filenames.
   character(len=200) :: TideAmp_file, gust_file, salt_file, temp_file ! Input file names.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_surface_forcing"  ! This module's name.
   character(len=48)  :: stagger
-  character(len=48)  :: flnam
+  character(len=80)  :: varnam
+  character(len=240) :: flnam
   character(len=240) :: basin_file
   integer :: i, j, isd, ied, jsd, jed
 
@@ -1387,7 +1428,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
-                 "properties, or with BOUSSINSEQ false to convert some "//&
+                 "properties, or with BOUSSINESQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R) ! (, do_not_log=CS%nonBous)
   call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
@@ -1451,11 +1492,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                  "due to internal corrections.", default=.false.)
 
   if (present(wind_stagger)) then
-        if (wind_stagger == AGRID)    then ; stagger = 'AGRID'
+    if     (wind_stagger == AGRID)    then ; stagger = 'AGRID'
     elseif (wind_stagger == BGRID_NE) then ; stagger = 'BGRID_NE'
     elseif (wind_stagger == CGRID_NE) then ; stagger = 'CGRID_NE'
     else ; stagger = 'UNKNOWN' ; call MOM_error(FATAL,"surface_forcing_init: WIND_STAGGER = "// &
-                      trim(stagger)// "is invalid."); endif
+                      trim(stagger)// "is invalid.") ; endif
     call log_param(param_file, mdl, "WIND_STAGGER", stagger, &
                    "The staggering of the input wind stress field "//&
                    "from the coupler that is actually used.")
@@ -1465,7 +1506,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                    "A case-insensitive character string to indicate the "//&
                    "staggering of the input wind stress field.  Valid "//&
                    "values are 'A', 'B', or 'C'.", default="C")
-        if (uppercase(stagger(1:1)) == 'A') then ; CS%wind_stagger = AGRID
+    if     (uppercase(stagger(1:1)) == 'A') then ; CS%wind_stagger = AGRID
     elseif (uppercase(stagger(1:1)) == 'B') then ; CS%wind_stagger = BGRID_NE
     elseif (uppercase(stagger(1:1)) == 'C') then ; CS%wind_stagger = CGRID_NE
     else ; call MOM_error(FATAL,"surface_forcing_init: WIND_STAGGER = "// &
@@ -1502,9 +1543,30 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
     call get_param(param_file, mdl, "SRESTORE_AS_SFLUX", CS%salt_restore_as_sflux, &
                  "If true, the restoring of salinity is applied as a salt "//&
                  "flux instead of as a freshwater flux.", default=.false.)
-    call get_param(param_file, mdl, "MAX_DELTA_SRESTORE", CS%max_delta_srestore, &
-                 "The maximum salinity difference used in restoring terms.", &
-                 units="PSU or g kg-1", default=999.0, scale=US%ppt_to_S)
+   call get_param(param_file, mdl, "MAX_DELTA_SRESTORE_FROM_FILE", CS%max_delta_srestore_file, &
+                 "If true, read a file MAX_DELTA_SRESTORE_FILE containing the field "//&
+                 "MAX_DELTA_SRESTORE_VARNAME for the maximum salinity difference used in "//&
+                 "restoring terms.  Where the field's value is negative turn off restoring when "//&
+                 "the salinity difference magnitude exceeds abs(value).", default=.false.)
+    if (.not. CS%max_delta_srestore_file) then
+      call get_param(param_file, mdl, "MAX_DELTA_SRESTORE", CS%max_delta_srestore, &
+                   "The maximum salinity difference used in restoring terms.", &
+                   units="PSU or g kg-1", default=999.0, scale=US%ppt_to_S)
+    else
+      call get_param(param_file, mdl, "MAX_DELTA_SRESTORE_FILE", flnam, &
+                   "The path to the file containing the maximum salinity difference field.", &
+                   default="max_delta_srestore.nc")
+      flnam = trim(CS%inputdir) // trim(flnam)
+      call get_param(param_file, mdl, "MAX_DELTA_SRESTORE_VARNAME", varnam, &
+                   "The name of the maximum salinity difference variable in the input file.", &
+                   default="max_delta_srestore")
+      CS%max_delta_srestore = 999.0
+      call safe_alloc_ptr(CS%max_delta_srestore_2d,isd,ied,jsd,jed)
+      call MOM_read_data(flnam,varnam, CS%max_delta_srestore_2d, G%domain, timelevel=1)
+    endif
+    call get_param(param_file, mdl, "MIN_RATIO_SRESTORE", CS%min_ratio_srestore, &
+                 "Turn off MAX_DELTA_SRESTORE where the ratio of SSS to restoring salinity "//&
+                 "is less than this value.", units="nondim", default=0.0)
     call get_param(param_file, mdl, "MASK_SRESTORE_UNDER_ICE", CS%mask_srestore_under_ice, &
                  "If true, disables SSS restoring under sea-ice based on a frazil "//&
                  "criteria (SST<=Tf). Only used when RESTORE_SALINITY is True.",      &
@@ -1612,13 +1674,13 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
     utide_2d(:,:) = 0.0
     call read_netCDF_data(TideAmp_file, 'tideamp', utide_2d, G%Domain, &
         rescale=US%m_to_Z*US%T_to_s)
-    do j=jsd, jed; do i=isd, ied
+    do j=jsd,jed ; do i=isd,ied
       utide = utide_2d(i,j)
       CS%BBL_tidal_dis(i,j) = G%mask2dT(i,j)*rho_TKE_tidal*CS%cd_tides*(utide*utide*utide)
       CS%ustar_tidal(i,j) = sqrt(CS%cd_tides)*utide
     enddo ; enddo
   else
-    do j=jsd,jed; do i=isd,ied
+    do j=jsd,jed ; do i=isd,ied
       utide = CS%utide
       CS%BBL_tidal_dis(i,j) = rho_TKE_tidal*CS%cd_tides*(utide*utide*utide)
       CS%ustar_tidal(i,j) = sqrt(CS%cd_tides)*utide
@@ -1708,8 +1770,12 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   call get_param(param_file, mdl, "ALLOW_ICEBERG_FLUX_DIAGNOSTICS", iceberg_flux_diags, &
                  "If true, makes available diagnostics of fluxes from icebergs "//&
                  "as seen by MOM6.", default=.false.)
+  call get_param(param_file, mdl, "ALLOW_CARBON_FLUX_EXCHANGE", CS%allow_carbon_flux_exchange, &
+                 "If true, makes available fluxes and diagnostics of carbon in runoff "//&
+                 "within MOM6.", default=.false.)
   call register_forcing_type_diags(Time, diag, US, CS%use_temperature, CS%handles, &
-                                   use_berg_fluxes=iceberg_flux_diags)
+                                   use_berg_fluxes=iceberg_flux_diags, &
+                                   use_carbon_runoff=CS%allow_carbon_flux_exchange)
 
   call get_param(param_file, mdl, "ALLOW_FLUX_ADJUSTMENTS", CS%allow_flux_adjustments, &
                  "If true, allows flux adjustments to specified via the "//&
@@ -1725,7 +1791,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   if (CS%restore_salt) then
     salt_file = trim(CS%inputdir) // trim(CS%salt_restore_file)
     CS%srestore_handle = init_external_field(salt_file, CS%salt_restore_var_name, MOM_domain=G%Domain)
-    call safe_alloc_ptr(CS%srestore_mask,isd,ied,jsd,jed); CS%srestore_mask(:,:) = 1.0
+    call safe_alloc_ptr(CS%srestore_mask,isd,ied,jsd,jed) ; CS%srestore_mask(:,:) = 1.0
     if (CS%mask_srestore) then ! read a 2-d file containing a mask for restoring fluxes
       flnam = trim(CS%inputdir) // 'salt_restore_mask.nc'
       call MOM_read_data(flnam,'mask', CS%srestore_mask, G%domain, timelevel=1)
@@ -1735,7 +1801,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   if (CS%restore_temp) then
     temp_file = trim(CS%inputdir) // trim(CS%temp_restore_file)
     CS%trestore_handle = init_external_field(temp_file, CS%temp_restore_var_name, MOM_domain=G%Domain)
-    call safe_alloc_ptr(CS%trestore_mask,isd,ied,jsd,jed); CS%trestore_mask(:,:) = 1.0
+    call safe_alloc_ptr(CS%trestore_mask,isd,ied,jsd,jed) ; CS%trestore_mask(:,:) = 1.0
     if (CS%mask_trestore) then  ! read a 2-d file containing a mask for restoring fluxes
       flnam = trim(CS%inputdir) // 'temp_restore_mask.nc'
       call MOM_read_data(flnam, 'mask', CS%trestore_mask, G%domain, timelevel=1)

@@ -16,3 +16,8 @@ xml
 # Citation output
 bib*.aux
 citelist.doc*
+
+
+# Python bytecode cache from the vendored _ext/autodoc_doxygen extension
+__pycache__
+*.pyc

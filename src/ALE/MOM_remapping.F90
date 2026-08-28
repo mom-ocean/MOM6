@@ -38,6 +38,7 @@ use Recon1d_PPM_CWK, only : PPM_CWK
 use Recon1d_EPPM_CWK, only : EPPM_CWK
 use Recon1d_PPM_H4_2019, only : PPM_H4_2019
 use Recon1d_PPM_H4_2018, only : PPM_H4_2018
+use Recon1d_PLM_WLS, only : PLM_WLS
 
 implicit none ; private
 
@@ -439,7 +440,7 @@ subroutine build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, &
   integer :: k, n
   logical :: deb ! Do debugging
 
-  deb=.false.; if (present(debug)) deb=debug
+  deb = .false. ; if (present(debug)) deb = debug
 
   h_neg_edge = h_neglect ; if (present(h_neglect_edge)) h_neg_edge = h_neglect_edge
 
@@ -1795,6 +1796,9 @@ subroutine setReconstructionType(string,CS)
     case ("C_PPM_H4_2018")
       allocate( PPM_H4_2018 :: CS%reconstruction )
       CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_PLM_WLS")
+      allocate( PLM_WLS :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
     case default
       call MOM_error(FATAL, "setReconstructionType: "//&
        "Unrecognized choice for REMAPPING_SCHEME ("//trim(string)//").")
@@ -2114,6 +2118,7 @@ logical function remapping_unit_tests(verbose, num_comp_samp)
   type(PPM_hybgen) :: PPM_hybgen_instance
   type(PPM_CWK) :: PPM_CWK_instance
   type(EPPM_CWK) :: EPPM_CWK_instance
+  type(PLM_WLS) :: PLM_WLS_instance
 
   call test%set( verbose=verbose ) ! Sets the verbosity flag in test
 ! call test%set( stop_instantly=.true. ) ! While debugging
@@ -2743,6 +2748,7 @@ logical function remapping_unit_tests(verbose, num_comp_samp)
   call test%test( PPM_CW_instance%unit_tests(verbose, test%stdout, test%stderr), 'PPM_CW unit test')
   call test%test( PPM_CWK_instance%unit_tests(verbose, test%stdout, test%stderr), 'PPM_CWK unit test')
   call test%test( EPPM_CWK_instance%unit_tests(verbose, test%stdout, test%stderr), 'EPPM_CWK unit test')
+  call test%test( PLM_WLS_instance%unit_tests(verbose, test%stdout, test%stderr), 'PLM_WLS unit test')
 
   ! Randomized, brute force tests
   ntests = 3000
@@ -2772,6 +2778,7 @@ logical function remapping_unit_tests(verbose, num_comp_samp)
   call test_recon_consistency(test, 'C_PPM_CW', n0, ntests, h_neglect)
   call test_recon_consistency(test, 'C_PPM_CWK', n0, ntests, h_neglect)
   call test_recon_consistency(test, 'C_EPPM_CWK', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_PLM_WLS', n0, ntests, h_neglect)
 
   call test_preserve_uniform(test, 'PCM', n0, ntests, h_neglect)
   call test_preserve_uniform(test, 'C_PCM', n0, ntests, h_neglect)
@@ -2798,6 +2805,7 @@ logical function remapping_unit_tests(verbose, num_comp_samp)
   call test_preserve_uniform(test, 'C_PPM_CW', n0, ntests, h_neglect)
   call test_preserve_uniform(test, 'C_PPM_CWK', n0, ntests, h_neglect)
   call test_preserve_uniform(test, 'C_EPPM_CWK', n0, ntests, h_neglect)
+  call test_preserve_uniform(test, 'C_PLM_WLS', n0, ntests, h_neglect)
 
   call test_unchanged_grid(test, 'C_PCM', n0, ntests, h_neglect)
   call test_unchanged_grid(test, 'C_PLM_CW', n0, ntests, h_neglect)
@@ -2809,6 +2817,7 @@ logical function remapping_unit_tests(verbose, num_comp_samp)
   call test_unchanged_grid(test, 'C_PPM_CW', n0, ntests, h_neglect)
   call test_unchanged_grid(test, 'C_PPM_CWK', n0, ntests, h_neglect)
   call test_unchanged_grid(test, 'C_EPPM_CWK', n0, ntests, h_neglect)
+  call test_unchanged_grid(test, 'C_PLM_WLS', n0, ntests, h_neglect)
 
   ! Check that remapping to the exact same grid leaves values unchanged
   allocate( h0(8), u0(8) )

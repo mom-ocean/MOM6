@@ -14,7 +14,7 @@ use MOM_open_boundary,   only : ocean_OBC_type, OBC_NONE
 use MOM_open_boundary,   only : OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_DIRECTION_E
 use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
 use MOM_open_boundary,   only : OBC_registry_type, register_OBC
-use MOM_time_manager,    only : time_type, time_type_to_real
+use MOM_time_manager,    only : time_type, time_to_real
 use MOM_tracer_registry, only : tracer_registry_type, tracer_name_lookup
 use MOM_tracer_registry, only : tracer_type
 use MOM_unit_scaling,    only : unit_scale_type
@@ -171,7 +171,7 @@ subroutine dyed_channel_update_flow(OBC, CS, G, GV, US, h, Time)
   if (.not.associated(OBC)) call MOM_error(FATAL, 'dyed_channel_initialization.F90: '// &
         'dyed_channel_update_flow() was called but OBC type was not initialized!')
 
-  time_sec = US%s_to_T * time_type_to_real(Time)
+  time_sec = time_to_real(Time, scale=US%s_to_T)
   PI = 4.0*atan(1.0)
 
   turns = modulo(G%HI%turns, 4)

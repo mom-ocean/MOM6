@@ -233,9 +233,11 @@ ENERGYSAVEDAYS = 1.0
 
 DIAG_AS_CHKSUM = True
 DEBUG = True
-GRID_ROTATION_ANGLE_BUGS = True !   [Boolean] default = True
-USE_GM_WORK_BUG = True          !   [Boolean] default = True
+
 USE_LAND_MASK_FOR_HVISC = False !   [Boolean] default = False
 GUST_CONST = 0.02               !   [Pa] default = 0.02
-FIX_USTAR_GUSTLESS_BUG = False  !   [Boolean] default = False
 
+! These are no longer necessary, as they are using the default value.
+GRID_ROTATION_ANGLE_BUGS = False !   [Boolean] default = False
+USE_GM_WORK_BUG = False         !   [Boolean] default = False
+USTAR_GUSTLESS_BUG = False      !   [Boolean] default = False

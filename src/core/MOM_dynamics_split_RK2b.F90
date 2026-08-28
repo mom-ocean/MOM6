@@ -37,7 +37,7 @@ use MOM_restart,           only : register_restart_field, register_restart_pair
 use MOM_restart,           only : query_initialized, set_initialized, save_restart
 use MOM_restart,           only : only_read_from_restarts
 use MOM_restart,           only : restart_init, is_new_run, MOM_restart_CS
-use MOM_time_manager,      only : time_type, time_type_to_real, operator(+)
+use MOM_time_manager,      only : time_type, real_to_time, operator(+)
 use MOM_time_manager,      only : operator(-), operator(>), operator(*), operator(/)
 
 use MOM_ALE,                   only : ALE_CS, ALE_remap_velocities
@@ -61,7 +61,6 @@ use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, radiation_open_bdry_conds
 use MOM_open_boundary,         only : open_boundary_zero_normal_flow, open_boundary_query
 use MOM_open_boundary,         only : open_boundary_test_extern_h, update_OBC_ramp
-use MOM_open_boundary,         only : copy_thickness_reservoirs
 use MOM_open_boundary,         only : update_segment_thickness_reservoirs
 use MOM_PressureForce,         only : PressureForce, PressureForce_CS
 use MOM_PressureForce,         only : PressureForce_init
@@ -371,10 +370,10 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
                                 ! saved for use in the Flather open boundary condition code [L T-1 ~> m s-1]
 
   ! GMM, TODO: make these allocatable?
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: uold ! u-velocity before vert_visc is applied, for fpmix
-                                                     !                                      [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vold ! v-velocity before vert_visc is applied, for fpmix
-                                                     !                                      [L T-1 ~> m s-1]
+  ! real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: uold ! u-velocity before vert_visc is applied, for fpmix
+  !                                                    !                                      [L T-1 ~> m s-1]
+  ! real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vold ! v-velocity before vert_visc is applied, for fpmix
+  !                                                    !                                      [L T-1 ~> m s-1]
   real :: pres_to_eta ! A factor that converts pressures to the units of eta
                       ! [H T2 R-1 L-2 ~> m Pa-1 or kg m-2 Pa-1]
   real, pointer, dimension(:,:) :: &
@@ -394,7 +393,7 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
     uh_ptr => NULL(), &  ! A pointer to a zonal volume or mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
     vh_ptr => NULL()     ! A pointer to a meridional volume or mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
 
-  real, dimension(SZI_(G),SZJ_(G)) :: hbl       ! Boundary layer depth from Cvmix [H ~> m or kg m-2]
+  ! real, dimension(SZI_(G),SZJ_(G)) :: hbl       ! Boundary layer depth from Cvmix [H ~> m or kg m-2]
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s].
   real :: Idt_bc    ! Inverse of the baroclinic timestep [T-1 ~> s-1]
   logical :: dyn_p_surf
@@ -671,9 +670,6 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   call cpu_clock_end(id_clock_mom_update)
   call do_group_pass(CS%pass_uv_inst, G%Domain, clock=id_clock_pass)
 
-  if (associated(CS%OBC)) &
-    call copy_thickness_reservoirs(CS%OBC, G, GV)
-
 ! u_accel_bt = layer accelerations due to barotropic solver
   call cpu_clock_begin(id_clock_continuity)
   call continuity(u_inst, v_inst, h, hp, uh_in, vh_in, dt, G, GV, US, CS%continuity_CSp, CS%OBC, pbv, &
@@ -690,11 +686,13 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   call cpu_clock_begin(id_clock_btstep)
   if (calc_dtbt) then
     if (CS%dtbt_use_bt_cont .and. associated(CS%BT_cont)) then
-      call set_dtbt(G, GV, US, CS%barotropic_CSp, CS%pbce, BT_cont=CS%BT_cont)
+      call set_dtbt(G, GV, US, CS%barotropic_CSp, CS%pbce, BT_cont=CS%BT_cont, &
+                    Time=Time_local - real_to_time(dt, unscale=US%T_to_s))
     else
       ! In the following call, eta is only used when NONLINEAR_BT_CONTINUITY is True. Otherwise, dtbt is effectively
       ! calculated with eta=0. Note that NONLINEAR_BT_CONTINUITY is False if BT_CONT is used, which is the default.
-      call set_dtbt(G, GV, US, CS%barotropic_CSp, CS%pbce, eta=eta)
+      call set_dtbt(G, GV, US, CS%barotropic_CSp, CS%pbce, eta=eta, &
+                    Time=Time_local - real_to_time(dt, unscale=US%T_to_s))
     endif
   endif
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
@@ -1188,11 +1186,11 @@ subroutine register_restarts_dyn_split_RK2b(HI, GV, US, param_file, CS, restart_
   real, dimension(SZI_(HI),SZJB_(HI),SZK_(GV)), &
                          target, intent(inout) :: vh !< merid volume or mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
 
-  character(len=40) :: mdl = "MOM_dynamics_split_RK2b" ! This module's name.
   type(vardesc)     :: vd(2)
   character(len=48) :: thickness_units, flux_units
 
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
+  character(len=40) :: mdl = "MOM_dynamics_split_RK2b" ! This module's name.
 
   isd  = HI%isd  ; ied  = HI%ied  ; jsd  = HI%jsd  ; jed  = HI%jed ; nz = GV%ke
   IsdB = HI%IsdB ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
@@ -1216,6 +1214,9 @@ subroutine register_restarts_dyn_split_RK2b(HI, GV, US, param_file, CS, restart_
   ALLOC_(CS%du_av_inst(IsdB:IedB,jsd:jed)) ; CS%du_av_inst(:,:) = 0.0
   ALLOC_(CS%dv_av_inst(isd:ied,JsdB:JedB)) ; CS%dv_av_inst(:,:) = 0.0
 
+  allocate(CS%taux_bot(IsdB:IedB,jsd:jed), source = 0.0)
+  allocate(CS%tauy_bot(isd:ied,JsdB:JedB), source = 0.0)
+
   ALLOC_(CS%eta(isd:ied,jsd:jed))       ; CS%eta(:,:)    = 0.0
 
   thickness_units = get_thickness_units(GV)
@@ -1238,6 +1239,18 @@ subroutine register_restarts_dyn_split_RK2b(HI, GV, US, param_file, CS, restart_
                              conversion=US%L_T_to_m_s)
 
   call register_barotropic_restarts(HI, GV, US, param_file, CS%barotropic_CSp, restart_CS)
+
+  call get_param(param_file, mdl, "SPLIT_BOTTOM_STRESS", CS%split_bottom_stress, &
+                 "If true, provide the bottom stress calculated by the "//&
+                 "vertical viscosity to the barotropic solver.", default=.false.,&
+                 do_not_log=.true.)
+
+  if (CS%split_bottom_stress) then
+    vd(1) = var_desc("taux_bot", "kg m-1 s-2", "Zonal bottom stress", 'u', '1')
+    vd(2) = var_desc("tauy_bot", "kg m-1 s-2", "Meridional bottom stress", 'v', '1')
+    call register_restart_pair(CS%taux_bot, CS%tauy_bot, vd(1), vd(2), .false., restart_CS, &
+                             conversion=US%RLZ_T2_to_Pa)
+  endif
 
 end subroutine register_restarts_dyn_split_RK2b
 
@@ -1322,13 +1335,11 @@ subroutine initialize_dyn_split_RK2b(u, v, h, tv, uh, vh, eta, Time, G, GV, US, 
                                                                 !! solver and Coriolis scheme.
 
   ! local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_tmp ! A temporary copy of the layer thicknesses [H ~> m or kg m-2]
   character(len=40) :: mdl = "MOM_dynamics_split_RK2b" ! This module's name.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=48) :: thickness_units, flux_units, eta_rest_name
   logical :: debug_truncations
-  logical :: read_uv, read_h2
   logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
                           ! recreate the bugs, or if false bugs are only used if actively selected.
   logical :: visc_rem_bug ! Stores the value of runtime paramter VISC_REM_BUG.
@@ -1364,7 +1375,7 @@ subroutine initialize_dyn_split_RK2b(u, v, h, tv, uh, vh, eta, Time, G, GV, US, 
   if (nc<=0) CS%use_HA = .false.
   call get_param(param_file, mdl, "BE", CS%be, &
                  "If SPLIT is true, BE determines the relative weighting "//&
-                 "of a  2nd-order Runga-Kutta baroclinic time stepping "//&
+                 "of a 2nd-order Runga-Kutta baroclinic time stepping "//&
                  "scheme (0.5) and a backward Euler scheme (1) that is "//&
                  "used for the Coriolis and inertial terms.  BE may be "//&
                  "from 0.5 to 1, but instability may occur near 0.5. "//&
@@ -1419,9 +1430,6 @@ subroutine initialize_dyn_split_RK2b(u, v, h, tv, uh, vh, eta, Time, G, GV, US, 
                  "continuity() and btstep() calls in the corrector step. Default of this flag "//&
                  "is set by VISC_REM_BUG", default=visc_rem_bug)
 
-
-  allocate(CS%taux_bot(IsdB:IedB,jsd:jed), source=0.0)
-  allocate(CS%tauy_bot(isd:ied,JsdB:JedB), source=0.0)
 
   ALLOC_(CS%uhbt(IsdB:IedB,jsd:jed))          ; CS%uhbt(:,:)         = 0.0
   ALLOC_(CS%vhbt(isd:ied,JsdB:JedB))          ; CS%vhbt(:,:)         = 0.0

@@ -76,7 +76,7 @@ type, public :: verticalGrid_type
   real :: H_to_m        !< A constant that translates distances in the units of thickness
                         !! to m [m H-1 ~> 1 or m3 kg-1].
   real :: H_to_Pa       !< A constant that translates the units of thickness to pressure
-                        !! [Pa H-1 = kg m-1 s-2 H-1 ~> kg m-2 s-2 or m s-2].
+                        !! [Pa H-1 ~> kg m-2 s-2 or m s-2].
   real :: H_to_Z        !< A constant that translates thickness units to the units of
                         !! depth [Z H-1 ~> 1 or m3 kg-1].
   real :: Z_to_H        !< A constant that translates depth units to thickness units
@@ -133,7 +133,7 @@ subroutine verticalGridInit( param_file, GV, US )
   call get_param(param_file, mdl, "RHO_0", GV%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
-                 "properties, or with BOUSSINSEQ false to convert some "//&
+                 "properties, or with BOUSSINESQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "BOUSSINESQ", GV%Boussinesq, &

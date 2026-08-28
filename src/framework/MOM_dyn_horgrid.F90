@@ -94,6 +94,7 @@ type, public :: dyn_horgrid_type
     geoLonCu, &  !< The geographic longitude at u points [degrees of longitude] or [m].
     dxCu, &      !< dxCu is delta x at u points [L ~> m].
     IdxCu, &     !< 1/dxCu [L-1 ~> m-1].
+    IdxCu_OBCmask, & !< 1/dxCu or 0 at boundary or OBC points [L-1 ~> m-1].
     dyCu, &      !< dyCu is delta y at u points [L ~> m].
     IdyCu, &     !< 1/dyCu [L-1 ~> m-1].
     dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell [L ~> m].
@@ -109,6 +110,7 @@ type, public :: dyn_horgrid_type
     IdxCv, &     !< 1/dxCv [L-1 ~> m-1].
     dyCv, &      !< dyCv is delta y at v points [L ~> m].
     IdyCv, &     !< 1/dyCv [L-1 ~> m-1].
+    IdyCv_OBCmask, & !< 1/dxCv or 0 at boundary or OBC points [L-1 ~> m-1].
     dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell [L ~> m].
     IareaCv, &   !< The masked inverse areas of v-grid cells [L-2 ~> m-2].
     areaCv       !< The areas of the v-grid cells [L2 ~> m2].
@@ -159,7 +161,16 @@ type, public :: dyn_horgrid_type
     y_ax_unit_short     !< A short description of the y-axis units for documenting parameter units
 
   real, allocatable, dimension(:,:) :: &
-    bathyT        !< Ocean bottom depth at tracer points, in depth units [Z ~> m].
+    bathyT        !< Ocean bottom depth, referenced to a zero reference height at tracer points.
+                  !! bathyT is in depth units and positive *below* the reference height [Z ~> m].
+  real, allocatable, dimension(:,:) :: &
+    meanSL        !< Spatially varying time mean sea level, referenced to a zero reference height
+                  !! at tracer points. meanSL is in height units and positive *above* zero. It is used
+                  !! a) as the height where p = p_atm or zero;
+                  !! b) to calculate time mean thickness of the water column, where
+                  !!    mean thickness = max(meanSL + bathyT, 0.0).
+                  !! meanSL is 2D for the consideration of a domain with spatically varying mean
+                  !! height, e.g. the Great Lakes system [Z ~> m].
 
   logical :: bathymetry_at_vel  !< If true, there are separate values for the
                   !! basin depths at velocity points.  Otherwise the effects of
@@ -244,6 +255,7 @@ subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
   allocate(G%dxBu(IsdB:IedB,JsdB:JedB), source=0.0)
   allocate(G%IdxT(isd:ied,jsd:jed), source=0.0)
   allocate(G%IdxCu(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%IdxCu_OBCmask(IsdB:IedB,jsd:jed), source=0.0)
   allocate(G%IdxCv(isd:ied,JsdB:JedB), source=0.0)
   allocate(G%IdxBu(IsdB:IedB,JsdB:JedB), source=0.0)
 
@@ -254,6 +266,7 @@ subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
   allocate(G%IdyT(isd:ied,jsd:jed), source=0.0)
   allocate(G%IdyCu(IsdB:IedB,jsd:jed), source=0.0)
   allocate(G%IdyCv(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%IdyCv_OBCmask(isd:ied,JsdB:JedB), source=0.0)
   allocate(G%IdyBu(IsdB:IedB,JsdB:JedB), source=0.0)
 
   allocate(G%areaT(isd:ied,jsd:jed), source=0.0)
@@ -292,8 +305,8 @@ subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
   allocate(G%porous_DmaxV(isd:ied,JsdB:JedB), source=0.0)
   allocate(G%porous_DavgV(isd:ied,JsdB:JedB), source=0.0)
 
-
   allocate(G%bathyT(isd:ied, jsd:jed), source=0.0)
+  allocate(G%meanSL(isd:ied, jsd:jed), source=0.0)
   allocate(G%CoriolisBu(IsdB:IedB, JsdB:JedB), source=0.0)
   allocate(G%Coriolis2Bu(IsdB:IedB, JsdB:JedB), source=0.0)
   allocate(G%dF_dx(isd:ied, jsd:jed), source=0.0)
@@ -335,6 +348,7 @@ subroutine rotate_dyn_horgrid(G_in, G, US, turns)
   call rotate_array_pair(G_in%dxT, G_in%dyT, turns, G%dxT, G%dyT)
   call rotate_array(G_in%areaT, turns, G%areaT)
   call rotate_array(G_in%bathyT, turns, G%bathyT)
+  call rotate_array(G_in%meanSL, turns, G%meanSL)
 
   call rotate_array_pair(G_in%df_dx, G_in%df_dy, turns, G%df_dx, G%df_dy)
   call rotate_array(G_in%sin_rot, turns, G%sin_rot)
@@ -437,6 +451,7 @@ subroutine rescale_dyn_horgrid_bathymetry(G, m_in_new_units)
   rescale = 1.0 / m_in_new_units
   do j=jsd,jed ; do i=isd,ied
     G%bathyT(i,j) = rescale*G%bathyT(i,j)
+    G%meanSL(i,j) = rescale*G%meanSL(i,j)
   enddo ; enddo
   if (G%bathymetry_at_vel) then ; do j=jsd,jed ; do I=IsdB,IedB
     G%Dblock_u(I,j) = rescale*G%Dblock_u(I,j) ; G%Dopen_u(I,j) = rescale*G%Dopen_u(I,j)
@@ -473,6 +488,7 @@ subroutine set_derived_dyn_horgrid(G, US)
     if (G%dyCu(I,j) < 0.0) G%dyCu(I,j) = 0.0
     G%IdxCu(I,j) = Adcroft_reciprocal(G%dxCu(I,j))
     G%IdyCu(I,j) = Adcroft_reciprocal(G%dyCu(I,j))
+    G%IdxCu_OBCmask(I,j) = G%OBCmaskCu(I,j) * G%IdxCu(I,j) ! This may be reset when the masks are set.
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
@@ -480,6 +496,7 @@ subroutine set_derived_dyn_horgrid(G, US)
     if (G%dyCv(i,J) < 0.0) G%dyCv(i,J) = 0.0
     G%IdxCv(i,J) = Adcroft_reciprocal(G%dxCv(i,J))
     G%IdyCv(i,J) = Adcroft_reciprocal(G%dyCv(i,J))
+    G%IdyCv_OBCmask(i,J) = G%OBCmaskCv(i,J) * G%IdyCv(i,J) ! This may be reset when the masks are set.
   enddo ; enddo
 
   do J=JsdB,JedB ; do I=IsdB,IedB
@@ -497,7 +514,7 @@ end subroutine set_derived_dyn_horgrid
 
 !> Adcroft_reciprocal(x) = 1/x for |x|>0 or 0 for x=0.
 function Adcroft_reciprocal(val) result(I_val)
-  real, intent(in) :: val  !< The value being inverted in abitrary units [A ~> a]
+  real, intent(in) :: val  !< The value being inverted in arbitrary units [A ~> a]
   real :: I_val            !< The Adcroft reciprocal of val [A-1 ~> a-1].
 
   I_val = 0.0 ; if (val /= 0.0) I_val = 1.0/val
@@ -521,10 +538,11 @@ subroutine destroy_dyn_horgrid(G)
   deallocate(G%areaT)  ; deallocate(G%IareaT)
   deallocate(G%areaBu) ; deallocate(G%IareaBu)
   deallocate(G%areaCu) ; deallocate(G%IareaCu)
-  deallocate(G%areaCv)  ; deallocate(G%IareaCv)
+  deallocate(G%areaCv) ; deallocate(G%IareaCv)
 
   deallocate(G%mask2dT)  ; deallocate(G%mask2dCu) ; deallocate(G%OBCmaskCu)
   deallocate(G%mask2dCv) ; deallocate(G%OBCmaskCv) ; deallocate(G%mask2dBu)
+  deallocate(G%IdxCu_OBCmask) ; deallocate(G%IdyCv_OBCmask)
 
   deallocate(G%geoLatT)  ; deallocate(G%geoLatCu)
   deallocate(G%geoLatCv) ; deallocate(G%geoLatBu)
@@ -536,9 +554,10 @@ subroutine destroy_dyn_horgrid(G)
   deallocate(G%porous_DminU) ; deallocate(G%porous_DmaxU) ; deallocate(G%porous_DavgU)
   deallocate(G%porous_DminV) ; deallocate(G%porous_DmaxV) ; deallocate(G%porous_DavgV)
 
-  deallocate(G%bathyT)  ; deallocate(G%CoriolisBu) ; deallocate(G%Coriolis2Bu)
-  deallocate(G%dF_dx)   ; deallocate(G%dF_dy)
-  deallocate(G%sin_rot) ; deallocate(G%cos_rot)
+  deallocate(G%bathyT)     ; deallocate(G%meanSL)
+  deallocate(G%CoriolisBu) ; deallocate(G%Coriolis2Bu)
+  deallocate(G%dF_dx)      ; deallocate(G%dF_dy)
+  deallocate(G%sin_rot)    ; deallocate(G%cos_rot)
 
   if (allocated(G%Dblock_u)) deallocate(G%Dblock_u)
   if (allocated(G%Dopen_u)) deallocate(G%Dopen_u)

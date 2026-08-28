@@ -150,7 +150,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     enddo
     ke = k
     if (ke < ks) then
-      ks = 1; ke = nz; write(file,'("U: Unable to set ks & ke.")')
+      ks = 1 ; ke = nz ; write(file,'("U: Unable to set ks & ke.")')
     endif
     if (CS%full_column) then
       ks = 1 ; ke = nz
@@ -490,7 +490,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     enddo
     ke = k
     if (ke < ks) then
-      ks = 1; ke = nz; write(file,'("V: Unable to set ks & ke.")')
+      ks = 1 ; ke = nz ; write(file,'("V: Unable to set ks & ke.")')
     endif
     if (CS%full_column) then
       ks = 1 ; ke = nz
@@ -771,8 +771,8 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
   CS%T => MIS%T ; CS%S => MIS%S
   CS%u_accel_bt => MIS%u_accel_bt ; CS%v_accel_bt => MIS%v_accel_bt
   CS%u_prev => MIS%u_prev ; CS%v_prev => MIS%v_prev
-  CS%u_av => MIS%u_av; if (.not.associated(MIS%u_av)) CS%u_av => MIS%u(:,:,:)
-  CS%v_av => MIS%v_av; if (.not.associated(MIS%v_av)) CS%v_av => MIS%v(:,:,:)
+  CS%u_av => MIS%u_av ; if (.not.associated(MIS%u_av)) CS%u_av => MIS%u(:,:,:)
+  CS%v_av => MIS%v_av ; if (.not.associated(MIS%v_av)) CS%v_av => MIS%v(:,:,:)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "", debugging=.true.)

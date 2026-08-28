@@ -56,7 +56,7 @@ type, public:: stochastic_CS
                               !! dissipation rate used to set the amplitude of SKEBS [nondim]
   real    :: skeb_frict_coef  !< If skeb_use_frict is true, then skeb_gm_coef * GM_work is added to the
                               !! dissipation rate used to set the amplitude of SKEBS [nondim]
-  real, allocatable :: skeb_diss(:,:,:) !< Dissipation rate used to set amplitude of SKEBS [L2 T-3 ~> m2 s-2]
+  real, allocatable :: skeb_diss(:,:,:) !< Dissipation rate used to set amplitude of SKEBS [L2 T-3 ~> m2 s-3]
                                         !! Index into this at h points.
   integer :: answer_date      !< The vintage of the order of arithmetic in the stochastics
                               !! calculations.  Values below 20250701 recover the answers from
@@ -134,7 +134,7 @@ subroutine stochastics_init(dt, grid, GV, US, CS, param_file, diag, Time)
   ! get number of processors and PE list for stochastic physics initialization
   call get_param(param_file, mdl, "DO_SPPT", CS%do_sppt, &
                  "If true, then stochastically perturb the thermodynamic "//&
-                 "tendencies of T,S, amd h.  Amplitude and correlations are "//&
+                 "tendencies of T,S, and h.  Amplitude and correlations are "//&
                  "controlled by the nam_stoch namelist in the UFS model only.", &
                  default=.false.)
   call get_param(param_file, mdl, "DO_SKEB", CS%do_skeb, &

@@ -1,18 +1,16 @@
-git+https://github.com/jr3cermak/sphinx.git@v3.2.1mom6.4
-git+https://github.com/jr3cermak/sphinxcontrib-autodoc_doxygen.git@0.7.13#egg=sphinxcontrib-autodoc_doxygen
-git+https://github.com/jr3cermak/sphinx-fortran.git@1.2.2#egg=sphinx-fortran
-git+https://github.com/jr3cermak/flint.git@0.0.1#egg=flint
+sphinx>=8,<9
 sphinx-rtd-theme
 sphinxcontrib-bibtex
-# requirements.txt not working from sphinx-fortran
+# lxml is required by the vendored docs/_ext/autodoc_doxygen extension
+# (used to parse Doxygen XML output).
+lxml
 numpy
+
+# Upstream VACUMM/sphinx-fortran has not cut a PyPI release past 1.1.1 but
+# its master branch has had continued fixes through 2025. Pinned to a
+# specific commit for reproducibility. See Notes-sphinx-upgrade.md (piece 2).
+# NB: this commit contains a broken FortranDomain.merge_domaindata that we
+# monkey-patch in conf.py to keep parallel builds (-j > 1) working. sphinx-
+# fortran also still imports `six` at module load time on this commit.
+git+https://github.com/VACUMM/sphinx-fortran.git@b14f438c1cc74d1dbcd5acd9a330c3b509caab56#egg=sphinx-fortran
 six
-future
-# Old Sphinx requires an old Jinja2
-jinja2<3.1
-sphinxcontrib_applehelp<1.0.8
-sphinxcontrib_devhelp<1.0.6
-sphinxcontrib_htmlhelp<2.0.5
-sphinxcontrib_qthelp<1.0.7
-sphinxcontrib_serializinghtml<1.0.7
-alabaster<0.7.14

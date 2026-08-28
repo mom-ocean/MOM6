@@ -584,28 +584,27 @@ ENERGYSAVEDAYS = 0.125          !   [days] default = 3600.0
 DIAG_AS_CHKSUM = True
 DEBUG = True
 USE_PSURF_IN_EOS = False        !   [Boolean] default = False
-GRID_ROTATION_ANGLE_BUGS = True !   [Boolean] default = True
 INTERPOLATE_RES_FN = True       !   [Boolean] default = True
 GILL_EQUATORIAL_LD = False      !   [Boolean] default = False
-USE_GM_WORK_BUG = True          !   [Boolean] default = True
 USE_LAND_MASK_FOR_HVISC = False !   [Boolean] default = False
-KAPPA_SHEAR_ITER_BUG = True     !   [Boolean] default = True
-KAPPA_SHEAR_ALL_LAYER_TKE_BUG = True !   [Boolean] default = True
-BULKML_CONV_MOMENTUM_BUG = True !   [Boolean] default = True
 PEN_SW_ABSORB_MINTHICK = 0.001  !   [m] default = 0.001
 GUST_CONST = 0.02               !   [Pa] default = 0.02
-FIX_USTAR_GUSTLESS_BUG = False  !   [Boolean] default = False
 
 
-! Explicitly use the defaults from late 2024
-EQN_OF_STATE = "WRIGHT"     ! default = "WRIGHT_FULL"
-HOR_DIFF_ANSWER_DATE = 20240101
-HOR_DIFF_LIMIT_BUG = True
+! Updated defaults reflecting the model status in late 2025
+DRAG_DIFFUSIVITY_ANSWER_DATE = 20251231
+EQN_OF_STATE = "WRIGHT_FULL"     ! default = "WRIGHT_FULL"
+HOR_DIFF_ANSWER_DATE = 20251231
+MASS_WEIGHT_IN_PRESSURE_GRADIENT_TOP = True !   [Boolean] default = True
 
-! Explicitly use the defaults from early 2025
-VISC_REM_BUG = True
-DRAG_DIFFUSIVITY_ANSWER_DATE = 20250101
-FRICTWORK_BUG = True
-HOR_DIFF_ANSWER_DATE = 20240101
-HOR_DIFF_LIMIT_BUG = True
-MASS_WEIGHT_IN_PRESSURE_GRADIENT_TOP = False
+! These are no longer necessary, as they are using the default value.
+HOR_DIFF_LIMIT_BUG = False      !   [Boolean] default = False
+GRID_ROTATION_ANGLE_BUGS = False !   [Boolean] default = False
+USE_GM_WORK_BUG = False         !   [Boolean] default = False
+USTAR_GUSTLESS_BUG = False      !   [Boolean] default = False
+KAPPA_SHEAR_ITER_BUG = False    !   [Boolean] default = False
+KAPPA_SHEAR_ALL_LAYER_TKE_BUG = False !   [Boolean] default = False
+VISC_REM_BUG = False            !   [Boolean] default = False
+FRICTWORK_BUG = False           !   [Boolean] default = False
+BULKML_CONV_MOMENTUM_BUG = False !   [Boolean] default = False
+

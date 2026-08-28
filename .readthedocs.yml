@@ -8,6 +8,10 @@ build:
   os: ubuntu-22.04
   tools:
     python: "3.11"
+  jobs:
+    build:
+      html:
+        - sphinx-build -M html docs $READTHEDOCS_OUTPUT -j auto
 
 # Extra formats
 # PDF generation is failing for now; disabled on 2020-12-02

@@ -11,7 +11,9 @@ use MOM_error_handler,         only : MOM_mesg, MOM_error, FATAL, WARNING
 use MOM_file_parser,           only : get_param, log_version, param_file_type, log_param
 use MOM_grid,                  only : ocean_grid_type
 use MOM_dyn_horgrid,           only : dyn_horgrid_type
-use MOM_open_boundary,         only : ocean_obc_type, update_OBC_segment_data, chksum_OBC_segments
+use MOM_open_boundary,         only : ocean_obc_type, chksum_OBC_segments
+use MOM_open_boundary,         only : read_OBC_dynamics_data, read_OBC_tracer_data
+use MOM_open_boundary,         only : update_OBC_dynamics_data, update_OBC_tracer_data
 use MOM_open_boundary,         only : OBC_registry_type, file_OBC_CS
 use MOM_open_boundary,         only : register_file_OBC, file_OBC_end
 use MOM_unit_scaling,          only : unit_scale_type
@@ -43,6 +45,8 @@ type, public :: update_OBC_CS ; private
   logical :: use_shelfwave = .false.    !< If true, use the shelfwave open boundary.
   logical :: use_dyed_channel = .false. !< If true, use the dyed channel open boundary.
   logical :: debug_OBCs = .false.       !< If true, write verbose OBC values for debugging purposes.
+  logical :: value_update_bug = .true.  !< If true, recover a bug that OBC segment data does not
+                                        !! update if all segments use 'value' and none uses 'file'.
   integer :: nk_OBC_debug = 0           !< The number of layers of OBC segment data to write out
                                         !! in full when DEBUG_OBCS is true.
   !>@{ Pointers to the control structures for named OBC specifications
@@ -74,6 +78,8 @@ subroutine call_OBC_register(G, GV, US, param_file, CS, OBC, tr_Reg)
 
   ! Local variables
   logical :: debug
+  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
+                          ! recreate the bugs, or if false bugs are only used if actively selected.
   character(len=200) :: config
   character(len=40)  :: mdl = "MOM_boundary_update" ! This module's name.
   ! This include declares and sets the variable "version".
@@ -86,6 +92,11 @@ subroutine call_OBC_register(G, GV, US, param_file, CS, OBC, tr_Reg)
 
   call log_version(param_file, mdl, version, "")
 
+  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
+  call get_param(param_file, mdl, "OBC_VALUE_UPDATE_BUG", CS%value_update_bug, &
+                 "If true, recover a bug that OBC segment data does not update if all segments "//&
+                 "use 'value' and none uses 'file'.", default=enable_bugs)
   call get_param(param_file, mdl, "USE_FILE_OBC", CS%use_files, &
                  "If true, use external files for the open boundary.", &
                  default=.false.)
@@ -168,8 +179,23 @@ subroutine update_OBC_data(OBC, G, GV, US, tv, h, CS, Time)
       call shelfwave_set_OBC_data(OBC, CS%shelfwave_OBC_CSp, G, GV, US, h, Time)
   if (CS%use_dyed_channel) &
       call dyed_channel_update_flow(OBC, CS%dyed_channel_OBC_CSp, G, GV, US, h, Time)
-  if (OBC%any_needs_IO_for_data .or. OBC%add_tide_constituents)  &
-      call update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
+
+  if (.not. OBC%user_BCs_set_globally) then
+    ! Update dynamics
+    if (OBC%any_needs_IO_for_data) &
+      call read_OBC_dynamics_data(G, GV, US, OBC, tv, h, Time)
+    if ((.not. CS%value_update_bug) .or. &
+        (OBC%any_needs_IO_for_data .or. OBC%add_tide_constituents)) &
+      call update_OBC_dynamics_data(G, GV, US, OBC, h, Time)
+    ! Update tracers: this is the old incorrect path. See step_MOM_tracer_dyn for the locked path.
+    ! If DT_OBC_SEG_UPDATE_OBGC is used (not recommended), BGC has its own update schedule, which
+    ! may happen in between tracer steps.
+    if ((.not. OBC%ignore_dt_obc_bgc) .and. OBC%any_needs_IO_for_data .and. OBC%tracer_dz_bug) then
+      call read_OBC_tracer_data(G, GV, US, OBC, Time, include_bgc=OBC%update_OBC_seg_data)
+      call update_OBC_tracer_data(OBC, include_bgc=OBC%update_OBC_seg_data)
+    endif
+  endif
+
   if (CS%debug_OBCs) call chksum_OBC_segments(OBC, G, GV, US, CS%nk_OBC_debug)
 
 end subroutine update_OBC_data

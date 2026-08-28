@@ -266,11 +266,11 @@ subroutine ZB2020_init(Time, G, GV, US, param_file, diag, CS, use_ZB2020)
   ! Mask is included to automatically satisfy B.C.
   do j=js-2,je+2 ; do i=is-2,ie+2
     CS%kappa_h(i,j) = -CS%amplitude * G%areaT(i,j) * G%mask2dT(i,j)
-  enddo; enddo
+  enddo ; enddo
 
   do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
     CS%kappa_q(I,J) = -CS%amplitude * G%areaBu(I,J) * G%mask2dBu(I,J)
-  enddo; enddo
+  enddo ; enddo
 
   if (CS%Klower_R_diss > 0) then
     allocate(CS%ICoriolis_h(SZI_(G),SZJ_(G)))
@@ -282,13 +282,13 @@ subroutine ZB2020_init(Time, G, GV, US, param_file, diag, CS, use_ZB2020)
       CS%ICoriolis_h(i,j) = 1. / ((abs(0.25 * ((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1)) &
                           + (G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J-1)))) + subroundoff_Cor) &
                           * CS%Klower_R_diss)
-    enddo; enddo
+    enddo ; enddo
   endif
 
   if (CS%Stress_iter > 0 .or. CS%HPF_iter > 0) then
     ! Include 1/16. factor to the mask for filter implementation
-    allocate(CS%maskw_h(SZI_(G),SZJ_(G))); CS%maskw_h(:,:) = G%mask2dT(:,:) * 0.0625
-    allocate(CS%maskw_q(SZIB_(G),SZJB_(G))); CS%maskw_q(:,:) = G%mask2dBu(:,:) * 0.0625
+    allocate(CS%maskw_h(SZI_(G),SZJ_(G))) ; CS%maskw_h(:,:) = G%mask2dT(:,:) * 0.0625
+    allocate(CS%maskw_q(SZIB_(G),SZJB_(G))) ; CS%maskw_q(:,:) = G%mask2dBu(:,:) * 0.0625
   endif
 
   ! Initialize MPI group passes
@@ -390,7 +390,7 @@ subroutine ZB2020_copy_gradient_and_thickness(sh_xx, sh_xy, vort_xy, hq, &
 
   do J=js-1,Jeq ; do I=is-1,Ieq
     CS%hq(I,J,k) = hq(I,J)
-  enddo; enddo
+  enddo ; enddo
 
   ! No physical B.C. is required for
   ! sh_xx in ZB2020. However, filtering
@@ -404,11 +404,11 @@ subroutine ZB2020_copy_gradient_and_thickness(sh_xx, sh_xy, vort_xy, hq, &
   ! flag in hor_visc module
   do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
     CS%sh_xy(I,J,k) = sh_xy(I,J) * G%mask2dBu(I,J)
-  enddo; enddo
+  enddo ; enddo
 
   do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
     CS%vort_xy(I,J,k) = vort_xy(I,J) * G%mask2dBu(I,J)
-  enddo; enddo
+  enddo ; enddo
 
   call cpu_clock_end(CS%id_clock_copy)
 
@@ -447,13 +447,7 @@ subroutine ZB2020_lateral_stress(u, v, h, diffu, diffv, G, GV, CS, &
   real, dimension(SZIB_(G),SZJB_(G)), intent(in) :: dx2q    !< dx^2 at q points [L2 ~> m2]
   real, dimension(SZIB_(G),SZJB_(G)), intent(in) :: dy2q    !< dy^2 at q points [L2 ~> m2]
 
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: i, j, k, n
-
   call cpu_clock_begin(CS%id_clock_module)
-
-  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   ! Compute attenuation if specified
   call compute_c_diss(G, GV, CS)
@@ -501,7 +495,7 @@ subroutine compute_c_diss(G, GV, CS)
   type(ZB2020_CS),         intent(inout) :: CS   !< ZB2020 control structure.
 
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: i, j, k, n
+  integer :: i, j, k
 
   real :: shear ! Shear in Klower2018 formula at h points [T-1 ~> s-1]
 
@@ -523,7 +517,7 @@ subroutine compute_c_diss(G, GV, CS)
                    + ((CS%sh_xy(I-1,J  ,k)**2) + (CS%sh_xy(I,J-1,k)**2)) &
                     ))
         CS%c_diss(i,j,k) = 1. / (1. + shear * CS%ICoriolis_h(i,j))
-      enddo; enddo
+      enddo ; enddo
 
     ! sqrt(sh_xx**2 + sh_xy**2 + vort_xy**2)
     elseif (CS%Klower_shear == 1) then
@@ -535,7 +529,7 @@ subroutine compute_c_diss(G, GV, CS)
                    +  (CS%sh_xy(I,J-1,k)**2   + CS%vort_xy(I,J-1,k)**2))  &
                     ))
         CS%c_diss(i,j,k) = 1. / (1. + shear * CS%ICoriolis_h(i,j))
-      enddo; enddo
+      enddo ; enddo
     endif
 
   enddo ! end of k loop
@@ -576,7 +570,7 @@ subroutine compute_stress(G, GV, CS)
   real :: vort_sh ! vort_xy*sh_xy in h point [T-2 ~> s-2]
 
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: i, j, k, n
+  integer :: i, j, k
 
   logical :: sum_sq_flag ! Flag to compute trace
   logical :: vort_sh_scheme_0, vort_sh_scheme_1 ! Flags to compute diagonal trace-free part
@@ -667,7 +661,7 @@ subroutine compute_stress_ANN_collocated(G, GV, CS)
   type(ZB2020_CS),         intent(inout) :: CS   !< ZB2020 control structure.
 
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: i, j, k, n, m
+  integer :: i, j, k, m
   integer :: ii, jj
   integer :: nij
 
@@ -679,7 +673,6 @@ subroutine compute_stress_ANN_collocated(G, GV, CS)
                                      ! (Txy,Txx,Tyy) [nondim]
   real :: yy(3)                      ! Vector of dimensional
                                      ! output features (Txy,Txx,Tyy) [L2 T-2 ~> m2 s-2]
-  real :: input_norm                 ! Norm of input features [T-1 ~> s-1]
   real :: tmp                        ! Temporal value of squared norm [T-2 ~> s-2]
   integer :: offset                  ! Half the stencil size. Used for selection
   integer :: stencil_points          ! The number of points after flattening
@@ -725,15 +718,15 @@ subroutine compute_stress_ANN_collocated(G, GV, CS)
                                 + (CS%vort_xy(I-1,J,k) + CS%vort_xy(I,J-1,k)) )
 
       sqr_h(i,j) = (((CS%sh_xx(i,j,k)**2) + (sh_xy_h(i,j,k)**2)) + (vort_xy_h(i,j,k)**2)) * G%mask2dT(i,j)
-    enddo; enddo
+    enddo ; enddo
 
     do j=js,je ; do i=is,ie
       tmp = 0.0
-      do jj=j-offset,j+offset; do ii=i-offset,i+offset
+      do jj=j-offset,j+offset ; do ii=i-offset,i+offset
         tmp = tmp + sqr_h(ii,jj)
-      enddo; enddo
+      enddo ; enddo
       norm_h(i,j,k) = sqrt(tmp)
-    enddo; enddo
+    enddo ; enddo
   enddo
 
   call pass_var(sh_xy_h, G%Domain, clock=CS%id_clock_mpi)
@@ -755,7 +748,7 @@ subroutine compute_stress_ANN_collocated(G, GV, CS)
                                           j-offset:j+offset,k), (/stencil_points/))
 
       x(m,:) = x(m,:) / (norm_h(i,j,k) + CS%subroundoff_shear)
-    enddo; enddo
+    enddo ; enddo
 
     call ANN_apply_array_sio(nij, x, y, CS%ann_Tall)
 
@@ -772,7 +765,7 @@ subroutine compute_stress_ANN_collocated(G, GV, CS)
     do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       CS%Txy(I,J,k) = 0.25 * ( (Txy(i+1,j+1) + Txy(i,j)) &
                              + (Txy(i+1,j)   + Txy(i,j+1))) * G%mask2dBu(I,J)
-    enddo; enddo
+    enddo ; enddo
 
   enddo ! end of k loop
 
@@ -943,7 +936,7 @@ subroutine filter_velocity_gradients(G, GV, CS)
   integer :: niter                       ! required number of iterations
 
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: i, j, k, n
+  integer :: i, j, k
 
   niter = CS%HPF_iter
 
@@ -960,19 +953,19 @@ subroutine filter_velocity_gradients(G, GV, CS)
   call cpu_clock_begin(CS%id_clock_filter)
   do k=1,nz
     ! Halo of size 2 is valid
-    do j=js-2,je+2; do i=is-2,ie+2
+    do j=js-2,je+2 ; do i=is-2,ie+2
       sh_xx(i,j,k) = CS%sh_xx(i,j,k)
-    enddo; enddo
+    enddo ; enddo
     ! Only halo of size 1 is valid
-    do J=Jsq-1,Jeq+1; do I=Isq-1,Ieq+1
+    do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       sh_xy(I,J,k) = CS%sh_xy(I,J,k)
       vort_xy(I,J,k) = CS%vort_xy(I,J,k)
-    enddo; enddo
+    enddo ; enddo
   enddo
   call cpu_clock_end(CS%id_clock_filter)
 
-  xx_halo = 2; xy_halo = 1; vort_halo = 1;
-  xx_iter = niter; xy_iter = niter; vort_iter = niter;
+  xx_halo = 2 ; xy_halo = 1 ; vort_halo = 1
+  xx_iter = niter ; xy_iter = niter ; vort_iter = niter
 
   do while &
     (xx_iter >  0 .or. xy_iter >  0 .or. & ! filter iterations remain to be done
@@ -992,7 +985,7 @@ subroutine filter_velocity_gradients(G, GV, CS)
     ! ------ filtering sh_xy, vort_xy ----
     if (xy_halo < 1) then
       call complete_group_pass(CS%pass_xy, G%Domain, clock=CS%id_clock_mpi)
-      xy_halo = CS%HPF_halo; vort_halo = CS%HPF_halo
+      xy_halo = CS%HPF_halo ; vort_halo = CS%HPF_halo
     endif
 
     call filter_hq(G, GV, CS, xy_halo, xy_iter, q=CS%sh_xy)
@@ -1007,13 +1000,13 @@ subroutine filter_velocity_gradients(G, GV, CS)
   ! B.C. are already applied to all fields
   call cpu_clock_begin(CS%id_clock_filter)
   do k=1,nz
-    do j=js-2,je+2; do i=is-2,ie+2
+    do j=js-2,je+2 ; do i=is-2,ie+2
       CS%sh_xx(i,j,k) = sh_xx(i,j,k) - CS%sh_xx(i,j,k)
-    enddo; enddo
-    do J=Jsq-1,Jeq+1; do I=Isq-1,Ieq+1
+    enddo ; enddo
+    do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       CS%sh_xy(I,J,k) = sh_xy(I,J,k) - CS%sh_xy(I,J,k)
       CS%vort_xy(I,J,k) = vort_xy(I,J,k) - CS%vort_xy(I,J,k)
-    enddo; enddo
+    enddo ; enddo
   enddo
   call cpu_clock_end(CS%id_clock_filter)
 
@@ -1040,8 +1033,8 @@ subroutine filter_stress(G, GV, CS)
 
   if (niter == 0) return
 
-  Txx_halo = 1; Tyy_halo = 1; Txy_halo = 1; ! these are required halo for Txx, Tyy, Txy
-  Txx_iter = niter; Tyy_iter = niter; Txy_iter = niter;
+  Txx_halo = 1 ; Tyy_halo = 1 ; Txy_halo = 1 ; ! these are required halo for Txx, Tyy, Txy
+  Txx_iter = niter ; Tyy_iter = niter ; Txy_iter = niter
 
   do while &
       (Txx_iter >  0 .or. Txy_iter >  0 .or. & ! filter iterations remain to be done
@@ -1061,7 +1054,7 @@ subroutine filter_stress(G, GV, CS)
     ! ------- filtering Txx, Tyy ---------
     if (Txx_halo < 1) then
       call complete_group_pass(CS%pass_Th, G%Domain, clock=CS%id_clock_mpi)
-      Txx_halo = CS%Stress_halo; Tyy_halo = CS%Stress_halo
+      Txx_halo = CS%Stress_halo ; Tyy_halo = CS%Stress_halo
     endif
 
     call filter_hq(G, GV, CS, Txx_halo, Txx_iter, h=CS%Txx)
@@ -1165,21 +1158,21 @@ subroutine filter_3D(x, maskw, isd, ied, jsd, jed, is, ie, js, je, nz, &
     do iter=1,niter
 
       if (direction) then
-        do j = js-halo, je+halo; do i = is-halo-1, ie+halo+1
+        do j = js-halo, je+halo ; do i = is-halo-1, ie+halo+1
           tmp(i,j) = weight * x(i,j,k) + (x(i,j-1,k) + x(i,j+1,k))
-        enddo; enddo
+        enddo ; enddo
 
-        do j = js-halo, je+halo; do i = is-halo, ie+halo;
+        do j = js-halo, je+halo ; do i = is-halo, ie+halo
           x(i,j,k) = (weight * tmp(i,j) + (tmp(i-1,j) + tmp(i+1,j))) * maskw(i,j)
-        enddo; enddo
+        enddo ; enddo
       else
-        do j = js-halo-1, je+halo+1; do i = is-halo, ie+halo
+        do j = js-halo-1, je+halo+1 ; do i = is-halo, ie+halo
           tmp(i,j) = weight * x(i,j,k) + (x(i-1,j,k) + x(i+1,j,k))
-        enddo; enddo
+        enddo ; enddo
 
-        do j = js-halo, je+halo; do i = is-halo, ie+halo;
+        do j = js-halo, je+halo ; do i = is-halo, ie+halo
           x(i,j,k) = (weight * tmp(i,j) + (tmp(i,j-1) + tmp(i,j+1))) * maskw(i,j)
-        enddo; enddo
+        enddo ; enddo
       endif
 
       halo = halo - 1

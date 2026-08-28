@@ -105,7 +105,7 @@ use shr_is_restart_fh_mod, only : init_is_restart_fh, is_restart_fh, is_restart_
 #endif
 use mom_cap_profiling, only: cap_profiling_init, cap_profiling
 
-implicit none; private
+implicit none ; private
 
 public SetServices
 public SetVM
@@ -433,7 +433,7 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   if (isPresent .and. isSet) then
      if (trim(value) .eq. '.true.') restart_eor = .true.
-  end if
+  endif
 
   if (localPet == 0) call cap_profiling("mom", "InitializeP0", "E")
 
@@ -508,7 +508,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
   if (localPet == 0) call cap_profiling("mom", "InitializeAdvertise", "B")
 
-  if(write_runtimelog) timeiads = MPI_Wtime()
+  if (write_runtimelog) timeiads = MPI_Wtime()
 
   call ESMF_LogWrite(subname//' enter', ESMF_LOGMSG_INFO)
 
@@ -573,7 +573,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
       if (cesm_coupled) then
         ! Multiinstance logfile name needs a correction
-        if(len_trim(inst_suffix) > 0) then
+        if (len_trim(inst_suffix) > 0) then
           n = index(logfile, '.')
           logfile = logfile(1:n-1)//trim(inst_suffix)//logfile(n:)
         endif
@@ -662,7 +662,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
     if (is_root_pe()) then
         write(stdout,*) 'ice_ncat = ', Ice_ocean_boundary%ice_ncat
     endif
-  end if
+  endif
 
   if (is_root_pe()) then
     write(stdout,*) subname//'start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
@@ -947,7 +947,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
     call NUOPC_Advertise(exportState, standardName=fldsFrOcn(n)%stdname, name=fldsFrOcn(n)%shortname, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
   enddo
-  if(write_runtimelog .and. is_root_pe()) write(stdout,*) 'In ',trim(subname),' time ', MPI_Wtime()-timeiads
+  if (write_runtimelog .and. is_root_pe()) write(stdout,*) 'In ',trim(subname),' time ', MPI_Wtime()-timeiads
 
   if (localPet == 0) call cap_profiling("mom", "InitializeAdvertise", "E")
 
@@ -1046,7 +1046,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
 
   if (localPet == 0) call cap_profiling("mom", "InitializeRealize", "B")
 
-  if(write_runtimelog) timeirls = MPI_Wtime()
+  if (write_runtimelog) timeirls = MPI_Wtime()
 
   call shr_log_setLogUnit (stdout)
 
@@ -1255,7 +1255,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
     do n = 1,numOwnedElements
       lonMesh(n) = ownedElemCoords(2*n-1)
       latMesh(n) = ownedElemCoords(2*n)
-    end do
+    enddo
 
     elemMaskArray = ESMF_ArrayCreate(Distgrid, maskMesh, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -1272,8 +1272,8 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
         mask(n) = ocean_grid%mask2dT(ig,jg)
         lon(n)  = ocean_grid%geolonT(ig,jg)
         lat(n)  = ocean_grid%geolatT(ig,jg)
-      end do
-    end do
+      enddo
+    enddo
 
     eps_omesh = get_eps_omesh(ocean_state)
     do n = 1,lsize
@@ -1299,7 +1299,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
         write(err_msg, frmt)n,maskMesh(n),mask(n)
         call MOM_error(FATAL, err_msg)
       endif
-    end do
+    enddo
 
     ! realize the import and export fields using the mesh
     call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", &
@@ -1344,8 +1344,8 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
           mod2med_areacor(k) = model_areas(k) / mesh_areas(k)
           med2mod_areacor(k) = mesh_areas(k) / model_areas(k)
         endif
-      end do
-    end do
+      enddo
+    enddo
     deallocate(mesh_areas)
     deallocate(model_areas)
 
@@ -1623,7 +1623,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   if (use_cdeps_inline) then
      call mom_inline_init(gcomp, clock, eMesh, localPet, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  end if
+  endif
 
   !---------------------------------
   ! write out diagnostics
@@ -1634,7 +1634,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   !if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   timere = 0.
-  if(write_runtimelog .and. is_root_pe()) write(stdout,*) 'In ',trim(subname),' time ', MPI_Wtime()-timeirls
+  if (write_runtimelog .and. is_root_pe()) write(stdout,*) 'In ',trim(subname),' time ', MPI_Wtime()-timeirls
 
   if (localPet == 0) call cap_profiling("mom", "InitializeRealize", "E")
 
@@ -1671,7 +1671,7 @@ subroutine DataInitialize(gcomp, rc)
 
   if (localPet == 0) call cap_profiling("mom", "DataInitialize", "B")
 
-  if(write_runtimelog) timedis = MPI_Wtime()
+  if (write_runtimelog) timedis = MPI_Wtime()
 
   ! query the Component for its clock, importState and exportState
   call ESMF_GridCompGet(gcomp, clock=clock, importState=importState, exportState=exportState, rc=rc)
@@ -1733,7 +1733,7 @@ subroutine DataInitialize(gcomp, rc)
     enddo
   endif
 
-  if(write_runtimelog .and. is_root_pe()) write(stdout,*) 'In ',trim(subname),' time ', MPI_Wtime()-timedis
+  if (write_runtimelog .and. is_root_pe()) write(stdout,*) 'In ',trim(subname),' time ', MPI_Wtime()-timedis
 
   if (localPet == 0) call cap_profiling("mom", "DataInitialize", "E")
 
@@ -1795,10 +1795,10 @@ subroutine ModelAdvance(gcomp, rc)
 
   if (localPet == 0) call cap_profiling("mom", "ModelAdvance", "B")
 
-  if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM Model_ADVANCE: ")
-  if(write_runtimelog) then
+  if (profile_memory) call ESMF_VMLogMemInfo("Entering MOM Model_ADVANCE: ")
+  if (write_runtimelog) then
      timers = MPI_Wtime()
-     if(timere>0. .and. is_root_pe()) write(stdout,*) 'In ',trim(subname),' time since last time step ',timers-timere
+     if (timere>0. .and. is_root_pe()) write(stdout,*) 'In ',trim(subname),' time since last time step ',timers-timere
   endif
 
   call shr_log_setLogUnit (stdout)
@@ -1913,7 +1913,7 @@ subroutine ModelAdvance(gcomp, rc)
     if (use_cdeps_inline) then
       call mom_inline_run(clock, ocean_public, ocean_grid, ice_ocean_boundary, dbug, rc=rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    end if
+    endif
 
     !---------------
     ! Update MOM6
@@ -1958,7 +1958,7 @@ subroutine ModelAdvance(gcomp, rc)
       ! turn off the alarm
       call ESMF_AlarmRingerOff(restart_alarm, rc=rc )
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    end if
+    endif
 
     write_restart_eor = .false.
     if (restart_eor) then
@@ -1968,8 +1968,8 @@ subroutine ModelAdvance(gcomp, rc)
         ! turn off the alarm
         call ESMF_AlarmRingerOff(stop_alarm, rc=rc )
         if (ChkErr(rc,__LINE__,u_FILE_u)) return
-      end if
-    end if
+      endif
+    endif
 
 #ifndef CESMCOUPLED
     call is_restart_fh(clock, restartfh_info, write_restartfh)
@@ -2080,12 +2080,12 @@ subroutine ModelAdvance(gcomp, rc)
     enddo
   endif
 
-  if(write_runtimelog) then
+  if (write_runtimelog) then
     timere = MPI_Wtime()
-    if(is_root_pe()) write(stdout,*) 'In ',trim(subname),' time ', timere-timers
+    if (is_root_pe()) write(stdout,*) 'In ',trim(subname),' time ', timere-timers
   endif
 
-  if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM Model_ADVANCE: ")
+  if (profile_memory) call ESMF_VMLogMemInfo("Leaving MOM Model_ADVANCE: ")
 
   if (localPet == 0) call cap_profiling("mom", "ModelAdvance", "E")
 
@@ -2319,7 +2319,7 @@ subroutine ocean_model_finalize(gcomp, rc)
     write(stdout,*) 'MOM: --- finalize called ---'
   endif
   rc = ESMF_SUCCESS
-  if(write_runtimelog) timefs = MPI_Wtime()
+  if (write_runtimelog) timefs = MPI_Wtime()
 
   call ESMF_GridCompGetInternalState(gcomp, ocean_internalstate, rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -2354,7 +2354,7 @@ subroutine ocean_model_finalize(gcomp, rc)
   call outputlog_run(clock, .true., rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-  if(write_runtimelog .and. is_root_pe()) write(stdout,*) 'In ',trim(subname),' time ', MPI_Wtime()-timefs
+  if (write_runtimelog .and. is_root_pe()) write(stdout,*) 'In ',trim(subname),' time ', MPI_Wtime()-timefs
 
   if (localPet == 0) call cap_profiling("mom", "ocean_model_finalize", "E")
 

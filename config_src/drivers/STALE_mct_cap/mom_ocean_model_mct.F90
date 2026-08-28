@@ -53,6 +53,7 @@ use MOM_variables,            only : surface
 use MOM_verticalGrid,         only : verticalGrid_type
 use MOM_ice_shelf,            only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf,            only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
+use MOM_ice_shelf,            only : adjust_ice_sheet_frazil
 use MOM_coupler_types,        only : coupler_1d_bc_type, coupler_2d_bc_type
 use MOM_coupler_types,        only : coupler_type_spawn, coupler_type_write_chksums
 use MOM_coupler_types,        only : coupler_type_initialized, coupler_type_copy_data
@@ -135,7 +136,7 @@ end type ocean_public_type
 !> The ocean_state_type contains all information about the state of the ocean,
 !! with a format that is private so it can be readily changed without disrupting
 !! other coupled components.
-type, public :: ocean_state_type ;
+type, public :: ocean_state_type
   ! This type is private, and can therefore vary between different ocean models.
   logical :: is_ocean_PE = .false.  !< True if this is an ocean PE.
   type(time_type) :: Time     !< The ocean model's time and master clock.
@@ -334,7 +335,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   call get_param(param_file, mdl, "RHO_0", Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
-                 "properties, or with BOUSSINSEQ false to convert some "//&
+                 "properties, or with BOUSSINESQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
   call get_param(param_file, mdl, "G_EARTH", G_Earth, &
@@ -364,7 +365,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   !   Consider using a run-time flag to determine whether to do the diagnostic
   ! vertical integrals, since the related 3-d sums are not negligible in cost.
   call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, &
-                              do_integrals=.true., gas_fields_ocn=gas_fields_ocn, use_meltpot=use_melt_pot)
+                              do_integrals=.true., gas_fields_ocn=gas_fields_ocn, &
+                              use_meltpot=use_melt_pot, use_iceshelves=OS%use_ice_shelf)
 
   call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
                             OS%forcing_CSp, OS%restore_salinity, OS%restore_temp)
@@ -402,6 +404,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                                 Ocean_sfc%axes(1:2), Time_in)
 
     call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
+
+    if (OS%use_ice_shelf .and. allocated(OS%sfc_state%frazil)) &
+      call adjust_ice_sheet_frazil(OS%sfc_state, OS%fluxes, OS%Ice_shelf_CSp)
 
     call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US)
   endif
@@ -580,7 +585,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call disable_averaging(OS%diag)
   Master_time = OS%Time ; Time1 = OS%Time
 
-  if(OS%offline_tracer_mode) then
+  if (OS%offline_tracer_mode) then
     call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp)
 
   elseif ((.not.do_thermo) .or. (.not.do_dyn)) then
@@ -660,6 +665,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     call forcing_diagnostics(OS%fluxes, OS%sfc_state, OS%grid, OS%US, OS%Time, OS%diag, OS%forcing_CSp%handles)
   endif
 
+  !only make ice-shelf frazil adjustments if sfc_state%frazil was updated (do_thermo=True)
+  if (do_thermo .and. OS%use_ice_shelf .and. allocated(OS%sfc_state%frazil)) &
+    call adjust_ice_sheet_frazil(OS%sfc_state, OS%fluxes, OS%Ice_shelf_CSp)
+
 ! Translate state into Ocean.
 !  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, &
 !                                   Ice_ocean_boundary%p, OS%press_to_z)
@@ -733,9 +742,11 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
   call ocean_model_save_restart(Ocean_state, Time)
   call diag_mediator_end(Time, Ocean_state%diag, end_diag_manager=.true.)
   ! print time stats
-  call MOM_infra_end
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
+
+  ! This closes out the infrastructure, including clocks, I/O and message passing communicators.
+  call MOM_infra_end()
 end subroutine ocean_model_end
 
 !> ocean_model_save_restart causes restart files associated with the ocean to be
@@ -797,7 +808,7 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
 
   call mpp_get_layout(input_domain,layout)
   call mpp_get_global_domain(input_domain, xsize=xsz, ysize=ysz)
-  if(PRESENT(maskmap)) then
+  if (PRESENT(maskmap)) then
     call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain, maskmap=maskmap)
   else
     call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)
@@ -971,6 +982,9 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
   call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
+
+  if (OS%use_ice_shelf .and. allocated(OS%sfc_state%frazil)) &
+    call adjust_ice_sheet_frazil(OS%sfc_state, OS%fluxes, OS%Ice_shelf_CSp)
 
   call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US)
 

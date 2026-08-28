@@ -153,7 +153,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
   do m = 1,ntr
 
      local_advect_scheme(m) = Reg%Tr(m)%advect_scheme
-     if(local_advect_scheme(m) < 0) local_advect_scheme(m) = CS%default_advect_scheme
+     if (local_advect_scheme(m) < 0) local_advect_scheme(m) = CS%default_advect_scheme
 
      if (local_advect_scheme(m) == ADVECT_PLM) then
        stencil_local = 2
@@ -273,15 +273,15 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
   !$OMP end parallel
 
   isv = is ; iev = ie ; jsv = js ; jev = je
+  nsten_halo = min(is - isd, ied - ie, js - jsd, jed - je) / stencil
 
   do itt=1,max_iter
 
     if (isv > is-stencil) then
       call do_group_pass(CS%pass_uhr_vhr_t_hprev, G%Domain, clock=id_clock_pass)
 
-      nsten_halo = min(is-isd,ied-ie,js-jsd,jed-je)/stencil
-      isv = is-nsten_halo*stencil ; jsv = js-nsten_halo*stencil
-      iev = ie+nsten_halo*stencil ; jev = je+nsten_halo*stencil
+      isv = is - nsten_halo * stencil ; jsv = js - nsten_halo * stencil
+      iev = ie + nsten_halo * stencil ; jev = je + nsten_halo * stencil
       ! Reevaluate domore_u & domore_v unless the valid range is the same size as
       ! before.  Also, do this if there is Strang splitting.
       if ((nsten_halo > 1) .or. (itt==1)) then
@@ -540,18 +540,10 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
             do m = 1,segment%tr_Reg%ntseg ! replace tracers with OBC values
               ntr_id = segment%tr_reg%Tr(m)%ntr_index
               if (advect_this_tracer(ntr_id)) then
-                if (allocated(segment%tr_Reg%Tr(m)%tres)) then
-                  if (segment%direction == OBC_DIRECTION_W) then
-                    T_tmp(i,ntr_id) = segment%tr_Reg%Tr(m)%tres(i,j,k)
-                  else
-                    T_tmp(i+1,ntr_id) = segment%tr_Reg%Tr(m)%tres(i,j,k)
-                  endif
+                if (segment%direction == OBC_DIRECTION_W) then
+                  T_tmp(i,ntr_id) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                 else
-                  if (segment%direction == OBC_DIRECTION_W) then
-                    T_tmp(i,ntr_id) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
-                  else
-                    T_tmp(i+1,ntr_id) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
-                  endif
+                  T_tmp(i+1,ntr_id) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                 endif
               endif ! advect_this_tracer
             enddo
@@ -692,9 +684,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                 do m=1,segment%tr_Reg%ntseg
                   ntr_id = segment%tr_reg%Tr(m)%ntr_index
                   if (advect_this_tracer(ntr_id)) then
-                    if (allocated(segment%tr_Reg%Tr(m)%tres)) then
-                      flux_x(I,j,ntr_id) = uhh(I)*segment%tr_Reg%Tr(m)%tres(I,j,k)
-                    else ; flux_x(I,j,ntr_id) = uhh(I)*segment%tr_Reg%Tr(m)%OBC_inflow_conc ; endif
+                    flux_x(I,j,ntr_id) = uhh(I)*segment%tr_Reg%Tr(m)%tres(I,j,k)
                   endif ! advect_this_tracer
                 enddo
               endif
@@ -718,9 +708,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
               do m=1,segment%tr_Reg%ntseg
                 ntr_id = segment%tr_reg%Tr(m)%ntr_index
                 if (advect_this_tracer(ntr_id)) then
-                  if (allocated(segment%tr_Reg%Tr(m)%tres)) then
-                    flux_x(I,j,ntr_id) = uhh(I)*segment%tr_Reg%Tr(m)%tres(I,j,k)
-                  else; flux_x(I,j,ntr_id) = uhh(I)*segment%tr_Reg%Tr(m)%OBC_inflow_conc; endif
+                  flux_x(I,j,ntr_id) = uhh(I)*segment%tr_Reg%Tr(m)%tres(I,j,k)
                 endif ! advect_this_tracer
               enddo
             endif
@@ -752,13 +740,12 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
     ! Update do_i so that nothing changes outside of the OBC (problem for interior OBCs only)
     if (associated(OBC)) then
-      if ((.not.OBC%exterior_OBC_bug) .and. (OBC%OBC_pe)) then
-        if (OBC%specified_u_BCs_exist_globally .or. OBC%open_u_BCs_exist_globally) then
-          do i=is,ie-1
-            if (OBC%segnum_u(I,j) > 0) do_i(i+1,j) = .false.  ! OBC_DIRECTION_E
-            if (OBC%segnum_u(I,j) < 0) do_i(i,j) = .false.    ! OBC_DIRECTION_W
-          enddo
-        endif
+      if ((.not.OBC%exterior_OBC_bug) .and. (OBC%OBC_pe) .and. &
+          (OBC%specified_u_BCs_exist_globally .or. OBC%open_u_BCs_exist_globally)) then
+        ! OBC_DIRECTION_E / OBC_DIRECTION_W on the west / east edge
+        do i=is,ie ; if ((OBC%segnum_u(I-1,j) > 0) .or. (OBC%segnum_u(I,j) < 0)) &
+          do_i(i,j) = .false.
+        enddo
       endif
     endif
 
@@ -780,9 +767,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
         ! diagnostics
         if (flux_type == 0) then
-          if (associated(Tr(m)%ad_x)) then ; do I=is-1,ie ; if (do_i(i,j) .or. do_i(i+1,j)) then
+          if (associated(Tr(m)%ad_x)) then ; do I=is-1,ie
             Tr(m)%ad_x(I,j,k) = Tr(m)%ad_x(I,j,k) + flux_x(I,j,m)*Idt
-          endif ; enddo ; endif
+          enddo ; endif
 
           ! diagnose convergence of flux_x (do not use the Ihnew(i) part of the logic).
           ! division by areaT to get into W/m2 for heat and kg/(s*m2) for salt.
@@ -793,13 +780,13 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
             endif ; enddo
           endif
         elseif (flux_type == 1) then
-          if (associated(Tr(m)%ad_x_resolved)) then ; do I=is-1,ie ; if (do_i(i,j) .or. do_i(i+1,j)) then
+          if (associated(Tr(m)%ad_x_resolved)) then ; do I=is-1,ie
             Tr(m)%ad_x_resolved(I,j,k) = Tr(m)%ad_x_resolved(I,j,k) + flux_x(I,j,m)*Idt
-          endif ; enddo ; endif
+          enddo ; endif
         elseif (flux_type == 2) then
-          if (associated(Tr(m)%ad_x_param)) then ; do I=is-1,ie ; if (do_i(i,j) .or. do_i(i+1,j)) then
+          if (associated(Tr(m)%ad_x_param)) then ; do I=is-1,ie
             Tr(m)%ad_x_param(I,j,k) = Tr(m)%ad_x_param(I,j,k) + flux_x(I,j,m)*Idt
-          endif ; enddo ; endif
+          enddo ; endif
         endif ! the case of flux_type not equal 0, 1, or 2 is caught in advect_tracer above.
       endif ! advect_this_tracer
     enddo
@@ -821,9 +808,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     !$OMP ordered
     do m=1,ntr ; if (associated(Tr(m)%ad2d_x)) then
       do j=js,je ; if (domore_u_initial(j,k)) then
-        do I=is-1,ie ; if (do_i(i,j) .or. do_i(i+1,j)) then
+        do I=is-1,ie
           Tr(m)%ad2d_x(I,j) = Tr(m)%ad2d_x(I,j) + flux_x(I,j,m)*Idt
-        endif ; enddo
+        enddo
       endif ; enddo
     endif ; enddo ! End of m-loop.
     !$OMP end ordered
@@ -981,18 +968,10 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
             do m = 1,segment%tr_Reg%ntseg ! replace tracers with OBC values
               ntr_id = segment%tr_reg%Tr(m)%ntr_index
               if (advect_this_tracer(ntr_id)) then
-                if (allocated(segment%tr_Reg%Tr(m)%tres)) then
-                  if (segment%direction == OBC_DIRECTION_S) then
-                    T_tmp(i,ntr_id,j) = segment%tr_Reg%Tr(m)%tres(i,j,k)
-                  else
-                    T_tmp(i,ntr_id,j+1) = segment%tr_Reg%Tr(m)%tres(i,j,k)
-                  endif
+                if (segment%direction == OBC_DIRECTION_S) then
+                  T_tmp(i,ntr_id,j) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                 else
-                  if (segment%direction == OBC_DIRECTION_S) then
-                    T_tmp(i,ntr_id,j) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
-                  else
-                    T_tmp(i,ntr_id,j+1) = segment%tr_Reg%Tr(m)%OBC_inflow_conc
-                  endif
+                  T_tmp(i,ntr_id,j+1) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                 endif
               endif ! advect_this_tracer
             enddo
@@ -1135,9 +1114,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                   do m=1,segment%tr_Reg%ntseg
                     ntr_id = segment%tr_reg%Tr(m)%ntr_index
                     if (advect_this_tracer(ntr_id)) then
-                      if (allocated(segment%tr_Reg%Tr(m)%tres)) then
-                        flux_y(i,ntr_id,J) = vhh(i,J)*OBC%segment(n)%tr_Reg%Tr(m)%tres(i,J,k)
-                      else ; flux_y(i,ntr_id,J) = vhh(i,J)*OBC%segment(n)%tr_Reg%Tr(m)%OBC_inflow_conc ; endif
+                      flux_y(i,ntr_id,J) = vhh(i,J)*OBC%segment(n)%tr_Reg%Tr(m)%tres(i,J,k)
                     endif ! advect_this_tracer
                   enddo
                 endif
@@ -1161,9 +1138,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                 do m=1,segment%tr_Reg%ntseg
                   ntr_id = segment%tr_reg%Tr(m)%ntr_index
                   if (advect_this_tracer(ntr_id)) then
-                    if (allocated(segment%tr_Reg%Tr(m)%tres)) then
-                      flux_y(i,ntr_id,J) = vhh(i,J)*segment%tr_Reg%Tr(m)%tres(i,J,k)
-                    else ; flux_y(i,ntr_id,J) = vhh(i,J)*segment%tr_Reg%Tr(m)%OBC_inflow_conc ; endif
+                    flux_y(i,ntr_id,J) = vhh(i,J)*segment%tr_Reg%Tr(m)%tres(i,J,k)
                   endif ! advect_this_tracer
                 enddo
               endif
@@ -1205,13 +1180,12 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
     ! Update do_i so that nothing changes outside of the OBC (problem for interior OBCs only)
     if (associated(OBC)) then
-      if ((OBC%exterior_OBC_bug .eqv. .false.) .and. (OBC%OBC_pe)) then
-        if (OBC%specified_v_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) then
-          do i=is,ie
-            if (OBC%segnum_v(i,J-1) > 0) do_i(i,j) = .false.  ! OBC_DIRECTION_N
-            if (OBC%segnum_v(i,J) < 0) do_i(i,j) = .false.  ! OBC_DIRECTION_S
-          enddo
-        endif
+      if ((.not.OBC%exterior_OBC_bug) .and. (OBC%OBC_pe) .and. &
+          (OBC%specified_v_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)) then
+        ! OBC_DIRECTION_N / OBC_DIRECTION_S on the south / north edge
+        do i=is,ie ; if ((OBC%segnum_v(i,J-1) > 0) .or. (OBC%segnum_v(i,J) < 0)) &
+          do_i(i,j) = .false.
+        enddo
       endif
     endif
 
@@ -1251,17 +1225,17 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     !$OMP ordered
     do m=1,ntr ; if (associated(Tr(m)%ad_y)) then
       do J=js-1,je ; if (domore_v_initial(J)) then
-        do i=is,ie ; if (do_i(i,j) .or. do_i(i,j+1)) then
+        do i=is,ie
           Tr(m)%ad_y(i,J,k) = Tr(m)%ad_y(i,J,k) + flux_y(i,m,J)*Idt
-        endif ; enddo
+        enddo
       endif ; enddo
     endif ; enddo ! End of m-loop.
 
     do m=1,ntr ; if (associated(Tr(m)%ad2d_y)) then
       do J=js-1,je ; if (domore_v_initial(J)) then
-        do i=is,ie ; if (do_i(i,j) .or. do_i(i,j+1)) then
+        do i=is,ie
           Tr(m)%ad2d_y(i,J) = Tr(m)%ad2d_y(i,J) + flux_y(i,m,J)*Idt
-        endif ; enddo
+        enddo
       endif ; enddo
     endif ; enddo ! End of m-loop.
     !$OMP end ordered
@@ -1269,9 +1243,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     !$OMP ordered
     do m=1,ntr ; if (associated(Tr(m)%ad_y_resolved)) then
       do J=js-1,je ; if (domore_v_initial(J)) then
-        do i=is,ie ; if (do_i(i,j) .or. do_i(i,j+1)) then
+        do i=is,ie
           Tr(m)%ad_y_resolved(i,J,k) = Tr(m)%ad_y_resolved(i,J,k) + flux_y(i,m,J)*Idt
-        endif ; enddo
+        enddo
       endif ; enddo
     endif ; enddo ! End of m-loop.
     !$OMP end ordered
@@ -1279,9 +1253,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     !$OMP ordered
     do m=1,ntr ; if (associated(Tr(m)%ad_y_param)) then
       do J=js-1,je ; if (domore_v_initial(J)) then
-        do i=is,ie ; if (do_i(i,j) .or. do_i(i,j+1)) then
+        do i=is,ie
           Tr(m)%ad_y_param(i,J,k) = Tr(m)%ad_y_param(i,J,k) + flux_y(i,m,J)*Idt
-        endif ; enddo
+        enddo
       endif ; enddo
     endif ; enddo ! End of m-loop.
     !$OMP end ordered

@@ -7,7 +7,7 @@ module MOM_cap_outputlog
 
 #ifdef CESMCOUPLED
 use ESMF                  , only : ESMF_GridComp, ESMF_Clock, ESMF_SUCCESS
-implicit none; private
+implicit none ; private
 
 public :: outputlog_init, outputlog_run, outputlog_restart
 contains
@@ -45,7 +45,7 @@ use MOM_cap_time          , only : AlarmInit
 use shr_is_restart_fh_mod , only : log_restart_fh
 use netcdf
 
-implicit none; private
+implicit none ; private
 
 public :: outputlog_init, outputlog_run, outputlog_restart
 

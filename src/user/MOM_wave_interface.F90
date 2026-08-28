@@ -357,7 +357,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
     if (.not.use_waves) return
   else
     CS%WaveMethod = NULL_WaveMethod
-  end if
+  endif
 
   ! Wave modified physics
   !  Presently these are all in research mode
@@ -457,8 +457,8 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
                  " INPUT         - Testing with fixed values.", default=NULL_STRING)
     select case (TRIM(TMPSTRING2))
     case (NULL_STRING)! Default
-      call MOM_error(FATAL, "wave_interface_init called with SURFACE_BANDS"//&
-                           " but no SURFBAND_SOURCE.")
+      call MOM_error(FATAL, "wave_interface_init called with SURFACE_BANDS "//&
+                            "but no SURFBAND_SOURCE.")
     case (DATAOVR_STRING)! Using Data Override
       CS%DataSource = DATAOVR
       call get_param(param_file, mdl, "SURFBAND_FILENAME", CS%SurfBandFileName, &
@@ -513,8 +513,8 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
 
   case (DHH85_STRING) !Donelan et al., 1985 spectrum
     CS%WaveMethod = DHH85
-    call MOM_error(WARNING,"DHH85 only ever set-up for uniform cases w/"//&
-                           " Stokes drift in x-direction.")
+    call MOM_error(WARNING,"DHH85 only ever set-up for uniform cases w/ "//&
+                           "Stokes drift in x-direction.")
     call get_param(param_file, mdl, "DHH85_AGE_FP", CS%WaveAgePeakFreq, &
          "Choose true to use waveage in peak frequency.", default=.false.)
     call get_param(param_file, mdl, "DHH85_AGE", CS%WaveAge, &
@@ -1824,7 +1824,7 @@ subroutine Stokes_PGF(G, GV, US, dz, u, v, PFu_Stokes, PFv_Stokes, CS )
         ! Computing (left/right) Eulerian velocities assuming the velocity passed to this routine is the
         ! Lagrangian velocity.  This requires the wave acceleration terms to be activated together.
         uE_l = 0.5*((u(I-1,j,k)-CS%Us_x(I-1,j,k))*G%mask2dCu(I-1,j) + &
-                    (u(I,j,k)-CS%Us_x(I-1,j,k))*G%mask2dCu(I,j))
+                    (u(I,j,k)-CS%Us_x(I,j,k))*G%mask2dCu(I,j))
         uE_r = 0.5*((u(I,j,k)-CS%Us_x(I,j,k))*G%mask2dCu(I,j) + &
                     (u(I+1,j,k)-CS%Us_x(I+1,j,k))*G%mask2dCu(I+1,j))
         vE_l = 0.5*((v(i,J-1,k)-CS%Us_y(i,J-1,k))*G%mask2dCv(i,J-1) + &
@@ -1836,6 +1836,8 @@ subroutine Stokes_PGF(G, GV, US, dz, u, v, PFu_Stokes, PFv_Stokes, CS )
         dP_Stokes_r_dz = 0.0
         dP_Stokes_l = 0.0
         dP_Stokes_r = 0.0
+        dP_lay_Stokes_l=0.0
+        dP_lay_Stokes_r=0.0
 
         do l = 1, CS%numbands
 
@@ -1881,8 +1883,8 @@ subroutine Stokes_PGF(G, GV, US, dz, u, v, PFu_Stokes, PFv_Stokes, CS )
               dexp2kzR = exp(TwoK*zi_r(k))-exp(TwoK*zi_r(k+1))
               dexp4kzR = exp(FourK*zi_r(k))-exp(FourK*zi_r(k+1))
               dP_Stokes_r_dz = dP_Stokes_r_dz + &
-                               ((uE_r*uS0_r+vE_r*vS0_r)*iTwoK*dexp2kzR + 0.5*(uS0_l*uS0_l+vS0_l*vS0_l)*iFourK*dexp4kzR)
-              dP_Stokes_r = dP_Stokes_r + (uE_r*uS0_r+vE_r*vS0_r)*dexp2kzR + 0.5*(uS0_l*uS0_l+vS0_l*vS0_l)*dexp4kzR
+                               ((uE_r*uS0_r+vE_r*vS0_r)*iTwoK*dexp2kzR + 0.5*(uS0_r*uS0_r+vS0_r*vS0_r)*iFourK*dexp4kzR)
+              dP_Stokes_r = dP_Stokes_r + (uE_r*uS0_r+vE_r*vS0_r)*dexp2kzR + 0.5*(uS0_r*uS0_r+vS0_r*vS0_r)*dexp4kzR
             else  ! These expressions are equivalent to those above for thick layers, but more accurate for thin layers.
               exp_top = exp(TwoK*zi_r(k))
               dP_lay_Stokes_r = dP_lay_Stokes_r + &
@@ -1960,6 +1962,8 @@ subroutine Stokes_PGF(G, GV, US, dz, u, v, PFu_Stokes, PFv_Stokes, CS )
         dP_Stokes_r_dz = 0.0
         dP_Stokes_l = 0.0
         dP_Stokes_r = 0.0
+        dP_lay_Stokes_l=0.0
+        dP_lay_Stokes_r=0.0
 
         do l = 1, CS%numbands
 
@@ -2005,8 +2009,8 @@ subroutine Stokes_PGF(G, GV, US, dz, u, v, PFu_Stokes, PFv_Stokes, CS )
               dexp2kzR = exp(TwoK*zi_r(k))-exp(TwoK*zi_r(k+1))
               dexp4kzR = exp(FourK*zi_r(k))-exp(FourK*zi_r(k+1))
               dP_Stokes_r_dz = dP_Stokes_r_dz + &
-                               ((uE_r*uS0_r+vE_r*vS0_r)*iTwoK*dexp2kzR + 0.5*(uS0_l*uS0_l+vS0_l*vS0_l)*iFourK*dexp4kzR)
-              dP_Stokes_r = dP_Stokes_r + (uE_r*uS0_r+vE_r*vS0_r)*dexp2kzR + 0.5*(uS0_l*uS0_l+vS0_l*vS0_l)*dexp4kzR
+                               ((uE_r*uS0_r+vE_r*vS0_r)*iTwoK*dexp2kzR + 0.5*(uS0_r*uS0_r+vS0_r*vS0_r)*iFourK*dexp4kzR)
+              dP_Stokes_r = dP_Stokes_r + (uE_r*uS0_r+vE_r*vS0_r)*dexp2kzR + 0.5*(uS0_r*uS0_r+vS0_r*vS0_r)*dexp4kzR
             else  ! These expressions are equivalent to those above for thick layers, but more accurate for thin layers.
               exp_top = exp(TwoK*zi_r(k))
               dP_lay_Stokes_r = dP_lay_Stokes_r + &

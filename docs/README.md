@@ -250,9 +250,11 @@ added to the RTD administrative interface if you want to trigger post processing
 
 If `UPDATEHTMLEQSVERBOSE` is set to `-v` this will turn on verbose printing for the post processor.
 
-NOTE: These options affect solo doxygen html processing only for the `make nortd` option.  For sphinx, they are
-utilized in the sphinx python module to handle post processing and are not part of the Makefile.  This was done
-as RTD runs sphinx processing directly using `sphinx-build` and not the Makefile.
+The post-processing hook is invoked from the `Makefile` for both the
+`make nortd` (doxygen html) and `make html` (sphinx html) targets. RTD,
+which runs `sphinx-build` directly without using this Makefile, will not
+trigger the hook automatically; if equation post-processing is desired
+on RTD it must be run as a separate step from the RTD build configuration.
 
 ##### PAPER
 
@@ -317,18 +319,27 @@ pip install -r requirements.txt
 
 You may need to use `pip3` to install requirements for python3.
 
-Requirements:
-- sphinx
-- sphinx-rtd-theme
-- sphinx-bibtex
-- sphinx-fortran
-- sphinxcontrib\_autodox-doxygen
-- flint
-- lxml
-- numpy
-- future
+The full pinned set lives in `requirements.txt`. The current toolchain
+uses stock upstream Sphinx 8.x from PyPI:
 
-For machines that need to build future, numpy or lxml, these packages are required:
+- `sphinx>=8,<9`
+- `sphinx-rtd-theme`
+- `sphinxcontrib-bibtex`
+- `lxml` (used by the vendored `_ext/autodoc_doxygen` extension to
+  parse the Doxygen XML output)
+- `numpy`
+- `sphinx-fortran` from the upstream `VACUMM/sphinx-fortran` repository,
+  pinned to a specific commit (upstream has not cut a PyPI release past
+  1.1.1 but the master branch has continued fixes)
+- `six`, still required at module load time by the pinned `sphinx-fortran`
+  commit
+
+The `sphinxcontrib-autodoc_doxygen` Sphinx extension that was previously
+pulled in as a separate fork is now vendored in-tree under
+`docs/_ext/autodoc_doxygen/`; nothing extra needs to be installed for it.
+
+For machines that need to build numpy or lxml from source, these packages
+are required:
 - Cython
 - wheel
 
@@ -343,8 +354,8 @@ PDF generation requires the following packages
 ### doxygen
 
 You may choose to download the [source](https://www.doxygen.nl/download.html).
-
-Latest is `doxygen-1.8.20.src.tar.gz`.
+The example below uses `1.8.20` but you can substitute any compatible
+release tarball.
 
 ```bash
 tar xzf doxygen-1.8.20.src.tar.gz
@@ -357,15 +368,17 @@ sudo make install
 ```
 
 The makefile for doxygen attempts to install the compiled version into /usr/local/bin.
-You can link to a specific executable within the virtual environment.   At this point we
-also recommend renaming `doxygen` to `doxygen-1.8.20` within `/usr/local/bin`.
+You can link to a specific executable within the virtual environment.
 
-NOTE: The makefile for the documentation framework will attempt to compile a local doxygen
-binary of version 1.8.13 if a binary cannot be found in the `$PATH`.
+NOTE: If a doxygen binary is not found in `$PATH`, the documentation Makefile
+will attempt to clone and compile its own copy of doxygen from source. The
+default release pulled in this fallback path is set by `DOXYGEN_RELEASE` in
+the Makefile (currently `Release_1_8_13`); pass a different value to override.
 
 #### Testing
 
-A lot of manual testing has been completed using the following versions:
+The toolchain is known to work with doxygen versions in the 1.8.x and 1.9.x
+series. Older manual testing was performed against:
 * 1.8.13
 * 1.8.14
 * 1.8.19
@@ -377,7 +390,9 @@ The [Read the Docs](https://readthedocs.org/) (RTD) site uses a virtual
 machine (VM) for processing documentation.  The VM architecture is type x86\_64.
 The default version for doxygen is 1.8.13 on the RTD VM.
 
-NOTE: Using modified python modules on RTD is possible through careful crafting of the requirements.txt file.  It is impossible to replace system binaries or compile code on RTD.  It is possible to ship replacement binaries that can be run from the repo.  For security reasons, a binary cannot be included in the MOM6 repository.
+NOTE: It is impossible to replace system binaries or compile code on RTD.
+It is possible to ship replacement binaries that can be run from the repo.
+For security reasons, a binary cannot be included in the MOM6 repository.
 
 #### Logfiles
 
@@ -388,19 +403,37 @@ Most websites force download of `*.log` files.
 
 # Credits
 
+## 2026
+The documentation toolchain was modernized to run against stock upstream
+Sphinx 8.x. The four-fork chain that the build had been carrying since
+2020 was reduced to:
+
+- A vendored copy of the Doxygen-to-Sphinx bridge under
+  `docs/_ext/autodoc_doxygen/`, originally derived from the `0.7.13`
+  release of `jr3cermak/sphinxcontrib-autodoc_doxygen`. The vendored
+  version is ported to the Sphinx 8 API and lives in-tree where it can
+  be debugged and edited like any other project source.
+- A pinned commit of upstream `VACUMM/sphinx-fortran` master.
+- A small monkey-patch in `conf.py` for `sphinx.util.math.wrap_displaymath`
+  that suppresses Sphinx's default outer wrapping when the source already
+  supplies its own LaTeX environment, replacing the only functional change
+  the previous Sphinx fork carried.
+- A small monkey-patch in `conf.py` for
+  `sphinxfortran.fortran_domain.FortranDomain.merge_domaindata` to fix a
+  parallel-build bug in upstream sphinx-fortran. To be removed when
+  upstream merges a fix.
+
+The `flint` dependency (formerly used to patch Doxygen's incomplete
+parsing of Fortran functions with `result()` clauses) was dropped after
+verifying empirically that nothing in the build pipeline references it.
+
 ## 2020
-The documentation pipeline was upgraded by [Rob Cermak](https://github.com/jr3cermak) and [Marshall Ward](https://github.com/marshallward).  Four modified python modules are required
-to process the MOM6 documentation.  The versions are tagged and placed into the production version of `requirements.txt`.  Development versions may be found in the respective `dev` branches.
-
-| Source | Modified | Version | Development |
-| ------ | -------- | ------- | ----------- |
-| [sphinx](https://github.com/sphinx-doc/sphinx) | [sphinx-3.2.1mom6.4](https://github.com/jr3cermak/sphinx) | B:3.2.1mom6.4 | B:dev |
-| [sphinxcontrib-autodoc-doxygen](https://github.com/rmcgibbo/sphinxcontrib-autodoc_doxygen) | [sphinxcontrib-autodoc-doxygen](https://github.com/jr3cermak/sphinxcontrib-autodoc_doxygen) | T:0.7.13 | B:dev |
-| [sphinx-fortran](https://github.com/VACUMM/sphinx-fortran) | [sphinx-fortran](https://github.com/jr3cermak/sphinx-fortran) | T:1.2.2 | B:dev |
-| [flint](https://github.com/marshallward/flint) | [flint](https://github.com/jr3cermak/flint) | T:0.0.1 | B:dev |
-| [MOM6](https://github.com/NOAA-GFDL/MOM6) | [esmg-docs](https://github.com/ESMG/MOM6/tree/esmg-docs) | [esmg-docs](https://github.com/ESMG/MOM6/tree/esmg-docs) | B:[esmg-test](https://github.com/jr3cermak/MOM6/tree/esmg-test) |
-
-T: tag B: branch
+The documentation pipeline was upgraded by [Rob Cermak](https://github.com/jr3cermak)
+and [Marshall Ward](https://github.com/marshallward). The pipeline at that time
+required four modified Python modules (`sphinx`, `sphinxcontrib-autodoc_doxygen`,
+`sphinx-fortran`, `flint`), all forked under the `jr3cermak` GitHub account.
+That toolchain was retired during the 2026 modernization above; this entry
+is retained as historical context.
 
 ## 2017
 The sphinx documentation of MOM6 is made possible by modifications by [Angus Gibson](https://github.com/angus-g) to two packages, [sphinx-fortran](https://github.com/angus-g/sphinx-fortran) and [autodoc\_doxygen](https://github.com/angus-g/sphinxcontrib-autodoc_doxygen).
