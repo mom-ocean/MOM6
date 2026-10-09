@@ -198,6 +198,11 @@ DIAG_AS_CHKSUM = True           !   [Boolean] default = False
                                 ! containing the checksum (bitcount) of the array.
 
 ! === module MOM_lateral_mixing_coeffs ===
+INTERPOLATED_SQG_STRUCTURE = False !   [Boolean] default = False
+                                ! If true, interpolate properties to velocity points and
+                                ! then interpolate the buoyancy frequencies and layer
+                                ! thicknesses back to tracer points when calculating the
+                                ! SQG vertical structure.
 
 ! === module MOM_set_visc ===
 LINEAR_DRAG = True              !   [Boolean] default = False
@@ -301,13 +306,38 @@ MAXVEL = 10.0                   !   [m s-1] default = 3.0E+08
                                 ! The maximum velocity allowed before the velocity components are truncated.
 
 ! === module MOM_barotropic ===
+INTEGRAL_BT_CONTINUITY = False  !   [Boolean] default = True
+                                ! If true, use the time-integrated velocity over the barotropic steps to
+                                ! determine the integrated transports used to update the continuity equation.
+                                ! Otherwise the transports are the sum of the transports based on a series of
+                                ! instantaneous velocities and the BT_CONT_TYPE for transports.  This is only
+                                ! valid if USE_BT_CONT_TYPE = True.
 BOUND_BT_CORRECTION = True      !   [Boolean] default = False
                                 ! If true, the corrective pseudo mass-fluxes into the barotropic solver are
                                 ! limited to values that require less than maxCFL_BT_cont to be accommodated.
+ADJUST_BT_CONT = False          !   [Boolean] default = True
+                                ! If true, adjust the curve fit to the BT_cont type that is used by the
+                                ! barotropic solver to match the transport about which the flow is being
+                                ! linearized.
+BT_PROJECT_VELOCITY = False     !   [Boolean] default = True
+                                ! If true, step the barotropic velocity first and project
+                                ! out the velocity tendancy by 1+BEBT when calculating the
+                                ! transport.  The default (false) is to use a predictor
+                                ! continuity step to find the pressure field, and then
+                                ! to do a corrector continuity step using a weighted
+                                ! average of the old and new velocities, with weights
+                                ! of (1-BEBT) and BEBT.
+BT_NONLIN_STRESS = False        !   [Boolean] default = True
+                                ! If true, use the full depth of the ocean at the start of the barotropic step
+                                ! when calculating the surface stress contribution to the barotropic
+                                ! acclerations.  Otherwise use the depth based on bathyT.
 SSH_EXTRA = 10.0                !   [m] default = 5.0
                                 ! An estimate of how much higher SSH might get, for use in calculating the safe
                                 ! external wave speed. The default is the minimum of 10 m or 5% of
                                 ! MAXIMUM_DEPTH.
+LINEARIZED_BT_CORIOLIS = True   !   [Boolean] default = False
+                                ! If true use the bottom depth instead of the total water column thickness in
+                                ! the barotropic Coriolis term calculations.
 BEBT = 0.2                      !   [nondim] default = 0.1
                                 ! BEBT determines whether the barotropic time stepping uses the forward-backward
                                 ! time-stepping scheme or a backward Euler scheme. BEBT is valid in the range
@@ -325,6 +355,9 @@ DTBT = 10.0                     !   [s or nondim] default = -0.98
 
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
+USE_LEGACY_DIABATIC_DRIVER = True !   [Boolean] default = False
+                                ! If true, use a legacy version of the diabatic subroutine. This is temporary
+                                ! and is needed to avoid change in answers.
 
 ! === module MOM_set_diffusivity ===
 BBL_EFFIC = 0.0                 !   [nondim] default = 0.2

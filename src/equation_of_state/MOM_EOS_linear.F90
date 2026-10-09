@@ -551,7 +551,6 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
                      ! 5 sub-column locations [L2 T-2 ~> m2 s-2]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
-  logical :: massWeight_bug ! If true, use an incorrect expression to determine where to apply mass weighting
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0, C1_9 = 1.0/9.0  ! Rational constants [nondim]
   real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants [nondim].
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, halo
@@ -562,11 +561,10 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh) ; endif
   if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh) ; endif
 
-  do_massWeight = .false. ; massWeight_bug = .false. ; top_massWeight = .false.
+  do_massWeight = .false. ; top_massWeight = .false.
   if (present(MassWghtInterp)) then
     do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
     top_massWeight = BTEST(MassWghtInterp, 1) ! True if the 2 bit is set
-    massWeight_bug = BTEST(MassWghtInterp, 3) ! True if the 8 bit is set
   endif
 
   lambda = 0.0 ; if (dRho_dp/=0.0) lambda = 1.0 / dRho_dp
@@ -598,9 +596,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
     ! hydrostatic consistency. For large hWght we bias the interpolation of
     ! T & S along the top and bottom integrals, akin to thickness weighting.
     hWght = 0.0
-    if (do_massWeight .and. massWeight_bug) then
-      hWght = max(0., bathyP(i,j)-p_t(i+1,j), bathyP(i+1,j)-p_t(i,j))
-    elseif (do_massWeight) then
+    if (do_massWeight) then
       hWght = max(0., p_t(i+1,j)-bathyP(i,j), p_t(i,j)-bathyP(i+1,j))
     endif
     if (top_massWeight) &
@@ -653,9 +649,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
     ! hydrostatic consistency. For large hWght we bias the interpolation of
     ! T & S along the top and bottom integrals, akin to thickness weighting.
     hWght = 0.0
-    if (do_massWeight .and. massWeight_bug) then
-      hWght = max(0., bathyP(i,j)-p_t(i,j+1), bathyP(i,j+1)-p_t(i,j))
-    elseif (do_massWeight) then
+    if (do_massWeight) then
       hWght = max(0., p_t(i,j+1)-bathyP(i,j), p_t(i,j)-bathyP(i,j+1))
     endif
     if (top_massWeight) &

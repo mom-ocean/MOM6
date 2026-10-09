@@ -3993,7 +3993,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
    call get_param(param_file, mdl, "EPBL_MLD_ITER_BUG", CS%MLD_iter_bug, &
                  "If true, use buggy logic that gives the wrong bounds for the next iteration "//&
                  "when successive guesses increase by exactly EPBL_MLD_TOLERANCE.", &
-                 default=enable_bugs, do_not_log=.not.CS%Use_MLD_iteration)
+                 default=.false., do_not_log=.not.CS%Use_MLD_iteration)
   call get_param(param_file, mdl, "EPBL_MLD_MAX_ITS", CS%max_MLD_its, &
                  "The maximum number of iterations that can be used to find a self-consistent "//&
                  "mixed layer depth.  If EPBL_MLD_BISECTION is true, the maximum number "//&

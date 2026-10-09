@@ -281,6 +281,11 @@ RESOLN_SCALED_KHTR = False      !   [Boolean] default = False
 USE_STORED_SLOPES = True        !   [Boolean] default = False
                                 ! If true, the isopycnal slopes are calculated once and stored for re-use. This
                                 ! uses more memory but avoids calling the equation of state more times than
+INTERPOLATED_SQG_STRUCTURE = False !   [Boolean] default = False
+                                ! If true, interpolate properties to velocity points and
+                                ! then interpolate the buoyancy frequencies and layer
+                                ! thicknesses back to tracer points when calculating the
+                                ! SQG vertical structure.
 
 ! === module MOM_wave_speed ===
 ETA_TOLERANCE = 1.0E-06         !   [m] default = 1.1E-09
@@ -385,10 +390,20 @@ BBL_THICK_MIN = 0.1             !   [m] default = 0.0
                                 ! near-bottom viscosity.
 
 ! === module MOM_barotropic ===
+INTEGRAL_BT_CONTINUITY = False  !   [Boolean] default = True
+                                ! If true, use the time-integrated velocity over the barotropic steps to
+                                ! determine the integrated transports used to update the continuity equation.
+                                ! Otherwise the transports are the sum of the transports based on a series of
+                                ! instantaneous velocities and the BT_CONT_TYPE for transports.  This is only
+                                ! valid if USE_BT_CONT_TYPE = True.
 BOUND_BT_CORRECTION = True      !   [Boolean] default = False
                                 ! If true, the corrective pseudo mass-fluxes into the
                                 ! barotropic solver are limited to values that require
                                 ! less than 0.1*MAXVEL to be accommodated.
+ADJUST_BT_CONT = False          !   [Boolean] default = True
+                                ! If true, adjust the curve fit to the BT_cont type that is used by the
+                                ! barotropic solver to match the transport about which the flow is being
+                                ! linearized.
 !BT x-halo = 0                  !
                                 ! The barotropic x-halo size that is actually used.
 !BT y-halo = 0                  !
@@ -397,7 +412,7 @@ NONLINEAR_BT_CONTINUITY = True  !   [Boolean] default = False
                                 ! If true, use nonlinear transports in the barotropic
                                 ! continuity equation.  This does not apply if
                                 ! USE_BT_CONT_TYPE is true.
-BT_PROJECT_VELOCITY = True      !   [Boolean] default = False
+BT_PROJECT_VELOCITY = True      !   [Boolean] default = True
                                 ! If true, step the barotropic velocity first and project
                                 ! out the velocity tendancy by 1+BEBT when calculating the
                                 ! transport.  The default (false) is to use a predictor
@@ -405,6 +420,10 @@ BT_PROJECT_VELOCITY = True      !   [Boolean] default = False
                                 ! to do a corrector continuity step using a weighted
                                 ! average of the old and new velocities, with weights
                                 ! of (1-BEBT) and BEBT.
+BT_NONLIN_STRESS = False        !   [Boolean] default = True
+                                ! If true, use the full depth of the ocean at the start of the barotropic step
+                                ! when calculating the surface stress contribution to the barotropic
+                                ! acclerations.  Otherwise use the depth based on bathyT.
 BT_THICK_SCHEME = "FROM_BT_CONT" ! default = "HYBRID"
                                 ! A string describing the scheme that is used to set the
                                 ! open face areas used for barotropic transport and the
@@ -417,6 +436,9 @@ BT_THICK_SCHEME = "FROM_BT_CONT" ! default = "HYBRID"
                                 !       layers that straddle that depth
                                 !    FROM_BT_CONT - use the average thicknesses kept
                                 !       in the h_u and h_v fields of the BT_cont_type
+LINEARIZED_BT_CORIOLIS = True   !   [Boolean] default = False
+                                ! If true use the bottom depth instead of the total water column thickness in
+                                ! the barotropic Coriolis term calculations.
 BEBT = 0.2                      !   [nondim] default = 0.1
                                 ! BEBT determines whether the barotropic time stepping
                                 ! uses the forward-backward time-stepping scheme or a
@@ -456,6 +478,9 @@ FOX_KEMPER_ML_RESTRAT_COEF = 5.0 !   [nondim] default = 0.0
 
 ! === module MOM_diabatic_driver ===
 ! The following parameters are used for diabatic processes.
+USE_LEGACY_DIABATIC_DRIVER = True !   [Boolean] default = False
+                                ! If true, use a legacy version of the diabatic subroutine. This is temporary
+                                ! and is needed to avoid change in answers.
 RECLAIM_FRAZIL = False          !   [Boolean] default = True
                                 ! If true, try to use any frazil heat deficit to cool any
                                 ! overlying layers down to the freezing point, thereby

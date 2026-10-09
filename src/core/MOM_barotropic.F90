@@ -5561,7 +5561,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   logical :: OBC_projection_bug
   logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
                           ! recreate the bugs, or if false bugs are only used if actively selected.
-  logical :: visc_rem_bug ! Stores the value of runtime paramter VISC_REM_BUG.
+  logical :: visc_rem_bug ! Stores the value of runtime parameter VISC_REM_BUG.
   logical :: dtbt_restart_bug ! Stores the value of runtime parameter DTBT_RESTART_BUG.
   character(len=48) :: thickness_units, flux_units
   character*(40) :: hvel_str
@@ -5608,7 +5608,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                  "equation.  Otherwise the transports are the sum of the transports based on "//&
                  "a series of instantaneous velocities and the BT_CONT_TYPE for transports.  "//&
                  "This is only valid if USE_BT_CONT_TYPE = True.", &
-                 default=.false., do_not_log=.not.use_BT_cont_type)
+                 default=.true., do_not_log=.not.use_BT_cont_type)
   call get_param(param_file, mdl, "BOUND_BT_CORRECTION", CS%bound_BT_corr, &
                  "If true, the corrective pseudo mass-fluxes into the "//&
                  "barotropic solver are limited to values that require "//&
@@ -5623,7 +5623,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                  "If true, adjust the curve fit to the BT_cont type "//&
                  "that is used by the barotropic solver to match the "//&
                  "transport about which the flow is being linearized.", &
-                 default=.false., do_not_log=.not.use_BT_cont_type)
+                 default=.true., do_not_log=.not.use_BT_cont_type)
   call get_param(param_file, mdl, "GRADUAL_BT_ICS", CS%gradual_BT_ICs, &
                  "If true, adjust the initial conditions for the "//&
                  "barotropic solver to the values from the layered "//&
@@ -5682,11 +5682,11 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                  "continuity step to find the pressure field, and then "//&
                  "to do a corrector continuity step using a weighted "//&
                  "average of the old and new velocities, with weights "//&
-                 "of (1-BEBT) and BEBT.", default=.false.)
+                 "of (1-BEBT) and BEBT.", default=.true.)
   call get_param(param_file, mdl, "BT_NONLIN_STRESS", CS%nonlin_stress, &
                  "If true, use the full depth of the ocean at the start of the barotropic "//&
                  "step when calculating the surface stress contribution to the barotropic "//&
-                 "acclerations.  Otherwise use the depth based on bathyT.", default=.false.)
+                 "accelerations.  Otherwise use the depth based on bathyT.", default=.true.)
   call get_param(param_file, mdl, "BT_RHO_LINEARIZED", CS%Rho_BT_lin, &
                  "A density that is used to convert total water column thicknesses into mass "//&
                  "in non-Boussinesq mode with linearized options in the barotropic solver or "//&
@@ -5736,7 +5736,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   call get_param(param_file, mdl, "EXTERIOR_OBC_BUG", CS%exterior_OBC_bug, &
                  "If true, recover a bug in barotropic solver and other routines when "//&
                  "boundary contitions interior to the domain are used.", &
-                 default=enable_bugs, do_not_log=.true.)
+                 default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "OBC_PROJECTION_BUG", OBC_projection_bug, &
                  "If false, use only interior ocean points at OBCs to specify several "//&
                  "calculations at OBC points, and it avoids applying a land mask at the bay-like "//&
@@ -5744,12 +5744,8 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                  "like the potential vorticity used in the barotropic solver relies on bathymetry "//&
                  "or other fields being projected outward across OBCs.  This option changes "//&
                  "answers for some configurations that use OBCs.", &
-                 default=enable_bugs, do_not_log=.true.)
+                 default=.false., do_not_log=.true.)
   CS%interior_OBC_PV = .not.OBC_projection_bug
-  call get_param(param_file, mdl, "DTBT_RESTART_BUG", dtbt_restart_bug, &
-                 "If true, recover a bug where the barotropic timestep DTBT read from a "//&
-                 "restart file is immediately overridden by a recalculation on the "//&
-                 "first dynamics step.", default=enable_bugs)
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   if (use_tides .and. present(HA_CSp)) CS%HA_CSp => HA_CSp
@@ -5816,7 +5812,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                  "to account for the difference between the forces that can be counteracted "//&
                  "by the stronger drag with BT_STRONG_DRAG and the average of the layer "//&
                  "viscous remnants after a baroclinic timestep.", &
-                 default=.false., do_not_log=.not.CS%strong_drag)
+                 default=.true., do_not_log=.not.CS%strong_drag)
   call get_param(param_file, mdl, "BT_LINEAR_WAVE_DRAG", CS%linear_wave_drag, &
                  "If true, apply a linear drag to the barotropic velocities, "//&
                  "using rates set by lin_drag_u & _v divided by the depth of "//&
@@ -5895,15 +5891,15 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                  "quite large if this is true.", default=CS%debug, &
                  debuggingParam=.true.)
   call get_param(param_file, mdl, "DEBUG_BT_WIDE_HALOS", CS%debug_wide_halos, &
-                 "If true, write the checksums on the full wide halos.   Otherwise only the "//&
+                 "If true, write the checksums on the full wide halos.  Otherwise only the "//&
                  "output for the final computational domain is written.  This can be valuable "//&
                  "for debugging certain cases where the stencil used in the wide halo "//&
-                 "iterations depends on which opoen boundary conditions are in the halos.", &
+                 "iterations depends on which open boundary conditions are in the halos.", &
                  default=.true., do_not_log=.not.(CS%debug_bt.and.CS%use_wide_halos), debuggingParam=.true.)
 
   call get_param(param_file, mdl, "LINEARIZED_BT_CORIOLIS", CS%linearized_BT_PV, &
                  "If true use the bottom depth instead of the total water column thickness "//&
-                 "in the barotropic Coriolis term calculations.", default=.true.)
+                 "in the barotropic Coriolis term calculations.", default=.false.)
   call get_param(param_file, mdl, "BEBT", CS%bebt, &
                  "BEBT determines whether the barotropic time stepping "//&
                  "uses the forward-backward time-stepping scheme or a "//&
@@ -5923,6 +5919,10 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                  "The value of DTBT that will actually be used is an "//&
                  "integer fraction of DT, rounding down.", &
                  units="s or nondim", default=-0.98)
+  call get_param(param_file, mdl, "DTBT_RESTART_BUG", dtbt_restart_bug, &
+                 "If true, recover a bug where the barotropic timestep DTBT read from a restart "//&
+                 "file is immediately overridden by a recalculation on the first dynamics step.", &
+                 default=enable_bugs, do_not_log=(dtbt_input>0.0))
   call get_param(param_file, mdl, "BT_USE_OLD_CORIOLIS_BRACKET_BUG", CS%use_old_coriolis_bracket_bug, &
                  "If True, use an order of operations that is not bitwise "//&
                  "rotationally symmetric in the meridional Coriolis term of "//&
@@ -6260,11 +6260,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
     CS%dtbt = dtbt_restart
   endif
 
-  if (dtbt_restart_bug) then
-    calc_dtbt = .true. ; if ((dtbt_restart > 0.0) .and. (dtbt_input > 0.0)) calc_dtbt = .false.
-  else
-    calc_dtbt = (dtbt_restart <= 0.0)
-  endif
+  calc_dtbt = ((dtbt_restart <= 0.0) .or. (dtbt_restart_bug .and. (dtbt_input <= 0.0)))
 
   call log_param(param_file, mdl, "DTBT as used", CS%dtbt, units="s", unscale=US%T_to_s)
   call log_param(param_file, mdl, "estimated maximum DTBT", CS%dtbt_max, units="s", unscale=US%T_to_s)

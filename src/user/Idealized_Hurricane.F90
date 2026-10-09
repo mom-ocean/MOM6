@@ -100,9 +100,6 @@ type, public :: idealized_hurricane_CS ; private
 
   ! Parameters used if in SCM (single column model) mode
   logical :: SCM_mode   !< If true this being used in Single Column Model mode
-  logical :: edge_taper_bug !< If true and SCM_mode is true, use a bug that does all of the tapering
-                        !! and inflow angle calculations for radii between RAD_EDGE and RAD_AMBIENT
-                        !! as though they were at RAD_EDGE.
   real :: f_column      !< Coriolis parameter used in the single column mode idealized
                         !! hurricane wind profile [T-1 ~> s-1]
   logical :: BR_Bench   !< A "benchmark" configuration (which is meant to
@@ -240,12 +237,6 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
   call get_param(param_file, mdl, "IDL_HURR_SCM", CS%SCM_mode, &
                  "Single Column mode switch used in the SCM idealized hurricane wind profile.", &
                  default=.false.)
-  call get_param(param_file, mdl, "IDL_HURR_SCM_EDGE_TAPER_BUG", CS%edge_taper_bug, &
-                 "If true and IDL_HURR_SCM is true, use a bug that does all of the tapering and "//&
-                 "inflow angle calculations for radii between RAD_EDGE and RAD_AMBIENT as though "//&
-                 "they were at RAD_EDGE.", &
-                 default=.false., do_not_log=.not.CS%SCM_mode)
-  if (.not.CS%SCM_mode) CS%edge_taper_bug = .false.
   call get_param(param_file, mdl, "IDL_HURR_SCM_LOCY", CS%dy_from_center, &
                  "Y distance of station used in the SCM idealized hurricane wind profile.", &
                  units='m', default=50.e3, scale=US%m_to_L)
@@ -533,11 +524,6 @@ subroutine idealized_hurricane_wind_profile(CS, US, absf, YY, XX, UOCN, VOCN, Tx
       U10 = sqrt(Holland_AxBxDP*exp(-Holland_A/radiusB) / (CS%rho_a*radiusB) + &
                  0.25*(radius_km*absf)**2) - 0.5*radius_km*absf
     elseif ( (radius > CS%rad_edge*CS%rad_max_wind) .and. (radius < CS%rad_ambient*CS%rad_max_wind) ) then
-      if (CS%edge_taper_bug) then  ! This recreates a bug that was in SCM_idealized_hurricane_wind_forcing.
-        radius = CS%rad_edge * CS%rad_max_wind
-        rad_rad_max = CS%rad_edge
-      endif
-
       radius10 = CS%rad_max_wind*CS%rad_edge
       if (CS%BR_Bench) then
         radius_km = radius10/1000.
@@ -563,11 +549,6 @@ subroutine idealized_hurricane_wind_profile(CS, US, absf, YY, XX, UOCN, VOCN, Tx
       U10 = (Holland_AxBxDP * exp(-Holland_A/radiusB)) / &
             ( tmp + sqrt(Holland_AxBxDP*exp(-Holland_A/radiusB) * (CS%rho_a*radiusB) + tmp**2) )
     elseif ( (radius > CS%rad_edge*CS%rad_max_wind) .and. (radius < CS%rad_ambient*CS%rad_max_wind) ) then
-      if (CS%edge_taper_bug) then  ! This recreates a bug that was in SCM_idealized_hurricane_wind_forcing.
-        radius = CS%rad_edge * CS%rad_max_wind
-        rad_rad_max = CS%rad_edge
-      endif
-
       radius_km = CS%rad_edge * CS%rad_max_wind
       if (CS%BR_Bench) radius_km = radius_km/1000.
       radiusB = (CS%rad_edge*US%L_to_m*CS%rad_max_wind)**CS%Holland_B
@@ -591,11 +572,6 @@ subroutine idealized_hurricane_wind_profile(CS, US, absf, YY, XX, UOCN, VOCN, Tx
       U10 = ( tmpA * exp(-rad_max_rad_B) ) / &
             ( tmpB + sqrt( (tmpA * CS%rho_a) * exp(-rad_max_rad_B) + tmpB**2) )
     elseif ( (rad_rad_max > CS%rad_edge) .and. (rad_rad_max < CS%rad_ambient) ) then
-      if (CS%edge_taper_bug) then  ! This recreates a bug that was in SCM_idealized_hurricane_wind_forcing.
-        radius = CS%rad_edge * CS%rad_max_wind
-        rad_rad_max = CS%rad_edge
-      endif
-
       radius_km = CS%rad_edge * CS%rad_max_wind
       if (CS%BR_Bench) radius_km = radius_km * 0.001
       rad_max_rad_B = CS%rad_edge**(-CS%Holland_B)
