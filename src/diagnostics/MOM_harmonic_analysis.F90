@@ -94,7 +94,7 @@ subroutine HA_init(Time, US, param_file, nc, CS)
   real :: HA_start_time                             !< Start time of harmonic analysis [T ~> s]
   real :: HA_end_time                               !< End time of harmonic analysis [T ~> s]
   logical :: HA_ssh, HA_ubt, HA_vbt
-  character(len=40)  :: mdl="MOM_harmonic_analysis" !< This module's name
+  character(len=40)  :: mdl = "MOM_harmonic_analysis" !< This module's name
   character(len=255) :: mesg
   integer :: year, month, day, hour, minute, second
 
@@ -459,7 +459,7 @@ subroutine HA_write(ha1, Time, G, CS)
   allocate(cdf_fields(2*nc+1))
 
   ! Variable names
-  cdf_vars(1) = var_desc("z0", "m" ,"mean value", ha1%grid, '1', '1')
+  cdf_vars(1) = var_desc("z0", "m", "mean value", ha1%grid, '1', '1')
   do k=1,nc
     cdf_vars(2*k  ) = var_desc(trim(CS%const_name(k))//"cos", "m", "cosine coefficient", ha1%grid, '1', '1')
     cdf_vars(2*k+1) = var_desc(trim(CS%const_name(k))//"sin", "m", "sine coefficient", ha1%grid, '1', '1')

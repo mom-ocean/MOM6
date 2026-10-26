@@ -87,7 +87,7 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, 'MIN_THICKNESS', CS%min_thickness, &
                  units="m", scale=GV%m_to_H, default=0.001, do_not_log=.True.)
 
-  call openParameterBlock(param_file,'CVMIX_DDIFF')
+  call openParameterBlock(param_file, 'CVMIX_DDIFF')
 
   call get_param(param_file, mdl, "STRAT_PARAM_MAX", CS%strat_param_max, &
                  "The maximum value for the double dissusion stratification parameter", &

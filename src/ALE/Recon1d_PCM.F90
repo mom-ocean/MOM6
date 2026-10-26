@@ -117,7 +117,7 @@ real function x(this, k, t)
   real,       intent(in) :: t    !< Value to solve for [A]
   real :: slp  ! Difference across cell [A]
 
-  slp = this%u_mean(min(k+1,this%n)) - this%u_mean(max(k-1,1))
+  slp = this%u_mean(min(k+1, this%n)) - this%u_mean(max(k-1, 1))
   if ( abs(slp) > 0. ) slp = sign(1., slp)
   x = 0.5 ! Fall back if t==u_mean
   ! if t>u_mean & slp=1 then x=1

@@ -23,7 +23,7 @@ integer function open_profile_file(name, nvar, grid_lon, grid_lat, thread, fset)
   integer, optional, intent(in) :: thread !< Thread number
   integer, optional, intent(in) :: fset !< File set
 
-  open_profile_file=-1
+  open_profile_file = -1
 end function open_profile_file
 
 !> Write a profile

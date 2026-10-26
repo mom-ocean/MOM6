@@ -180,7 +180,7 @@ subroutine stochastics_init(dt, grid, GV, US, CS, param_file, diag, Time)
   if (CS%do_sppt .OR. CS%pert_epbl .OR. CS%do_skeb) then
     num_procs = num_PEs()
     allocate(pelist(num_procs))
-    call Get_PElist(pelist,commID = mom_comm)
+    call Get_PElist(pelist, commID=mom_comm)
     pe_zero = root_PE()
     nxT = grid%ied - grid%isd + 1
     nyT = grid%jed - grid%jsd + 1
@@ -377,7 +377,7 @@ subroutine apply_skeb(grid, GV, US, CS, uc, vc, thickness, tv, dt, Time_end)
 
   ! smooth dissipation skeb_npass times
   do iter=1,CS%skeb_npass
-    if (mod(iter,2) == 1) call pass_var(CS%skeb_diss, grid%domain)
+    if (mod(iter, 2) == 1) call pass_var(CS%skeb_diss, grid%domain)
     do k=1,GV%ke
       if (CS%answer_date < 20250701) then
         ! Do the filter with expressions that do not preserve rotational symmetry.
@@ -433,19 +433,19 @@ subroutine apply_skeb(grid, GV, US, CS, uc, vc, thickness, tv, dt, Time_end)
 
   call enable_averages(dt, Time_end, CS%diag)
   if (CS%id_diss > 0) then
-     call post_data(CS%id_diss, sqrt(dt * max(CS%skeb_diss(:,:,:), 0.)), CS%diag)
+    call post_data(CS%id_diss, sqrt(dt * max(CS%skeb_diss(:,:,:), 0.)), CS%diag)
   endif
   if (CS%id_skeb_wts > 0) then
-     call post_data(CS%id_skeb_wts, CS%skeb_wts, CS%diag)
+    call post_data(CS%id_skeb_wts, CS%skeb_wts, CS%diag)
   endif
   if (CS%id_skebu > 0) then
-     call post_data(CS%id_skebu, ustar(:,:,:), CS%diag)
+    call post_data(CS%id_skebu, ustar(:,:,:), CS%diag)
   endif
   if (CS%id_skebv > 0) then
-     call post_data(CS%id_skebv, vstar(:,:,:), CS%diag)
+    call post_data(CS%id_skebv, vstar(:,:,:), CS%diag)
   endif
   if (CS%id_psi > 0) then
-     call post_data(CS%id_psi, psi(:,:,:), CS%diag)
+    call post_data(CS%id_psi, psi(:,:,:), CS%diag)
   endif
   call disable_averaging(CS%diag)
   CS%skeb_diss(:,:,:) = 0.0 ! Must zero before next time step.

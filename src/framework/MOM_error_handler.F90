@@ -258,10 +258,10 @@ subroutine callTree_enter(mesg,n)
     if (present(n)) then
       write(nAsString(1:8),'(i8)') n
       call loc_MOM_err(NOTE, 'callTree: '// &
-        repeat('   ',callTreeIndentLevel-1)//'loop '//trim(mesg)//trim(nAsString))
+        repeat('   ', callTreeIndentLevel-1)//'loop '//trim(mesg)//trim(nAsString))
     else
       call loc_MOM_err(NOTE, 'callTree: '// &
-        repeat('   ',callTreeIndentLevel-1)//'---> '//trim(mesg))
+        repeat('   ', callTreeIndentLevel-1)//'---> '//trim(mesg))
     endif
   endif
 end subroutine callTree_enter
@@ -273,7 +273,7 @@ subroutine callTree_leave(mesg)
   callTreeIndentLevel = callTreeIndentLevel - 1
   if (verbosity<6) return
   if (is_root_pe()) call loc_MOM_err(NOTE, 'callTree: '// &
-        repeat('   ',callTreeIndentLevel)//'<--- '//trim(mesg))
+        repeat('   ', callTreeIndentLevel)//'<--- '//trim(mesg))
 end subroutine callTree_leave
 
 !> Writes a message about reaching a milestone if call tree reporting is active
@@ -289,10 +289,10 @@ subroutine callTree_waypoint(mesg,n)
     if (present(n)) then
       write(nAsString(1:8),'(i8)') n
       call loc_MOM_err(NOTE, 'callTree: '// &
-        repeat('   ',callTreeIndentLevel)//'loop '//trim(mesg)//trim(nAsString))
+        repeat('   ', callTreeIndentLevel)//'loop '//trim(mesg)//trim(nAsString))
     else
       call loc_MOM_err(NOTE, 'callTree: '// &
-        repeat('   ',callTreeIndentLevel)//'o '//trim(mesg))
+        repeat('   ', callTreeIndentLevel)//'o '//trim(mesg))
     endif
   endif
 end subroutine callTree_waypoint

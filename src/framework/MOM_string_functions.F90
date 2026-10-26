@@ -32,7 +32,7 @@ function lowercase(input_string)
 !   This function returns a string in which all uppercase letters have been
 ! replaced by their lowercase counterparts.  It is loosely based on the
 ! lowercase function in mpp_util.F90.
-  integer, parameter :: co=iachar('a')-iachar('A') ! case offset
+  integer, parameter :: co = iachar('a')-iachar('A') ! case offset
   integer :: k
 
   lowercase = input_string
@@ -50,7 +50,7 @@ function uppercase(input_string)
 !   This function returns a string in which all lowercase letters have been
 ! replaced by their uppercase counterparts.  It is loosely based on the
 ! uppercase function in mpp_util.F90.
-  integer, parameter :: co=iachar('A')-iachar('a') ! case offset
+  integer, parameter :: co = iachar('A')-iachar('a') ! case offset
   integer :: k
 
   uppercase = input_string
@@ -82,7 +82,7 @@ function left_ints(i)
   write(left_ints(1:1320),'(A)') trim(left_int(i(1)))
   if (size(i)>1) then
     do j=2,size(i)
-      tmp=left_ints
+      tmp = left_ints
       write(left_ints(1:1320),'(A,", ",A)') trim(tmp),trim(left_int(i(j)))
     enddo
   endif
@@ -97,15 +97,15 @@ function left_real(val)
 
   if ((abs(val) < 1.0e4) .and. (abs(val) >= 1.0e-3)) then
     write(left_real, '(F30.11)') val
-    if (.not.isFormattedFloatEqualTo(left_real,val)) then
+    if (.not.isFormattedFloatEqualTo(left_real, val)) then
       write(left_real, '(F30.12)') val
-      if (.not.isFormattedFloatEqualTo(left_real,val)) then
+      if (.not.isFormattedFloatEqualTo(left_real, val)) then
         write(left_real, '(F30.13)') val
-        if (.not.isFormattedFloatEqualTo(left_real,val)) then
+        if (.not.isFormattedFloatEqualTo(left_real, val)) then
           write(left_real, '(F30.14)') val
-          if (.not.isFormattedFloatEqualTo(left_real,val)) then
+          if (.not.isFormattedFloatEqualTo(left_real, val)) then
             write(left_real, '(F30.15)') val
-            if (.not.isFormattedFloatEqualTo(left_real,val)) then
+            if (.not.isFormattedFloatEqualTo(left_real, val)) then
               write(left_real, '(F30.16)') val
             endif
           endif
@@ -123,15 +123,15 @@ function left_real(val)
   else
     if ((abs(val) <= 1.0e-100) .or. (abs(val) >= 1.0e100)) then
       write(left_real(1:32), '(ES24.14E3)') val
-      if (.not.isFormattedFloatEqualTo(left_real,val)) &
+      if (.not.isFormattedFloatEqualTo(left_real, val)) &
         write(left_real(1:32), '(ES24.15E3)') val
     else
       write(left_real(1:32), '(ES23.14)') val
-      if (.not.isFormattedFloatEqualTo(left_real,val)) &
+      if (.not.isFormattedFloatEqualTo(left_real, val)) &
         write(left_real(1:32), '(ES23.15)') val
     endif
     do
-      ind = index(left_real,"0E")
+      ind = index(left_real, "0E")
       if (ind == 0) exit
       if (left_real(ind-1:ind-1) == ".") exit
       left_real = left_real(1:ind-1)//left_real(ind+1:)
@@ -152,18 +152,18 @@ function left_reals(r,sep)
   logical :: doWrite
   character(len=10) :: separator
 
-  n=1 ; doWrite=.true. ; left_reals=''
+  n = 1 ; doWrite = .true. ; left_reals = ''
   if (present(sep)) then
-    separator=sep ; ns=len(sep)
+    separator = sep ; ns = len(sep)
   else
-    separator=', ' ; ns=2
+    separator = ', ' ; ns = 2
   endif
   do j=1,size(r)
-    doWrite=.true.
+    doWrite = .true.
     if (j<size(r)) then
       if (r(j)==r(j+1)) then
-        n=n+1
-        doWrite=.false.
+        n = n+1
+        doWrite = .false.
       endif
     endif
     if (doWrite) then
@@ -175,7 +175,7 @@ function left_reals(r,sep)
       else
         left_reals = left_reals // trim(left_real(r(j)))
       endif
-      n=1
+      n = 1
     endif
   enddo
 end function left_reals
@@ -188,9 +188,9 @@ function isFormattedFloatEqualTo(str, val)
   ! Local variables
   real :: scannedVal ! The value extraced from str, in arbitrary units [A]
 
-  isFormattedFloatEqualTo=.false.
+  isFormattedFloatEqualTo = .false.
   read(str(1:),*,err=987) scannedVal
-  if (scannedVal == val) isFormattedFloatEqualTo=.true.
+  if (scannedVal == val) isFormattedFloatEqualTo = .true.
  987 return
 end function isFormattedFloatEqualTo
 
@@ -218,11 +218,11 @@ character(len=120) function extract_word(string, separators, n)
   extract_word = ''
   lastCharIsSeperator = .true.
   ns = len_trim(string)
-  i = 0 ; b=0 ; e=0 ; nw=0
+  i = 0 ; b = 0 ; e = 0 ; nw = 0
   do while (i<ns)
     i = i+1
     if (lastCharIsSeperator) then ! search for end of word
-      if (verify(string(i:i),separators)==0) then
+      if (verify(string(i:i), separators)==0) then
         continue ! Multiple separators
       else
         lastCharIsSeperator = .false. ! character is beginning of word
@@ -230,7 +230,7 @@ character(len=120) function extract_word(string, separators, n)
         continue
       endif
     else ! continue search for end of word
-      if (verify(string(i:i),separators)==0) then
+      if (verify(string(i:i), separators)==0) then
         lastCharIsSeperator = .true.
         e = i-1 ! Previous character is end of word
         nw = nw+1
@@ -324,39 +324,39 @@ logical function string_functions_unit_tests(verbose)
   fail = .false.
   v = verbose
   write(stdout,*) '==== MOM_string_functions: string_functions_unit_tests ==='
-  fail = fail .or. localTestS(v,left_int(-1),'-1')
-  fail = fail .or. localTestS(v,left_ints(i(:)),'-1, 1, 3, 3, 0')
-  fail = fail .or. localTestS(v,left_real(0.),'0.0')
-  fail = fail .or. localTestS(v,left_reals(r(:)),'0.0, 1.0, -2.0, 1.3, 3*3.0E-11, -5.1E+12')
-  fail = fail .or. localTestS(v,left_reals(r(:),sep=' '),'0.0 1.0 -2.0 1.3 3*3.0E-11 -5.1E+12')
-  fail = fail .or. localTestS(v,left_reals(r(:),sep=','),'0.0,1.0,-2.0,1.3,3*3.0E-11,-5.1E+12')
-  fail = fail .or. localTestS(v,ints_to_string(i(:),5),'_-0001_0001_0003_0003_0000')
-  fail = fail .or. localTestS(v,ints_to_string(i(2:),2),'_0001_0003')
-  fail = fail .or. localTestS(v,ints_to_string(i(:)),'_-0001_0001_0003')
-  fail = fail .or. localTestS(v,trim_trailing_commas("One, Two, Three, "), "One, Two, Three")
-  fail = fail .or. localTestS(v,extractWord("One Two,Three",1),"One")
-  fail = fail .or. localTestS(v,extractWord("One Two,Three",2),"Two")
-  fail = fail .or. localTestS(v,extractWord("One Two,Three",3),"Three")
-  fail = fail .or. localTestS(v,extractWord("One Two,  Three",3),"Three")
-  fail = fail .or. localTestS(v,extractWord(" One Two,Three",1),"One")
-  fail = fail .or. localTestS(v,extract_word("One,Two,Three",",",3),"Three")
-  fail = fail .or. localTestS(v,extract_word("One,Two,Three",",",4),"")
-  fail = fail .or. localTestS(v,remove_spaces("1 2 3"),"123")
-  fail = fail .or. localTestS(v,remove_spaces(" 1 2 3"),"123")
-  fail = fail .or. localTestS(v,remove_spaces("1 2 3 "),"123")
-  fail = fail .or. localTestS(v,remove_spaces("123"),"123")
-  fail = fail .or. localTestS(v,remove_spaces(" "),"")
-  fail = fail .or. localTestS(v,remove_spaces(""),"")
-  fail = fail .or. localTestI(v,extract_integer("1","",1),1)
-  fail = fail .or. localTestI(v,extract_integer("1,2,3",",",1),1)
-  fail = fail .or. localTestI(v,extract_integer("1,2",",",2),2)
-  fail = fail .or. localTestI(v,extract_integer("1,2",",",3),0)
-  fail = fail .or. localTestI(v,extract_integer("1,2",",",4,4),4)
-  fail = fail .or. localTestR(v,extract_real("1.","",1),1.)
-  fail = fail .or. localTestR(v,extract_real("1.,2.,3.",",",1),1.)
-  fail = fail .or. localTestR(v,extract_real("1.,2.",",",2),2.)
-  fail = fail .or. localTestR(v,extract_real("1.,2.",",",3),0.)
-  fail = fail .or. localTestR(v,extract_real("1.,2.",",",4,4.),4.)
+  fail = fail .or. localTestS(v, left_int(-1), '-1')
+  fail = fail .or. localTestS(v, left_ints(i(:)), '-1, 1, 3, 3, 0')
+  fail = fail .or. localTestS(v, left_real(0.), '0.0')
+  fail = fail .or. localTestS(v, left_reals(r(:)), '0.0, 1.0, -2.0, 1.3, 3*3.0E-11, -5.1E+12')
+  fail = fail .or. localTestS(v, left_reals(r(:), sep=' '), '0.0 1.0 -2.0 1.3 3*3.0E-11 -5.1E+12')
+  fail = fail .or. localTestS(v, left_reals(r(:), sep=','), '0.0,1.0,-2.0,1.3,3*3.0E-11,-5.1E+12')
+  fail = fail .or. localTestS(v, ints_to_string(i(:), 5), '_-0001_0001_0003_0003_0000')
+  fail = fail .or. localTestS(v, ints_to_string(i(2:), 2), '_0001_0003')
+  fail = fail .or. localTestS(v, ints_to_string(i(:)), '_-0001_0001_0003')
+  fail = fail .or. localTestS(v, trim_trailing_commas("One, Two, Three, "), "One, Two, Three")
+  fail = fail .or. localTestS(v, extractWord("One Two,Three", 1), "One")
+  fail = fail .or. localTestS(v, extractWord("One Two,Three", 2), "Two")
+  fail = fail .or. localTestS(v, extractWord("One Two,Three", 3), "Three")
+  fail = fail .or. localTestS(v, extractWord("One Two,  Three", 3), "Three")
+  fail = fail .or. localTestS(v, extractWord(" One Two,Three", 1), "One")
+  fail = fail .or. localTestS(v, extract_word("One,Two,Three", ",", 3), "Three")
+  fail = fail .or. localTestS(v, extract_word("One,Two,Three", ",", 4), "")
+  fail = fail .or. localTestS(v, remove_spaces("1 2 3"), "123")
+  fail = fail .or. localTestS(v, remove_spaces(" 1 2 3"), "123")
+  fail = fail .or. localTestS(v, remove_spaces("1 2 3 "), "123")
+  fail = fail .or. localTestS(v, remove_spaces("123"), "123")
+  fail = fail .or. localTestS(v, remove_spaces(" "), "")
+  fail = fail .or. localTestS(v, remove_spaces(""), "")
+  fail = fail .or. localTestI(v, extract_integer("1", "", 1), 1)
+  fail = fail .or. localTestI(v, extract_integer("1,2,3", ",", 1), 1)
+  fail = fail .or. localTestI(v, extract_integer("1,2", ",", 2), 2)
+  fail = fail .or. localTestI(v, extract_integer("1,2", ",", 3), 0)
+  fail = fail .or. localTestI(v, extract_integer("1,2", ",", 4, 4), 4)
+  fail = fail .or. localTestR(v, extract_real("1.", "", 1), 1.)
+  fail = fail .or. localTestR(v, extract_real("1.,2.,3.", ",", 1), 1.)
+  fail = fail .or. localTestR(v, extract_real("1.,2.", ",", 2), 2.)
+  fail = fail .or. localTestR(v, extract_real("1.,2.", ",", 3), 0.)
+  fail = fail .or. localTestR(v, extract_real("1.,2.", ",", 4, 4.), 4.)
   if (.not. fail) write(stdout,*) 'Pass'
   string_functions_unit_tests = fail
 end function string_functions_unit_tests
@@ -366,8 +366,8 @@ logical function localTestS(verbose,str1,str2)
   logical, intent(in) :: verbose !< If true, write results to stdout
   character(len=*), intent(in) :: str1 !< String
   character(len=*), intent(in) :: str2 !< String
-  localTestS=.false.
-  if (trim(str1)/=trim(str2)) localTestS=.true.
+  localTestS = .false.
+  if (trim(str1) /= trim(str2)) localTestS = .true.
   if (localTestS .or. verbose) then
     write(stdout,*) '>'//trim(str1)//'<'
     if (localTestS) then
@@ -382,8 +382,8 @@ logical function localTestI(verbose,i1,i2)
   logical, intent(in) :: verbose !< If true, write results to stdout
   integer, intent(in) :: i1 !< Integer
   integer, intent(in) :: i2 !< Integer
-  localTestI=.false.
-  if (i1/=i2) localTestI=.true.
+  localTestI = .false.
+  if (i1 /= i2) localTestI = .true.
   if (localTestI .or. verbose) then
     write(stdout,*) i1,i2
     if (localTestI) then
@@ -398,8 +398,8 @@ logical function localTestR(verbose,r1,r2)
   logical, intent(in) :: verbose !< If true, write results to stdout
   real, intent(in) :: r1 !< The first value to compare, in arbitrary units [A]
   real, intent(in) :: r2 !< The first value to compare, in arbitrary units [A]
-  localTestR=.false.
-  if (r1/=r2) localTestR=.true.
+  localTestR = .false.
+  if (r1 /= r2) localTestR = .true.
   if (localTestR .or. verbose) then
     write(stdout,*) r1,r2
     if (localTestR) then
@@ -458,9 +458,9 @@ function ints_to_string(a, n) result(i2s)
   i2s = ''
   do i=1,min(size(a), n_max)
     if (a(i) < 0) then
-      write (i2s_temp, '(I5.4)') a(i)
+      write(i2s_temp, '(I5.4)') a(i)
     else
-      write (i2s_temp, '(I4.4)') a(i)
+      write(i2s_temp, '(I4.4)') a(i)
     endif
     i2s = trim(i2s) //'_'// trim(i2s_temp)
   enddo

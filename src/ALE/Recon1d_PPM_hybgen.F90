@@ -401,20 +401,20 @@ subroutine bound_edge_values(N, h, u, edge_val, h_neglect, answer_date)
   use_2018_answers = .true. ; if (present(answer_date)) use_2018_answers = (answer_date < 20190101)
 
   do k = 1,N
-    km1 = max(1,k-1) ; kp1 = min(k+1,N)
+    km1 = max(1, k-1) ; kp1 = min(k+1, N)
     slope_x_h = 0.0
     if (use_2018_answers) then
       sigma_l = 2.0 * ( u(k) - u(km1) ) / ( h(k) + h_neglect )
       sigma_c = 2.0 * ( u(kp1) - u(km1) ) / ( h(km1) + 2.0*h(k) + h(kp1) + h_neglect )
       sigma_r = 2.0 * ( u(kp1) - u(k) ) / ( h(k) + h_neglect )
       if ( (sigma_l * sigma_r) > 0.0 ) &
-        slope_x_h = 0.5 * h(k) * sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
+        slope_x_h = 0.5 * h(k) * sign( min(abs(sigma_l), abs(sigma_c), abs(sigma_r)), sigma_c )
     elseif ( ((h(km1) + h(kp1)) + 2.0*h(k)) > 0.0 ) then
       sigma_l = ( u(k) - u(km1) )
       sigma_c = ( u(kp1) - u(km1) ) * ( h(k) / ((h(km1) + h(kp1)) + 2.0*h(k)) )
       sigma_r = ( u(kp1) - u(k) )
       if ( (sigma_l * sigma_r) > 0.0 ) &
-        slope_x_h = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
+        slope_x_h = sign( min(abs(sigma_l), abs(sigma_c), abs(sigma_r)), sigma_c )
     endif
     if ( (u(km1)-edge_val(k,1)) * (edge_val(k,1)-u(k)) < 0.0 ) then
       edge_val(k,1) = u(k) - sign( min( abs(slope_x_h), abs(edge_val(k,1)-u(k)) ), slope_x_h )

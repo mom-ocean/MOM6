@@ -67,7 +67,7 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   !   When modifying the code, comment out this error message.  It is here
   ! so that the original (unmodified) version is not accidentally used.
   call MOM_error(FATAL, "User_wind_surface_forcing: " // &
-     "User forcing routine called without modification." )
+      "User forcing routine called without modification." )
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -268,7 +268,7 @@ subroutine USER_surface_forcing_init(Time, G, US, param_file, diag, CS)
 
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80, scale=US%m_to_L**2*US%Z_to_m*US%T_to_s**2)
+                 units="m s-2", default=9.80, scale=US%m_to_L**2*US%Z_to_m*US%T_to_s**2)
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
@@ -282,7 +282,7 @@ subroutine USER_surface_forcing_init(Time, G, US, param_file, diag, CS)
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back "//&
                  "toward some specified surface state with a rate "//&
-                 "given by FLUXCONST.", default= .false.)
+                 "given by FLUXCONST.", default=.false.)
   if (CS%restorebuoy) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes to the relative "//&

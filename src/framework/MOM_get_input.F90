@@ -74,12 +74,12 @@ subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename,
   if (file_exists('input.nml')) then
     unit = open_namelist_file(file='input.nml')
   else
-    call MOM_error(FATAL,'Required namelist file input.nml does not exist.')
+    call MOM_error(FATAL, 'Required namelist file input.nml does not exist.')
   endif
 
   ! Read namelist parameters
   ! NOTE: Every rank is reading MOM_input_nml
-  ierr=1 ; do while (ierr /= 0)
+  ierr = 1 ; do while (ierr /= 0)
     read(unit, nml=MOM_input_nml, iostat=io, end=10)
     ierr = check_nml_error(io, 'MOM_input_nml')
   enddo
@@ -88,10 +88,10 @@ subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename,
   ! Store parameters in container
   if (present(dirs)) then
     if (present(ensemble_num)) then
-      dirs%output_directory = slasher(ensembler(output_directory,ensemble_num))
-      dirs%restart_output_dir = slasher(ensembler(restart_output_dir,ensemble_num))
-      dirs%restart_input_dir = slasher(ensembler(restart_input_dir,ensemble_num))
-      dirs%input_filename = ensembler(input_filename,ensemble_num)
+      dirs%output_directory = slasher(ensembler(output_directory, ensemble_num))
+      dirs%restart_output_dir = slasher(ensembler(restart_output_dir, ensemble_num))
+      dirs%restart_input_dir = slasher(ensembler(restart_input_dir, ensemble_num))
+      dirs%input_filename = ensembler(input_filename, ensemble_num)
     else
       dirs%output_directory = slasher(ensembler(output_directory))
       dirs%restart_output_dir = slasher(ensembler(restart_output_dir))
@@ -116,7 +116,7 @@ subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename,
     do io = 1, npf
       if (len_trim(trim(parameter_filename(io))) > 0) then
         if (present(ensemble_num)) then
-          call open_param_file(ensembler(parameter_filename(io),ensemble_num), param_file, &
+          call open_param_file(ensembler(parameter_filename(io), ensemble_num), param_file, &
                check_params, doc_file_dir=output_dir, ensemble_num=ensemble_num)
         else
           call open_param_file(ensembler(parameter_filename(io)), param_file, &

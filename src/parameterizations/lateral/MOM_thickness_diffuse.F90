@@ -890,14 +890,14 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     pres(i,j,1) = 0.0
     if (associated(tv%p_surf)) then ; pres(i,j,1) = tv%p_surf(i,j) ; endif
 
-    h_avail(i,j,1) = max(I4dt*G%areaT(i,j)*(h(i,j,1)-GV%Angstrom_H),0.0)
+    h_avail(i,j,1) = max(I4dt*G%areaT(i,j)*(h(i,j,1)-GV%Angstrom_H), 0.0)
     h_avail_rsum(i,j,2) = h_avail(i,j,1)
     h_frac(i,j,1) = 1.0
     pres(i,j,2) = pres(i,j,1) + (GV%g_Earth*GV%H_to_RZ) * h(i,j,1)
   enddo ; enddo
   do j=js-1,je+1
     do k=2,nz ; do i=is-1,ie+1
-      h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H),0.0)
+      h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H), 0.0)
       h_avail_rsum(i,j,k+1) = h_avail_rsum(i,j,k) + h_avail(i,j,k)
       h_frac(i,j,k) = 0.0 ; if (h_avail(i,j,k) > 0.0) &
         h_frac(i,j,k) = h_avail(i,j,k) / h_avail_rsum(i,j,k+1)
@@ -2499,12 +2499,12 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
            'Time Mean Diffusive Zonal Thickness Flux', &
            'kg s-1', conversion=GV%H_to_kg_m2*US%L_to_m**2*US%s_to_T, &
            y_cell_method='sum', v_extensive=.true.)
-  if (CS%id_uhGM > 0) call safe_alloc_ptr(CDp%uhGM,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
+  if (CS%id_uhGM > 0) call safe_alloc_ptr(CDp%uhGM, G%IsdB, G%IedB, G%jsd, G%jed, GV%ke)
   CS%id_vhGM = register_diag_field('ocean_model', 'vhGM', diag%axesCvL, Time, &
            'Time Mean Diffusive Meridional Thickness Flux', &
            'kg s-1', conversion=GV%H_to_kg_m2*US%L_to_m**2*US%s_to_T, &
            x_cell_method='sum', v_extensive=.true.)
-  if (CS%id_vhGM > 0) call safe_alloc_ptr(CDp%vhGM,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
+  if (CS%id_vhGM > 0) call safe_alloc_ptr(CDp%vhGM, G%isd, G%ied, G%JsdB, G%JedB, GV%ke)
 
   CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', diag%axesT1, Time, &
           'Integrated Tendency of Ocean Mesoscale Eddy KE from Parameterized Eddy Advection', &
@@ -2572,7 +2572,7 @@ subroutine thickness_diffuse_get_KH(CS, KH_u_GME, KH_v_GME, G, GV)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(inout) :: KH_v_GME !< Isopycnal height
                                                    !! diffusivities at v-faces [L2 T-1 ~> m2 s-1]
   ! Local variables
-  integer :: i,j,k
+  integer :: i, j, k
 
   do k=1,GV%ke+1 ; do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
     KH_u_GME(I,j,k) = CS%KH_u_GME(I,j,k)

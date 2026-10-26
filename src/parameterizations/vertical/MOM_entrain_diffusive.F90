@@ -236,7 +236,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
 
   tolerance = CS%Tolerance_Ent
   kmb = GV%nk_rho_varies
-  K2 = max(kmb+1,2) ; kb_min = K2
+  K2 = max(kmb+1, 2) ; kb_min = K2
   if (.not. CS%bulkmixedlayer) then
     kb(:) = 1
     ! These lines fill in values that are arbitrary, but needed because
@@ -434,7 +434,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
     endif
     do k=nz-1,kb_min,-1 ; do i=is,ie ; if (do_i(i)) then
       if (k >= kb(i)) then
-        maxF(i,k) = MIN(maxF(i,k),dsp1_ds(i,k+1)*maxF(i,k+1) + htot(i))
+        maxF(i,k) = MIN(maxF(i,k), dsp1_ds(i,k+1)*maxF(i,k+1) + htot(i))
         htot(i) = htot(i) + (h(i,j,k) - Angstrom)
       endif
       if (k == kb(i)) then
@@ -467,7 +467,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
     endif ; enddo ; enddo
     if (.not.CS%bulkmixedlayer) then
       do i=is,ie
-        maxF(i,1) = MIN(maxF(i,1),dsp1_ds(i,2)*maxF(i,2) + htot(i))
+        maxF(i,1) = MIN(maxF(i,1), dsp1_ds(i,2)*maxF(i,2) + htot(i))
       enddo
     endif
 
@@ -539,7 +539,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
 
     do it=0,CS%max_ent_it-1
       do i=is1,ie1 ; if (do_i(i)) then
-        if (.not.CS%bulkmixedlayer) F(i,1) = MIN(F(i,1),maxF(i,1))
+        if (.not.CS%bulkmixedlayer) F(i,1) = MIN(F(i,1), maxF(i,1))
         b1(i) = 1.0
       endif ; enddo ! end of i loop
 
@@ -580,7 +580,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
 
       do k=nz-2,kb_min_act,-1 ; do i=is1,ie1
         if (do_i(i) .and. (k > kb(i))) &
-          F(i,k) = MIN((F(i,k)+c1(i,k+1)*(F(i,k+1)-Fprev(i,k+1))),maxF(i,k))
+          F(i,k) = MIN((F(i,k)+c1(i,k+1)*(F(i,k+1)-Fprev(i,k+1))), maxF(i,k))
       enddo ; enddo
 
       if (CS%bulkmixedlayer) then
@@ -648,7 +648,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
       endif ; enddo
       do k=nz-2,kb_min_act,-1 ; do i=is1,ie1 ; if (do_i(i)) then
         if (k>kb(i)) then
-          F(i,k) = MIN(MAX(minF(i,k),F(i,k)), (dsp1_ds(i,k+1)*F(i,k+1) + &
+          F(i,k) = MIN(MAX(minF(i,k), F(i,k)), (dsp1_ds(i,k+1)*F(i,k+1) + &
                MAX(((F(i,k+1)-dsp1_ds(i,k+2)*F(i,k+2)) + &
                     (h(i,j,k+1) - Angstrom)), 0.5*(h(i,j,k+1)-Angstrom))))
         elseif (k==kb(i)) then
@@ -672,7 +672,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
           h_avail = eakb(i) + MAX(0.5*(h_bl(i,kmb+1)-Angstrom), &
                 (F_kb(i)-ea_kbp1(i)) + (h_bl(i,kmb+1)-Angstrom))
           ! Ensure that 0 < eb_kmb < h_avail.
-          Ent_bl(i,Kmb+1) = MIN(Ent_bl(i,Kmb+1),0.5*(eakb(i) + h_avail))
+          Ent_bl(i,Kmb+1) = MIN(Ent_bl(i,Kmb+1), 0.5*(eakb(i) + h_avail))
 
           eb_kmb(i) = max(2.0*Ent_bl(i,Kmb+1) - eakb(i), 0.0)
         endif
@@ -683,11 +683,11 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
         if ((.not.CS%bulkmixedlayer) .or. (k > kb(i)+1)) then
           F(i,k) = MIN(F(i,k), ds_dsp1(i,k)*( ((F(i,k-1) + &
               dsp1_ds(i,k-1)*F(i,k-1)) - F(i,k-2)) + (h(i,j,k-1) - Angstrom)))
-          F(i,k) = MAX(F(i,k),MIN(minF(i,k),0.0))
+          F(i,k) = MAX(F(i,k), MIN(minF(i,k), 0.0))
         elseif (k == kb(i)+1) then
           F(i,k) = MIN(F(i,k), ds_dsp1(i,k)*( ((F(i,k-1) + eakb(i)) - &
               eb_kmb(i)) + (h(i,j,k-1) - Angstrom)))
-          F(i,k) = MAX(F(i,k),MIN(minF(i,k),0.0))
+          F(i,k) = MAX(F(i,k), MIN(minF(i,k), 0.0))
         endif
       endif ; enddo ; enddo
     endif ! (it == (CS%max_ent_it))
@@ -749,7 +749,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
               if (abs(Rho_cor) < abs(0.9*eakb(i)*dS_kb_eff)) then
                 ea_cor = -Rho_cor / dS_kb_eff
               else
-                ea_cor = sign(0.9*eakb(i),-Rho_cor*dS_kb_eff)
+                ea_cor = sign(0.9*eakb(i), -Rho_cor*dS_kb_eff)
               endif
 
               if (ea_cor > 0.0) then
@@ -775,7 +775,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
         enddo ; enddo
 
         ! Repetitive, unless ea(kb) has been corrected.
-        k=kmb
+        k = kmb
         do i=is,ie
           ! Do not adjust eb through the base of the buffer layers, but it
           ! may be necessary to change entrainment from above.
@@ -1021,12 +1021,12 @@ subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb)
     ! Entrainment is always positive, but F may be negative due to
     ! surface buoyancy fluxes.
     do i=is,ie
-      ea(i,j,1) = 0.0 ; eb(i,j,1) = MAX(F(i,1),0.0)
-      ea(i,j,2) = dsp1_ds(i,2)*F(i,2) - MIN(F(i,1),0.0)
+      ea(i,j,1) = 0.0 ; eb(i,j,1) = MAX(F(i,1), 0.0)
+      ea(i,j,2) = dsp1_ds(i,2)*F(i,2) - MIN(F(i,1), 0.0)
     enddo
 
     do k=2,nz-1 ; do i=is,ie
-      eb(i,j,k) = MAX(F(i,k),0.0)
+      eb(i,j,k) = MAX(F(i,k), 0.0)
       ea(i,j,k+1) = dsp1_ds(i,k+1)*F(i,k+1) - (F(i,k)-eb(i,j,k))
       if (ea(i,j,k+1) < 0.0) then
         eb(i,j,k) = eb(i,j,k) - ea(i,j,k+1)
@@ -1974,14 +1974,14 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
               chg_prev(i) = 0.5*(minent(i) - ent_best(i))
             endif
           else
-            if (abs(chg) < tolerance) chg = SIGN(tolerance,chg)
+            if (abs(chg) < tolerance) chg = SIGN(tolerance, chg)
             ent(i) = ent_best(i) + chg
             chg_prev(i) = chg
           endif
         endif
       endif ; enddo
 
-      if (mod(it,3) == 0) then  ! Re-determine the loop bounds.
+      if (mod(it, 3) == 0) then  ! Re-determine the loop bounds.
         ie1 = is-1 ; do i=is1,ie ; if (do_i(i)) ie1 = i ; enddo
         do i=ie1,is,-1 ; if (do_i(i)) is1 = i ; enddo
       endif
@@ -2026,13 +2026,13 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
           elseif ((F(i) <= F_maxent(i)) .and. (F(i) > F_minent(i))) then
             new_min_bound = .false. ! We have a new maximum bound.
           else ! This case would bracket a minimum.  Weird.
-             ! Unless the derivative indicates that there is a maximum near the
-             ! lower bound, try keeping the end with the larger value of F
-             ! in a tie keep the minimum as the answer here will be compared
-             ! with the maximum input value later.
-             new_min_bound = .true.
-             if (dF_dE_min(i) > 0.0 .or. (F_minent(i) >= F_maxent(i))) &
-               new_min_bound = .false.
+            ! Unless the derivative indicates that there is a maximum near the
+            ! lower bound, try keeping the end with the larger value of F
+            ! in a tie keep the minimum as the answer here will be compared
+            ! with the maximum input value later.
+            new_min_bound = .true.
+            if (dF_dE_min(i) > 0.0 .or. (F_minent(i) >= F_maxent(i))) &
+              new_min_bound = .false.
           endif
           if (need_bracket(i)) then ! Still not bracketed.
             if (new_min_bound) then
@@ -2143,7 +2143,7 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS, just_re
                  units="s", scale=US%s_to_T, fail_if_missing=.true., do_not_log=just_read_params)
   call get_param(param_file, mdl, "TOLERANCE_ENT", CS%Tolerance_Ent, &
                  "The tolerance with which to solve for entrainment values.", &
-                 units="m", default=US%Z_to_m*MAX(100.0*GV%Angstrom_Z,1.0e-4*sqrt(dt*Kd)), scale=GV%m_to_H, &
+                 units="m", default=US%Z_to_m*MAX(100.0*GV%Angstrom_Z, 1.0e-4*sqrt(dt*Kd)), scale=GV%m_to_H, &
                  do_not_log=just_read_params)
   call get_param(param_file, mdl, "ENTRAIN_DIFFUSIVE_MAX_ENT", CS%max_Ent, &
                  "A large ceiling on the maximum permitted amount of entrainment across each "//&

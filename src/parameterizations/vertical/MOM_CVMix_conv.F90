@@ -96,7 +96,7 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, 'MIN_THICKNESS', CS%min_thickness, &
                  units="m", scale=US%m_to_Z, default=0.001, do_not_log=.True.)
 
-  call openParameterBlock(param_file,'CVMix_CONVECTION')
+  call openParameterBlock(param_file, 'CVMix_CONVECTION')
 
   call get_param(param_file, mdl, "PRANDTL_CONV", prandtl_conv, &
                  "The turbulent Prandtl number applied to convective "//&
@@ -248,31 +248,31 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
                              OBL_ind=kOBL)
 
       ! Increment the diffusivity outside of the boundary layer.
-      do K=max(1,kOBL+1),GV%ke+1
+      do K = max(1, kOBL+1), GV%ke+1
         Kd(i,j,K) = Kd(i,j,K) + GV%m2_s_to_HZ_T * kd_col(K)
       enddo
       if (present(Kd_aux)) then
         ! Increment the other diffusivity outside of the boundary layer.
-        do K=max(1,kOBL+1),GV%ke+1
+        do K = max(1, kOBL+1), GV%ke+1
           Kd_aux(i,j,K) = Kd_aux(i,j,K) + GV%m2_s_to_HZ_T * kd_col(K)
         enddo
       endif
 
       ! Increment the viscosity outside of the boundary layer.
-      do K=max(1,kOBL+1),GV%ke+1
+      do K = max(1, kOBL+1), GV%ke+1
         Kv(i,j,K) = Kv(i,j,K) + GV%m2_s_to_HZ_T * kv_col(K)
       enddo
 
       ! Store 3-d arrays for diagnostics.
       if (CS%id_kv_conv > 0) then
         ! Do not apply mixing due to convection within the boundary layer
-        do K=max(1,kOBL+1),GV%ke+1
+        do K = max(1, kOBL+1), GV%ke+1
           Kv_conv(i,j,K) = US%m2_s_to_Z2_T * kv_col(K)
         enddo
       endif
       if (CS%id_kd_conv > 0) then
         ! Do not apply mixing due to convection within the boundary layer
-        do K=max(1,kOBL+1),GV%ke+1
+        do K = max(1, kOBL+1), GV%ke+1
           Kd_conv(i,j,K) = US%m2_s_to_Z2_T * kd_col(K)
         enddo
       endif

@@ -38,18 +38,18 @@ subroutine init_stochastic_physics_ocn(delt, geoLonT, geoLatT, nxT, nyT, nz, &
   integer, intent(in)    :: mpicomm !< mpi communicator
   integer, intent(out)   :: iret    !< return code
 
-  iret=0
+  iret = 0
   if (pert_epbl_in) then
     call MOM_error(WARNING, 'init_stochastic_physics_ocn: pert_epbl needs to be false if using the stub')
-    iret=-1
+    iret = -1
   endif
   if (do_sppt_in) then
     call MOM_error(WARNING, 'init_stochastic_physics_ocn: do_sppt needs to be false if using the stub')
-    iret=-1
+    iret = -1
   endif
   if (do_skeb_in) then
     call MOM_error(WARNING, 'init_stochastic_physics_ocn: do_skeb needs to be false if using the stub')
-    iret=-1
+    iret = -1
   endif
 
   ! This stub function does not actually do anything.

@@ -63,7 +63,7 @@ subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, melt_mask, G, 
                  "Valid values are: CHANNEL, FILE, and USER.", &
                  fail_if_missing=.true.)
 
-  if (PRESENT(rotate_index)) rotate=rotate_index
+  if (PRESENT(rotate_index)) rotate = rotate_index
 
   if (rotate) then
     allocate(tmp1_2d(G_in%isd:G_in%ied,G_in%jsd:G_in%jed), source=0.0)
@@ -74,19 +74,19 @@ subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, melt_mask, G, 
       case ("CHANNEL") ; call initialize_ice_thickness_channel (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
       case ("FILE") ; call initialize_ice_thickness_from_file (tmp1_2d, tmp2_2d, tmp3_2d, tmp4_2d, G_in, US, PF)
       case ("USER") ; call USER_init_ice_thickness (tmp1_2d, tmp2_2d, tmp3_2d, G_in, US, PF)
-      case default  ; call MOM_error(FATAL,"MOM_initialize: Unrecognized ice profile setup "//trim(config))
+      case default  ; call MOM_error(FATAL, "MOM_initialize: Unrecognized ice profile setup "//trim(config))
     end select
-    call rotate_array(tmp1_2d,turns, h_shelf)
-    call rotate_array(tmp2_2d,turns, area_shelf_h)
-    call rotate_array(tmp3_2d,turns, hmask)
-    call rotate_array(tmp4_2d,turns, melt_mask)
-    deallocate(tmp1_2d,tmp2_2d,tmp3_2d)
+    call rotate_array(tmp1_2d, turns, h_shelf)
+    call rotate_array(tmp2_2d, turns, area_shelf_h)
+    call rotate_array(tmp3_2d, turns, hmask)
+    call rotate_array(tmp4_2d, turns, melt_mask)
+    deallocate(tmp1_2d, tmp2_2d, tmp3_2d)
   else
     select case ( trim(config) )
       case ("CHANNEL") ; call initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, US, PF)
       case ("FILE") ; call initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, melt_mask, G, US, PF)
       case ("USER") ; call USER_init_ice_thickness (h_shelf, area_shelf_h, hmask, G, US, PF)
-      case default  ; call MOM_error(FATAL,"MOM_initialize: Unrecognized ice profile setup "//trim(config))
+      case default  ; call MOM_error(FATAL, "MOM_initialize: Unrecognized ice profile setup "//trim(config))
     end select
   endif
 
@@ -109,7 +109,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, melt
 
   !  This subroutine reads ice thickness and area from a file and puts it into
   !  h_shelf [Z ~> m] and area_shelf_h [L2 ~> m2] (and dimensionless) and updates hmask
-  character(len=200) :: filename,thickness_file,inputdir ! Strings for file/path
+  character(len=200) :: filename, thickness_file, inputdir ! Strings for file/path
   character(len=200) :: thickness_varname, area_varname, hmask_varname, melt_mask_varname  ! Variable name in file
   character(len=40)  :: mdl = "initialize_ice_thickness_from_file" ! This subroutine's name.
   integer :: i, j, isc, jsc, iec, jec
@@ -135,14 +135,14 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, melt
   call get_param(PF, mdl, "ICE_AREA_VARNAME", area_varname, &
                  "The name of the area variable in ICE_THICKNESS_FILE.", &
                  default="area_shelf_h")
-  hmask_varname="h_mask"
+  hmask_varname = "h_mask"
   call get_param(PF, mdl, "MELT_MASK_VARNAME", melt_mask_varname, &
                  "The name of the melt mask variable in ICE_THICKNESS_FILE.", &
                  default="melt_mask")
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " initialize_topography_from_file: Unable to open "//trim(filename))
   call MOM_read_data(filename, trim(thickness_varname), h_shelf, G%Domain, scale=US%m_to_Z)
-  call MOM_read_data(filename,trim(area_varname), area_shelf_h, G%Domain, scale=US%m_to_L**2)
+  call MOM_read_data(filename, trim(area_varname), area_shelf_h, G%Domain, scale=US%m_to_L**2)
   if (field_exists(filename, trim(hmask_varname), MOM_domain=G%Domain)) then
     call MOM_read_data(filename, trim(hmask_varname), hmask, G%Domain)
     hmask_set = .true.
@@ -154,7 +154,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, melt
   if (field_exists(filename, trim(melt_mask_varname), MOM_domain=G%Domain)) then
     call MOM_read_data(filename, trim(melt_mask_varname), melt_mask, G%Domain)
   else
-    melt_mask(:,:)=1.0
+    melt_mask(:,:) = 1.0
   endif
 
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
@@ -187,13 +187,13 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, melt
 
         if (area_shelf_h(i,j) >= G%areaT(i,j)) then
           hmask(i,j) = 1.
-          area_shelf_h(i,j)=G%areaT(i,j)
+          area_shelf_h(i,j) = G%areaT(i,j)
         elseif (area_shelf_h(i,j) == 0.0) then
           hmask(i,j) = 0.
         elseif ((area_shelf_h(i,j) > 0) .and. (area_shelf_h(i,j) <= G%areaT(i,j))) then
           hmask(i,j) = 2.
         else
-          call MOM_error(FATAL,mdl// " AREA IN CELL OUT OF RANGE")
+          call MOM_error(FATAL, mdl// " AREA IN CELL OUT OF RANGE")
         endif
       enddo
     enddo
@@ -257,16 +257,16 @@ subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US,
         if (G%geoLonCu(i-1,j) >= edge_pos) then
         ! Everything past the edge is open ocean.
           area_shelf_h(i,j) = 0.0
-          hmask (i,j) = 0.0
-          h_shelf (i,j) = 0.0
+          hmask(i,j) = 0.0
+          h_shelf(i,j) = 0.0
         else
           if (G%geoLonCu(i,j) > edge_pos) then
             area_shelf_h(i,j) = G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
                                 (G%geoLonCu(i,j) - G%geoLonCu(i-1,j))
-            hmask (i,j) = 2.0
+            hmask(i,j) = 2.0
           else
             area_shelf_h(i,j) = G%areaT(i,j)
-            hmask (i,j) = 1.0
+            hmask(i,j) = 1.0
           endif
 
           if (G%geoLonT(i,j) > slope_pos) then
@@ -327,7 +327,7 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
 
   character(len=40)  :: mdl = "initialize_ice_shelf_boundary_channel" ! This subroutine's name.
-  integer :: i, j, isd, jsd, giec, gjec, gisc, gjsc,gisd,gjsd, isc, jsc, iec, jec, ied, jed
+  integer :: i, j, isd, jsd, giec, gjec, gisc, gjsc, gisd, gjsd, isc, jsc, iec, jec, ied, jed
   real    :: input_thick ! The input ice shelf thickness [Z ~> m]
   real    :: input_vel  ! The input ice velocity at the upstream boundary [L T-1 ~> m s-1]
   real    :: lenlat, len_stress, westlon, lenlon, southlat ! The input positions of the channel boundarises
@@ -426,7 +426,7 @@ subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,float_cond,&
 
   !  This subroutine reads ice thickness and area from a file and puts it into
   !  h_shelf [Z ~> m] and area_shelf_h [L2 ~> m2] (and dimensionless) and updates hmask
-  character(len=200) :: filename,vel_file,inputdir,bed_topo_file ! Strings for file/path
+  character(len=200) :: filename, vel_file, inputdir, bed_topo_file ! Strings for file/path
   character(len=200) :: ushelf_varname, vshelf_varname, &
                         floatfr_varname, bed_varname  ! Variable name in file
   character(len=40)  :: mdl = "initialize_ice_velocity_from_file" ! This subroutine's name.
@@ -557,7 +557,7 @@ subroutine initialize_ice_shelf_boundary_from_file(u_face_mask_bdry, v_face_mask
   call MOM_read_data(filename, trim(vmask_varname), vmask, G%Domain, position=CORNER, scale=1.)
   filename = trim(inputdir)//trim(icethick_file)
 
-  call MOM_read_data(filename,trim(hmsk_varname), hmask, G%Domain, scale=1.)
+  call MOM_read_data(filename, trim(hmsk_varname), hmask, G%Domain, scale=1.)
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
 
   do j=jsc,jec

@@ -21,7 +21,7 @@ use MOM_array_transform, only : rotate_array
 use MOM_coms,            only : sum_across_PEs
 use MOM_diag_mediator,   only : post_data, query_averaging_enabled, register_diag_field
 use MOM_diag_mediator,   only : diag_ctrl
-use MOM_domains,         only : pass_var,pass_vector
+use MOM_domains,         only : pass_var, pass_vector
 use MOM_error_handler,   only : MOM_error, FATAL, NOTE, WARNING, is_root_pe
 use MOM_file_parser,     only : get_param, log_param, log_version, param_file_type
 use MOM_get_input,       only : directories, Get_MOM_input
@@ -45,7 +45,7 @@ implicit none ; private
 !  Publicly available functions
 public set_up_oda_incupd_field, set_up_oda_incupd_vel_field
 public initialize_oda_incupd_fixed, initialize_oda_incupd, apply_oda_incupd, oda_incupd_end
-public init_oda_incupd_diags,calc_oda_increments,output_oda_incupd_inc
+public init_oda_incupd_diags, calc_oda_increments, output_oda_incupd_inc
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -215,7 +215,7 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h, nz_data, re
   CS%nz = GV%ke
 
   ! increments on horizontal grid
-  if (.not. CS%incupdDataOngrid) call MOM_error(FATAL,'initialize_oda_incupd: '// &
+  if (.not. CS%incupdDataOngrid) call MOM_error(FATAL, 'initialize_oda_incupd: '// &
            'The oda_incupd code only applies ODA increments on the same horizontal grid. ')
 
   ! get number of timestep for full update
@@ -284,7 +284,7 @@ subroutine set_up_oda_incupd_field(sp_val, G, GV, CS)
     write(mesg,'("Increase MAX_FIELDS_ to at least ",I0," in MOM_memory.h or decrease &
            &the number of fields increments in the call to &
            &initialize_oda_incupd." )') CS%fldno
-    call MOM_error(FATAL,"set_up_oda_incupd_field: "//mesg)
+    call MOM_error(FATAL, "set_up_oda_incupd_field: "//mesg)
   endif
 
   ! store the increment/full field tracer profiles
@@ -374,7 +374,7 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
 
 
   ! increments calculated on if CS%ncount = 0.0
-  if (CS%ncount /= 0.0) call MOM_error(FATAL,'calc_oda_increments: '// &
+  if (CS%ncount /= 0.0) call MOM_error(FATAL, 'calc_oda_increments: '// &
            'CS%ncount should be 0.0 to get accurate increments.')
 
   ! get h_obs
@@ -383,7 +383,7 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
   do k=1,nz_data  ; do j=js,je ; do i=is,ie
     h_obs(i,j,k) = CS%Ref_h%p(i,j,k)
   enddo ; enddo ; enddo
-  call pass_var(h_obs,G%Domain)
+  call pass_var(h_obs, G%Domain)
 
 
   ! allocate 1-d arrays
@@ -407,7 +407,7 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
         sum_h2 = sum_h2+h_obs(i,j,k)
       enddo
       do k=1,nz_data
-        tmp_h(k)=(sum_h1/sum_h2)*h_obs(i,j,k)
+        tmp_h(k) = (sum_h1/sum_h2) * h_obs(i,j,k)
       enddo
       ! get temperature
       do k=1,nz
@@ -461,7 +461,7 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
           sum_h2 = sum_h2+hu_obs(k)
         enddo
         do k=1,nz_data
-          hu_obs(k)=(sum_h1/sum_h2)*hu_obs(k)
+          hu_obs(k) = (sum_h1/sum_h2) * hu_obs(k)
         enddo
         ! remap model u on hu_obs
         call remapping_core_h(CS%remap_cs, nz, hu(1:nz), tmp_val1, &
@@ -496,7 +496,7 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
           sum_h2 = sum_h2+hv_obs(k)
         enddo
         do k=1,nz_data
-          hv_obs(k)=(sum_h1/sum_h2)*hv_obs(k)
+          hv_obs(k) = (sum_h1/sum_h2) * hv_obs(k)
         enddo
         ! remap model v on hv_obs
         call remapping_core_h(CS%remap_cs, nz, hv(1:nz), tmp_val1, &
@@ -511,10 +511,10 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
 
   call pass_var(CS%Inc(1)%p, G%Domain)
   call pass_var(CS%Inc(2)%p, G%Domain)
-  call pass_vector(CS%Inc_u%p,CS%Inc_v%p,G%Domain)
+  call pass_vector(CS%Inc_u%p, CS%Inc_v%p, G%Domain)
 
   ! deallocate  arrays
-  deallocate(tmp_h,tmp_val2,hu_obs,hv_obs)
+  deallocate(tmp_h, tmp_val2, hu_obs, hv_obs)
   deallocate(h_obs)
 
 end subroutine calc_oda_increments
@@ -579,9 +579,9 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
 
   ! print out increments
   write(mesg,'(f10.0)') CS%ncount
-  if (is_root_pe()) call MOM_error(NOTE,"updating fields with increments ncount:"//trim(mesg))
+  if (is_root_pe()) call MOM_error(NOTE, "updating fields with increments ncount:"//trim(mesg))
   write(mesg,'(f10.8)') inc_wt
-  if (is_root_pe()) call MOM_error(NOTE,"updating fields with weight inc_wt:"//trim(mesg))
+  if (is_root_pe()) call MOM_error(NOTE, "updating fields with weight inc_wt:"//trim(mesg))
 
   ! get h_obs
   nz_data = CS%Inc(1)%nz_data
@@ -589,7 +589,7 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
   do k=1,nz_data  ; do j=js,je ; do i=is,ie
     h_obs(i,j,k) = CS%Ref_h%p(i,j,k)
   enddo ; enddo ; enddo
-  call pass_var(h_obs,G%Domain)
+  call pass_var(h_obs, G%Domain)
 
   ! allocate 1-d array
   allocate(tmp_h(nz_data), source=0.0)
@@ -649,7 +649,7 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
   ! add u and v increments
   if (CS%uv_inc) then
 
-    call pass_var(h,G%Domain) ! to ensure reproducibility
+    call pass_var(h, G%Domain) ! to ensure reproducibility
 
     ! add increments to u
     hu(:) = 0.0
@@ -713,7 +713,7 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
           sum_h2 = sum_h2 + hv_obs(k)
         enddo
         do k=1,nz_data
-          hv_obs(k)=( sum_h1 / sum_h2 ) * hv_obs(k)
+          hv_obs(k) = ( sum_h1 / sum_h2 ) * hv_obs(k)
         enddo
         ! remap increment profile on hv
         call remapping_core_h(CS%remap_cs, nz_data, hv_obs(1:nz_data), tmp_val2, &
@@ -731,7 +731,7 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
 
   call pass_var(tv%T, G%Domain)
   call pass_var(tv%S, G%Domain)
-  call pass_vector(u,v,G%Domain)
+  call pass_vector(u, v, G%Domain)
 
   ! Diagnostics of increments, mostly used for debugging.
   if (CS%uv_inc) then
@@ -744,7 +744,7 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
   if (CS%id_S_oda_inc > 0) call post_data(CS%id_S_oda_inc, tmp_s, CS%diag)
 
   ! deallocate arrays
-  deallocate(tmp_h,tmp_val2,hu_obs,hv_obs)
+  deallocate(tmp_h, tmp_val2, hu_obs, hv_obs)
   deallocate(h_obs)
 
 end subroutine apply_oda_incupd
@@ -772,7 +772,7 @@ subroutine output_oda_incupd_inc(Time, G, GV, param_file, CS, US)
   if (.not.associated(CS)) return
   ! get the output_directory
   call Get_MOM_Input(dirs=dirs)
-  if (is_root_pe()) call MOM_error(NOTE,"output increments in output_directory")
+  if (is_root_pe()) call MOM_error(NOTE, "output increments in output_directory")
 
   ! get a restart structure
   call restart_init(param_file, restart_CSp_tmp)

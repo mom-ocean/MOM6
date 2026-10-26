@@ -90,17 +90,17 @@ public remapping_unit_tests, build_reconstructions_1d, average_value_ppoly
 public interpolate_column, reintegrate_column, dzFromH1H2
 
 ! The following are private parameter constants
-integer, parameter  :: REMAPPING_PCM        = 0 !< O(h^1) remapping scheme
-integer, parameter  :: REMAPPING_PLM        = 2 !< O(h^2) remapping scheme
-integer, parameter  :: REMAPPING_PLM_HYBGEN = 3 !< O(h^2) remapping scheme
-integer, parameter  :: REMAPPING_PPM_CW     =10 !< O(h^3) remapping scheme
-integer, parameter  :: REMAPPING_PPM_H4     = 4 !< O(h^3) remapping scheme
-integer, parameter  :: REMAPPING_PPM_IH4    = 5 !< O(h^3) remapping scheme
-integer, parameter  :: REMAPPING_PPM_HYBGEN = 6 !< O(h^3) remapping scheme
-integer, parameter  :: REMAPPING_WENO_HYBGEN= 7 !< O(h^3) remapping scheme
-integer, parameter  :: REMAPPING_PQM_IH4IH3 = 8 !< O(h^4) remapping scheme
-integer, parameter  :: REMAPPING_PQM_IH6IH5 = 9 !< O(h^5) remapping scheme
-integer, parameter  :: REMAPPING_VIA_CLASS  =99 !< Scheme is controlled by Recon1d class
+integer, parameter :: REMAPPING_PCM         =  0 !< O(h^1) remapping scheme
+integer, parameter :: REMAPPING_PLM         =  2 !< O(h^2) remapping scheme
+integer, parameter :: REMAPPING_PLM_HYBGEN  =  3 !< O(h^2) remapping scheme
+integer, parameter :: REMAPPING_PPM_CW      = 10 !< O(h^3) remapping scheme
+integer, parameter :: REMAPPING_PPM_H4      =  4 !< O(h^3) remapping scheme
+integer, parameter :: REMAPPING_PPM_IH4     =  5 !< O(h^3) remapping scheme
+integer, parameter :: REMAPPING_PPM_HYBGEN  =  6 !< O(h^3) remapping scheme
+integer, parameter :: REMAPPING_WENO_HYBGEN =  7 !< O(h^3) remapping scheme
+integer, parameter :: REMAPPING_PQM_IH4IH3  =  8 !< O(h^4) remapping scheme
+integer, parameter :: REMAPPING_PQM_IH6IH5  =  9 !< O(h^5) remapping scheme
+integer, parameter :: REMAPPING_VIA_CLASS   = 99 !< Scheme is controlled by Recon1d class
 
 integer, parameter  :: INTEGRATION_PCM = 0  !< Piecewise Constant Method
 integer, parameter  :: INTEGRATION_PLM = 1  !< Piecewise Linear Method
@@ -150,7 +150,7 @@ subroutine remapping_set_param(CS, remapping_scheme, boundary_extrapolation,  &
 
   if (present(remapping_scheme)) then
     call setReconstructionType( remapping_scheme, CS )
-    if (index(trim(remapping_scheme),'C_')>0) then
+    if (index(trim(remapping_scheme), 'C_') > 0) then
       if (present(nk)) then
         call CS%reconstruction%init(nk, h_neglect=h_neglect)
       else
@@ -334,7 +334,7 @@ subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, net_err, PCM_cell)
 
   endif
 
- if (present(net_err)) net_err = uh_err
+  if (present(net_err)) net_err = uh_err
 
 end subroutine remapping_core_h
 
@@ -571,9 +571,9 @@ subroutine check_reconstructions_1d(n0, h0, u0, deg, boundary_extrapolation, &
 
   problem_detected = .false.
   do i0 = 1, n0
-    u_l = u0(max(1,i0-1))
+    u_l = u0(max(1, i0-1))
     u_c = u0(i0)
-    u_r = u0(min(n0,i0+1))
+    u_r = u0(min(n0, i0+1))
     if (i0 > 1 .or. .not. boundary_extrapolation) then
       u_min = min(u_l, u_c)
       u_max = max(u_l, u_c)
@@ -1148,7 +1148,7 @@ subroutine remap_sub_to_tgt_grid_om4(n0, n1, h1, h_sub, u_sub, uh_sub, &
         dh = dh + h_sub(i_sub)
         duh = duh + uh_sub(i_sub)
         ! This accumulates the contribution to the error bound for the sum of u*h
-        uh_err = uh_err + max(abs(duh),abs(uh_sub(i_sub)))*epsilon(duh)
+        uh_err = uh_err + max(abs(duh), abs(uh_sub(i_sub))) * epsilon(duh)
       enddo
       u1(i1) = duh / dh
       ! This is the contribution from the division to the error bound for the sum of u*h
@@ -1229,7 +1229,7 @@ subroutine remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, &
         ! Ideally u_ref would be already be substracted in uh_sub
         duh = duh + ( uh_sub(i_sub) - h_sub(i_sub) * u_ref )
         ! This accumulates the contribution to the error bound for the sum of u*h
-        uh_err = uh_err + max(abs(duh),abs(uh_sub(i_sub)))*epsilon(duh)
+        uh_err = uh_err + max(abs(duh), abs(uh_sub(i_sub))) * epsilon(duh)
       enddo
       u1(i1) = duh / dh + u_ref
       ! This is the contribution from the division to the error bound for the sum of u*h
@@ -1451,7 +1451,7 @@ real function average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefs, method, i0, x
           + ( ppoly0_coefs(i0,4) * 0.25* ( xa2pxb2 * xapxb )                             &
           +   ppoly0_coefs(i0,5) * 0.2 * ( ( xb*xb_2 + xa*xa_2 ) * xapxb + xa_2*xb_2 ) ) ) ) )
       case default
-        call MOM_error( FATAL,'The selected integration method is invalid' )
+        call MOM_error( FATAL, 'The selected integration method is invalid' )
     end select
   else ! dh == 0.
     select case ( method )
@@ -1490,7 +1490,7 @@ real function average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefs, method, i0, x
               + xa *   ppoly0_coefs(i0,5) ) ) )
       case default
         u_ave = 0.
-        call MOM_error( FATAL,'The selected integration method is invalid' )
+        call MOM_error( FATAL, 'The selected integration method is invalid' )
     end select
   endif
   average_value_ppoly = u_ave
@@ -1544,8 +1544,8 @@ subroutine check_remapped_values(n0, h0, u0, ppoly_r_E, deg, ppoly_r_coefs, &
     write(0,*) 'U: u0max=',u0max,'u1max=',u1max
     if (u1max>u0max) write(0,*) 'U maximum overshoot=',u1max-u0max,' <-----!'
     write(0,'(a3,6a24)') 'k','h0','left edge','u0','right edge','h1','u1'
-    do k = 1, max(n0,n1)
-      if (k<=min(n0,n1)) then
+    do k = 1, max(n0, n1)
+      if (k <= min(n0, n1)) then
         write(0,'(i3,1p6e24.16)') k,h0(k),ppoly_r_E(k,1),u0(k),ppoly_r_E(k,2),h1(k),u1(k)
       elseif (k>n0) then
         write(0,'(i3,96x,1p2e24.16)') k,h1(k),u1(k)
@@ -1644,7 +1644,7 @@ subroutine dzFromH1H2( n1, h1, n2, h2, dx )
   x1 = 0.
   x2 = 0.
   dx(1) = 0.
-  do K = 1, max(n1,n2)
+  do K = 1, max(n1, n2)
     if (k <= n1) x1 = x1 + h1(k) ! Interface k+1, right of source cell k
     if (k <= n2) then
       x2 = x2 + h2(k) ! Interface k+1, right of target cell k

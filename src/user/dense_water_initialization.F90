@@ -124,9 +124,9 @@ subroutine dense_water_initialize_TS(G, GV, US, param_file, T, S, h, just_read)
        units="nondim", default=default_mld, do_not_log=just_read)
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
                  default=35.0, units="ppt", scale=US%ppt_to_S, do_not_log=just_read)
-  call get_param(param_file, mdl,"T_REF", T_ref, 'Reference temperature', &
+  call get_param(param_file, mdl, "T_REF", T_ref, 'Reference temperature', &
                 units='degC', scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file, mdl,"S_RANGE", S_range, 'Initial salinity range', &
+  call get_param(param_file, mdl, "S_RANGE", S_range, 'Initial salinity range', &
                 units="ppt", default=2.0, scale=US%ppt_to_S, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.

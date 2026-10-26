@@ -82,7 +82,7 @@ program Shelf_main
   ! nmax is the number of iterations after which to stop so that the simulation does not exceed its
   ! CPU time limit.  nmax is determined by evaluating the CPU time used between successive calls to
   ! write_cputime.  Initially it is set to be very large.
-  integer :: nmax=2000000000
+  integer :: nmax = 2000000000
   ! A structure containing pointers to the thermodynamic forcing fields
   ! at the ocean surface.
   type(forcing) :: fluxes
@@ -141,16 +141,16 @@ program Shelf_main
   type(time_type) :: daymax          ! The final day of the simulation.
 
   integer :: CPU_steps          ! The number of steps between writing CPU time.
-  integer :: date_init(6)=0                ! The start date of the whole simulation.
-  integer :: date(6)=-1                    ! Possibly the start date of this run segment.
-  integer :: years=0, months=0, days=0     ! These may determine the segment run
-  integer :: hours=0, minutes=0, seconds=0 ! length, if read from a namelist.
+  integer :: date_init(6) = 0              ! The start date of the whole simulation.
+  integer :: date(6) = -1                  ! Possibly the start date of this run segment.
+  integer :: years = 0, months = 0, days = 0     ! These may determine the segment run
+  integer :: hours = 0, minutes = 0, seconds = 0 ! length, if read from a namelist.
   integer :: yr, mon, day, hr, mins, sec   ! Temp variables for writing the date.
   type(param_file_type) :: param_file      ! The structure indicating the file(s)
                                            ! containing all run-time parameters.
   character(len=9)  :: month
   character(len=16) :: calendar = 'noleap'
-  integer :: calendar_type=-1
+  integer :: calendar_type = -1
   integer :: verbosity
   integer :: unit, io_status, ierr
   logical :: symmetric
@@ -190,7 +190,7 @@ program Shelf_main
     call open_ASCII_file(unit, 'input.nml', action=READONLY_FILE)
     read(unit, ice_solo_nml, iostat=io_status)
     call close_file(unit)
-    ierr = check_nml_error(io_status,'ice_solo_nml')
+    ierr = check_nml_error(io_status, 'ice_solo_nml')
     if (years+months+days+hours+minutes+seconds > 0) then
       if (is_root_pe()) write(*,ice_solo_nml)
     endif
@@ -218,9 +218,9 @@ program Shelf_main
     elseif (calendar(1:10)=='THIRTY_DAY') then ;  calendar_type = THIRTY_DAY_MONTHS
     elseif (calendar(1:11)=='NO_CALENDAR') then ; calendar_type = NO_CALENDAR
     elseif (calendar(1:1) /= ' ') then
-      call MOM_error(FATAL,'Shelf_driver: Invalid namelist value '//trim(calendar)//' for calendar')
+      call MOM_error(FATAL, 'Shelf_driver: Invalid namelist value '//trim(calendar)//' for calendar')
     else
-      call MOM_error(FATAL,'Shelf_driver: No namelist value for calendar')
+      call MOM_error(FATAL, 'Shelf_driver: No namelist value for calendar')
     endif
   endif
   call set_calendar_type(calendar_type)
@@ -252,7 +252,7 @@ program Shelf_main
 
   if (sum(date) >= 0) then
     ! In this case, the segment starts at a time fixed by ocean_solo.res
-    segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
+    segment_start_time = set_date(date(1), date(2), date(3), date(4), date(5), date(6))
     Time = segment_start_time
   else
     ! In this case, the segment starts at Start_time.
@@ -339,7 +339,7 @@ program Shelf_main
     Time_end = daymax
   endif
 
-  call diag_manager_set_time_end_infra (Time_end)
+  call diag_manager_set_time_end_infra(Time_end)
 
   if (Time >= Time_end) call MOM_error(FATAL, &
     "Shelf_driver: The run has been started at or after the end time of the run.")
@@ -385,7 +385,7 @@ program Shelf_main
 
   if (cpu_steps > 0) call write_cputime(Time, 0, write_CPU_CSp)
 
-  if (((.not.BTEST(Restart_control,1)) .and. (.not.BTEST(Restart_control,0))) &
+  if (((.not.BTEST(Restart_control, 1)) .and. (.not.BTEST(Restart_control, 0))) &
       .or. (Restart_control < 0)) permit_incr_restart = .false.
 
   if (restint > real_to_time(0.0)) then
@@ -438,10 +438,10 @@ program Shelf_main
 
 !  See if it is time to write out a restart file - timestamped or not.
     if ((permit_incr_restart) .and. (Time + (Time_step_shelf/2) > restart_time)) then
-      if (BTEST(Restart_control,1)) then
+      if (BTEST(Restart_control, 1)) then
         call ice_shelf_save_restart(ice_shelf_CSp, Time, dirs%restart_output_dir, .true.)
       endif
-      if (BTEST(Restart_control,0)) then
+      if (BTEST(Restart_control, 0)) then
         call ice_shelf_save_restart(ice_shelf_CSp, Time, dirs%restart_output_dir)
       endif
       ! Write ice shelf solo restart file.

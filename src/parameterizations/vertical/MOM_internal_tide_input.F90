@@ -133,10 +133,10 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
+  if (.not.associated(CS)) call MOM_error(FATAL, "set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
-  if (.not.CS%initialized) call MOM_error(FATAL,"set_diffusivity: "//&
+  if (.not.CS%initialized) call MOM_error(FATAL, "set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
   use_EOS = associated(tv%eqn_of_state)
@@ -192,7 +192,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 
   if (CS%debug) then
     call hchksum(N2_bot, "N2_bot", G%HI, haloshift=0, unscale=US%s_to_T**2)
-    call hchksum(CS%TKE_itidal_input,"TKE_itidal_input", G%HI, haloshift=0, &
+    call hchksum(CS%TKE_itidal_input, "TKE_itidal_input", G%HI, haloshift=0, &
                  unscale=HZ2_T3_to_W_m2)
   endif
 
@@ -354,7 +354,7 @@ subroutine get_input_TKE(G, TKE_itidal_input, nFreq, CS)
                                                          !! [H Z2 T-3 ~> m3 s-3 or W m-2].
   type(int_tide_input_CS),   target       :: CS !< A pointer that is set to point to the control
                                                  !! structure for the internal tide input module.
-  integer :: i,j,fr
+  integer :: i, j, fr
 
   do fr=1,nFreq ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
     TKE_itidal_input(i,j,fr) = CS%TKE_itidal_input(i,j,fr)
@@ -370,7 +370,7 @@ subroutine get_barotropic_tidal_vel(G, vel_btTide, nFreq, CS)
                          intent(out) :: vel_btTide !< Barotropic velocity read from file [L T-1 ~> m s-1].
   type(int_tide_input_CS),   target       :: CS !< A pointer that is set to point to the control
                                                  !! structure for the internal tide input module.
-  integer :: i,j,fr
+  integer :: i, j, fr
 
   do fr=1,nFreq ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
     vel_btTide(i,j,fr) = CS%tideamp(i,j,fr)
@@ -461,7 +461,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                units="m s-1", default=0.0, scale=US%m_s_to_L_T)
 
   call read_param(param_file, "INTERNAL_TIDE_FREQS", num_freq)
-  CS%nFreq= num_freq
+  CS%nFreq = num_freq
 
   allocate(itide%Nb(isd:ied,jsd:jed), source=0.0)
   allocate(itide%Rho_bot(isd:ied,jsd:jed), source=0.0)
@@ -495,7 +495,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
 
     call read_param(param_file, "INTTIDE_AMP_VARNAMES", tidefile_varnames)
     do fr=1,num_freq
-      tideamp_var = extractWord(tidefile_varnames,fr)
+      tideamp_var = extractWord(tidefile_varnames, fr)
       call MOM_read_data(filename, tideamp_var, CS%tideamp(:,:,fr), G%domain, scale=US%m_s_to_L_T)
     enddo
 
@@ -573,14 +573,14 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
     write(var_name, '("TKE_itidal_itide_freq",i1)') fr
     write(var_descript, '("Internal Tide Driven Turbulent Kinetic Energy in frequency ",i1)') fr
 
-    CS%id_TKE_itidal_itide(fr) = register_diag_field('ocean_model',var_name,diag%axesT1,Time, &
+    CS%id_TKE_itidal_itide(fr) = register_diag_field('ocean_model', var_name, diag%axesT1, Time, &
                                                      var_descript, 'W m-2', conversion=HZ2_T3_to_W_m2)
   enddo
 
-  CS%id_Nb = register_diag_field('ocean_model','Nb_itide',diag%axesT1,Time, &
+  CS%id_Nb = register_diag_field('ocean_model', 'Nb_itide', diag%axesT1, Time, &
        'Bottom Buoyancy Frequency', 's-1', conversion=US%s_to_T)
 
-  CS%id_N2_bot = register_diag_field('ocean_model','N2_b_itide',diag%axesT1,Time, &
+  CS%id_N2_bot = register_diag_field('ocean_model', 'N2_b_itide', diag%axesT1, Time, &
        'Bottom Buoyancy frequency squared', 's-2', conversion=US%s_to_T**2)
 
 end subroutine int_tide_input_init

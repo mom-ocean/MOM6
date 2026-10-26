@@ -338,11 +338,11 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
 
   ! Determine how many tidal components are to be used.
   nc = 0
-  if (use_M2) nc=nc+1 ; if (use_S2) nc=nc+1
-  if (use_N2) nc=nc+1 ; if (use_K2) nc=nc+1
-  if (use_K1) nc=nc+1 ; if (use_O1) nc=nc+1
-  if (use_P1) nc=nc+1 ; if (use_Q1) nc=nc+1
-  if (use_MF) nc=nc+1 ; if (use_MM) nc=nc+1
+  if (use_M2) nc = nc + 1 ; if (use_S2) nc = nc + 1
+  if (use_N2) nc = nc + 1 ; if (use_K2) nc = nc + 1
+  if (use_K1) nc = nc + 1 ; if (use_O1) nc = nc + 1
+  if (use_P1) nc = nc + 1 ; if (use_Q1) nc = nc + 1
+  if (use_MF) nc = nc + 1 ; if (use_MM) nc = nc + 1
   CS%nc = nc
 
   if (nc == 0) then
@@ -407,54 +407,54 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
   if (CS%use_eq_phase) call astro_longitudes_init(CS%time_ref, CS%tidal_longitudes)
 
   ! Set the parameters for all components that are in use.
-  c=0
+  c = 0
   if (use_M2) then
-    c=c+1 ; CS%const_name(c) = "M2" ; CS%struct(c) = 2
+    c = c+1 ; CS%const_name(c) = "M2" ; CS%struct(c) = 2
     CS%love_no(c) = 0.693 ; amp_def(c) = 0.242334 ! Default amplitude in m.
   endif
 
   if (use_S2) then
-    c=c+1 ; CS%const_name(c) = "S2" ; CS%struct(c) = 2
+    c = c+1 ; CS%const_name(c) = "S2" ; CS%struct(c) = 2
     CS%love_no(c) = 0.693 ; amp_def(c) = 0.112743 ! Default amplitude in m.
   endif
 
   if (use_N2) then
-    c=c+1 ; CS%const_name(c) = "N2" ; CS%struct(c) = 2
+    c = c+1 ; CS%const_name(c) = "N2" ; CS%struct(c) = 2
     CS%love_no(c) = 0.693 ; amp_def(c) = 0.046397 ! Default amplitude in m.
   endif
 
   if (use_K2) then
-    c=c+1 ; CS%const_name(c) = "K2" ; CS%struct(c) = 2
+    c = c+1 ; CS%const_name(c) = "K2" ; CS%struct(c) = 2
     CS%love_no(c) = 0.693 ; amp_def(c) = 0.030684 ! Default amplitude in m.
   endif
 
   if (use_K1) then
-    c=c+1 ; CS%const_name(c) = "K1" ; CS%struct(c) = 1
+    c = c+1 ; CS%const_name(c) = "K1" ; CS%struct(c) = 1
     CS%love_no(c) = 0.736 ; amp_def(c) = 0.141565 ! Default amplitude in m.
   endif
 
   if (use_O1) then
-    c=c+1 ; CS%const_name(c) = "O1" ; CS%struct(c) = 1
+    c = c+1 ; CS%const_name(c) = "O1" ; CS%struct(c) = 1
     CS%love_no(c) = 0.695 ; amp_def(c) = 0.100661 ! Default amplitude in m.
   endif
 
   if (use_P1) then
-    c=c+1 ; CS%const_name(c) = "P1" ; CS%struct(c) = 1
+    c = c+1 ; CS%const_name(c) = "P1" ; CS%struct(c) = 1
     CS%love_no(c) = 0.706 ; amp_def(c) = 0.046848 ! Default amplitude in m.
   endif
 
   if (use_Q1) then
-    c=c+1 ; CS%const_name(c) = "Q1" ; CS%struct(c) = 1
+    c = c+1 ; CS%const_name(c) = "Q1" ; CS%struct(c) = 1
     CS%love_no(c) = 0.695 ; amp_def(c) = 0.019273 ! Default amplitude in m.
   endif
 
   if (use_MF) then
-    c=c+1 ; CS%const_name(c) = "MF" ; CS%struct(c) = 3
+    c = c+1 ; CS%const_name(c) = "MF" ; CS%struct(c) = 3
     CS%love_no(c) = 0.693 ; amp_def(c) = 0.042041 ! Default amplitude in m.
   endif
 
   if (use_MM) then
-    c=c+1 ; CS%const_name(c) = "MM" ; CS%struct(c) = 3
+    c = c+1 ; CS%const_name(c) = "MM" ; CS%struct(c) = 3
     CS%love_no(c) = 0.693 ; amp_def(c) = 0.022191 ! Default amplitude in m.
   endif
 
@@ -500,8 +500,8 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
       call find_in_files(tidal_input_files, "PHASE_SAL_"//trim(CS%const_name(c)), phase, G)
       call find_in_files(tidal_input_files, "AMP_SAL_"//trim(CS%const_name(c)), CS%ampsal(:,:,c), &
                          G, scale=US%m_to_Z)
-      call pass_var(phase,           G%domain,complete=.false.)
-      call pass_var(CS%ampsal(:,:,c),G%domain,complete=.true.)
+      call pass_var(phase,            G%domain, complete=.false.)
+      call pass_var(CS%ampsal(:,:,c), G%domain, complete=.true.)
       do j=js-1,je+1 ; do i=is-1,ie+1
         CS%cosphasesal(i,j,c) = cos(phase(i,j)*deg_to_rad)
         CS%sinphasesal(i,j,c) = sin(phase(i,j)*deg_to_rad)
@@ -518,8 +518,8 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
       call find_in_files(tidal_input_files, "PHASE_PREV_"//trim(CS%const_name(c)), phase, G)
       call find_in_files(tidal_input_files, "AMP_PREV_"//trim(CS%const_name(c)), CS%amp_prev(:,:,c), &
                          G, scale=US%m_to_Z)
-      call pass_var(phase,             G%domain,complete=.false.)
-      call pass_var(CS%amp_prev(:,:,c),G%domain,complete=.true.)
+      call pass_var(phase,              G%domain, complete=.false.)
+      call pass_var(CS%amp_prev(:,:,c), G%domain, complete=.true.)
       do j=js-1,je+1 ; do i=is-1,ie+1
         CS%cosphase_prev(i,j,c) = cos(phase(i,j)*deg_to_rad)
         CS%sinphase_prev(i,j,c) = sin(phase(i,j)*deg_to_rad)

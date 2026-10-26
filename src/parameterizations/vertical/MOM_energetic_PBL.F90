@@ -236,7 +236,7 @@ type, public :: energetic_PBL_CS ; private
                              !! calls occur.
 
   !/ Others
-  type(time_type), pointer :: Time=>NULL() !< A pointer to the ocean model's clock.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
 
   logical :: TKE_diagnostics = .false. !< If true, diagnostics of the TKE budget are being calculated.
   integer :: answer_date     !< The vintage of the order of arithmetic and expressions in the ePBL
@@ -251,7 +251,7 @@ type, public :: energetic_PBL_CS ; private
                              !! that can work with successive increments to the diffusivity in
                              !! upward or downward passes.
   logical :: debug           !< If true, write verbose checksums for debugging purposes.
-  type(diag_ctrl), pointer :: diag=>NULL() !< A structure that is used to regulate the
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
                              !! timing of diagnostic output.
 
   real, allocatable, dimension(:,:) :: &
@@ -387,7 +387,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
 !   The key parameters for the mixed layer are found in the control structure.
 !   To use the classic constant mstar mixed layers choose EPBL_MSTAR_SCHEME=CONSTANT.
 ! The key parameters then include mstar, nstar, TKE_decay, and conv_decay.
-! For the Oberhuber (1993) mixed layer,the values of these are:
+! For the Oberhuber (1993) mixed layer, the values of these are:
 !      mstar = 1.25,  nstar = 1, TKE_decay = 2.5, conv_decay = 0.5
 ! TKE_decay is 1/kappa in eq. 28 of Oberhuber (1993), while conv_decay is 1/mu.
 ! For a traditional Kraus-Turner mixed layer, the values are:
@@ -1332,9 +1332,9 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
 
     v0_ML_turb_vel_scale = 0.0 ! a variable that gets passed on to get_eqdisc_v0 & get_eqdisc_v0h
     if (CS%eqdisc_v0) then
-      call get_eqdisc_v0(CS,absf,B_flux,u_star,v0_ML_turb_vel_scale)
+      call get_eqdisc_v0(CS, absf, B_flux, u_star, v0_ML_turb_vel_scale)
     elseif (CS%eqdisc_v0h) then
-      call get_eqdisc_v0h(CS,B_flux,u_star,MLD_guess,v0_ML_turb_vel_scale)
+      call get_eqdisc_v0h(CS, B_flux, u_star, MLD_guess, v0_ML_turb_vel_scale)
     endif
 
     Kd(1) = 0.0 ; Kddt_h(1) = 0.0
@@ -1930,7 +1930,7 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
         MLD_guess = 0.5*(min_MLD + max_MLD)
       else ! Try using the false position method or the returned value instead of simple bisection.
         ! Taking the occasional step with MLD_output empirically helps to converge faster.
-        if ((dMLD_min > 0.0) .and. (dMLD_max < 0.0) .and. (OBL_it > 2) .and. (mod(OBL_it-1,4) > 0)) then
+        if ((dMLD_min > 0.0) .and. (dMLD_max < 0.0) .and. (OBL_it > 2) .and. (mod(OBL_it-1, 4) > 0)) then
           ! Both bounds have valid change estimates and are probably in the range of possible outputs.
           MLD_guess = (dMLD_min*max_MLD - dMLD_max*min_MLD) / (dMLD_min - dMLD_max)
         elseif ((MLD_found > min_MLD) .and. (MLD_found < max_MLD)) then
@@ -2735,7 +2735,7 @@ subroutine ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, absf, &
 
       ! Try using the false position method or the returned value instead of simple bisection.
       ! Taking the occasional step with BBLD_output empirically helps to converge faster.
-      if ((dBBLD_min > 0.0) .and. (dBBLD_max < 0.0) .and. (BBL_it > 2) .and. (mod(BBL_it-1,4) > 0)) then
+      if ((dBBLD_min > 0.0) .and. (dBBLD_max < 0.0) .and. (BBL_it > 2) .and. (mod(BBL_it-1, 4) > 0)) then
         ! Both bounds have valid change estimates and are probably in the range of possible outputs.
         BBLD_guess = (dBBLD_min*max_BBLD - dBBLD_max*min_BBLD) / (dBBLD_min - dBBLD_max)
       elseif ((BBLD_found > min_BBLD) .and. (BBLD_found < max_BBLD)) then
@@ -3562,7 +3562,7 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, &
 
     if (CS%answer_date < 20190101) then
       ! The limit for the balance of rotation and stabilizing is f(L_Ekman,L_Obukhov)
-      mstar_S = CS%mstar_coef*sqrt(max(0.0,Buoyancy_Flux) / UStar**2 / &
+      mstar_S = CS%mstar_coef*sqrt(max(0.0, Buoyancy_Flux) / UStar**2 / &
                     (Abs_Coriolis + 1.e-10*US%T_to_s) )
       ! The limit for rotation (Ekman length) limited mixing
       mstar_N =  CS%C_Ek * log( max( 1., UStar / (Abs_Coriolis + 1.e-10*US%T_to_s) / BLD ) )
@@ -3576,7 +3576,7 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, &
 
     ! Here 1.25 is about .5/von Karman, which gives the Obukhov limit.
     mstar = max(mstar_S, min(1.25, mstar_N))
-    if (CS%mstar_Cap > 0.0) mstar = min( CS%mstar_Cap,mstar )
+    if (CS%mstar_Cap > 0.0) mstar = min(CS%mstar_Cap, mstar)
   elseif ( mstar_scheme == mstar_from_RH18 ) then
     if (CS%answer_date < 20190101) then
       mstar_N = CS%RH18_mstar_cn1 * ( 1.0 - 1.0 / ( 1. + CS%RH18_mstar_cn2 * &
@@ -3586,14 +3586,14 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, &
       mstar_N = (CS%RH18_mstar_cn1 *  MSN_term) / ( 1. + MSN_term)
     endif
     mstar_S = CS%RH18_mstar_CS1 * ( max(0.0, Buoyancy_Flux)**2 * BLD / &
-             ( UStar**5 * max(Abs_Coriolis,1.e-20*US%T_to_s) ) )**CS%RH18_mstar_cs2
+             ( UStar**5 * max(Abs_Coriolis, 1.e-20*US%T_to_s) ) )**CS%RH18_mstar_cs2
     mstar = mstar_N + mstar_S
   endif
 
   !/ 2. Adjust mstar to account for convective turbulence
   if (CS%answer_date < 20190101) then
-    mstar_Conv_Red = 1. - CS%mstar_Convect_coef * (-min(0.0,Buoyancy_Flux) + 1.e-10*US%T_to_s**3*US%m_to_Z**2) / &
-                         ( (-min(0.0,Buoyancy_Flux) + 1.e-10*US%T_to_s**3*US%m_to_Z**2) + &
+    mstar_Conv_Red = 1. - CS%mstar_Convect_coef * (-min(0.0, Buoyancy_Flux) + 1.e-10*US%T_to_s**3*US%m_to_Z**2) / &
+                         ( (-min(0.0, Buoyancy_Flux) + 1.e-10*US%T_to_s**3*US%m_to_Z**2) + &
                          2.0 *mstar * UStar**3 / BLD )
   else
     MSCR_term1 = -BLD * min(0.0, Buoyancy_Flux)
@@ -3988,9 +3988,9 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "mixed layer depth.  Otherwise use the false position after a maximum and minimum "//&
                  "bound have been evaluated and the returned value or bisection before this.", &
                  default=.false., do_not_log=.not.CS%Use_MLD_iteration)
-   call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
                  default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
-   call get_param(param_file, mdl, "EPBL_MLD_ITER_BUG", CS%MLD_iter_bug, &
+  call get_param(param_file, mdl, "EPBL_MLD_ITER_BUG", CS%MLD_iter_bug, &
                  "If true, use buggy logic that gives the wrong bounds for the next iteration "//&
                  "when successive guesses increase by exactly EPBL_MLD_TOLERANCE.", &
                  default=enable_bugs, do_not_log=.not.CS%Use_MLD_iteration)
@@ -4446,13 +4446,13 @@ subroutine energetic_PBL_end(CS)
   if (report_avg_its) then
     call EFP_sum_across_PEs(CS%sum_its, 2)
     avg_its = EFP_to_real(CS%sum_its(1)) / EFP_to_real(CS%sum_its(2))
-    write (mesg,*) "Average ePBL iterations = ", avg_its
+    write(mesg,*) "Average ePBL iterations = ", avg_its
     call MOM_mesg(mesg)
 
     if ((CS%ePBL_BBL_effic > 0.0) .or. (CS%ePBL_tidal_effic > 0.0) .or. CS%ePBL_BBL_use_mstar) then
       call EFP_sum_across_PEs(CS%sum_its_BBL, 2)
       avg_its = EFP_to_real(CS%sum_its_BBL(1)) / EFP_to_real(CS%sum_its_BBL(2))
-      write (mesg,*) "Average ePBL BBL iterations = ", avg_its
+      write(mesg,*) "Average ePBL BBL iterations = ", avg_its
       call MOM_mesg(mesg)
     endif
   endif

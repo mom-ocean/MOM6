@@ -176,7 +176,7 @@ type, public :: vertvisc_CS ; private
   integer :: id_uE_h  = -1, id_vE_h  = -1
   integer :: id_uStk  = -1, id_vStk  = -1
   integer :: id_uStk0 = -1, id_vStk0 = -1
-  integer :: id_uInc_h= -1, id_vInc_h= -1
+  integer :: id_uInc_h = -1, id_vInc_h = -1
   integer :: id_taux_bot = -1, id_tauy_bot = -1
   integer :: id_Kv_slow = -1, id_Kv_u = -1, id_Kv_v = -1
   integer :: id_Kv_gl90_u = -1, id_Kv_gl90_v = -1
@@ -254,7 +254,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
-  pi = 4. * atan2(1.,1.)
+  pi = 4. * atan2(1., 1.)
   Irho0 = 1.0 / GV%Rho0
 
   ! initialize arrays
@@ -272,7 +272,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
       taux_u(I,j)  = forces%taux(I,j) * Irho0
       if ( (G%mask2dCu(I,j) > 0.5) ) then
         ! h to u-pts
-        tmp_u  = MAX (1.0 ,(G%mask2dT(i,j) + G%mask2dT(i+1,j) ) )
+        tmp_u = MAX(1.0, (G%mask2dT(i,j) + G%mask2dT(i+1,j)))
         hbl_u(I,j) = ((G%mask2dT(i,j) * hbl_h(i,j)) + (G%mask2dT(i+1,j) * hbl_h(i+1,j))) / tmp_u
         depth   = 0.
         Gat1  = 0.
@@ -284,7 +284,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
             sigma = depth / hbl_u(i,j)
             ! cell bottom
             depth = depth + 0.5*CS%h_u(I,j,k)
-            call cvmix_kpp_composite_Gshape(sigma,Gat1,Gsig,dGdsig)
+            call cvmix_kpp_composite_Gshape(sigma, Gat1, Gsig, dGdsig)
             ! nonlocal boundary-layer increment
             uInc_u(I,j,k)  = dt * Cemp_NL * taux_u(I,j) * dGdsig / (hbl_u(I,j) * GV%H_to_Z)
             ui(I,j,k) = ui(I,j,k) + uInc_u(I,j,k)
@@ -306,7 +306,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
       tauy_v(i,J)  = forces%tauy(i,J) * Irho0
       if ( (G%mask2dCv(i,J) > 0.5) ) then
         ! h to v-pts
-        tmp_v  = max( 1.0 ,(G%mask2dT(i,j) + G%mask2dT(i,j+1)))
+        tmp_v = max(1.0, (G%mask2dT(i,j) + G%mask2dT(i,j+1)))
         hbl_v(i,J) = (G%mask2dT(i,j) * hbl_h(i,J) + G%mask2dT(i,j+1) * hbl_h(i,j+1)) / tmp_v
         depth = 0.
         Gat1  = 0.
@@ -318,7 +318,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
             sigma = depth / hbl_v(i,J)
             ! cell bottom
             depth = depth + 0.5* CS%h_v(i,J,k)
-            call cvmix_kpp_composite_Gshape(sigma,Gat1,Gsig,dGdsig)
+            call cvmix_kpp_composite_Gshape(sigma, Gat1, Gsig, dGdsig)
             ! nonlocal boundary-layer increment
             vInc_v(i,J,k) = dt * Cemp_NL * tauy_v(i,J) * dGdsig / (hbl_v(i,J) * GV%H_to_Z)
             vi(i,J,k) = vi(i,J,k) + vInc_v(i,J,k)
@@ -347,9 +347,9 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
       do i = is,ie
         if (G%mask2dT(i,j) > 0.5)  then
           ! u to h-pts
-          tmp_u  = max( 1.0 ,(G%mask2dCu(i,j) + G%mask2dCu(i-1,j)))
+          tmp_u = max(1.0, (G%mask2dCu(i,j) + G%mask2dCu(i-1,j)))
           ! v to h-pts
-          tmp_v  = max( 1.0 ,(G%mask2dCv(i,j) + G%mask2dCv(i,j-1)))
+          tmp_v = max(1.0, (G%mask2dCv(i,j) + G%mask2dCv(i,j-1)))
           do k = 1,nz
             uE_h(i,j,k)   = (G%mask2dCu(i,j) *   uE_u(i,j,k) + G%mask2dCu(i-1,j) *   uE_u(i-1,j,k)) / tmp_u
             uInc_h(i,j,k) = (G%mask2dCu(i,j) * uInc_u(i,j,k) + G%mask2dCu(i-1,j) * uInc_u(i-1,j,k)) / tmp_u
@@ -616,10 +616,10 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
-  if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
 
-  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
 
   if (CS%id_GLwork > 0) then
@@ -640,8 +640,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   accel_underflow = CS%vel_underflow * Idt
 
-  !Check if Stokes mixing allowed if requested (present and associated)
-  DoStokesMixing=.false.
+  ! Check if Stokes mixing allowed if requested (present and associated)
+  DoStokesMixing = .false.
   if (CS%StokesMixing) then
     if (present(Waves)) DoStokesMixing = associated(Waves)
     if (.not. DoStokesMixing) &
@@ -1194,10 +1194,10 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   is = G%isc ; ie = G%iec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
-  if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
 
-  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(remnant): "// &
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_vert_friction(remnant): "// &
          "Module must be initialized before it is used.")
 
   ! Find the zonal viscous remnant using a modification of a standard tridagonal solver.
@@ -1371,7 +1371,7 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
-  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(coef): "// &
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_vert_friction(coef): "// &
          "Module must be initialized before it is used.")
 
   h_neglect = GV%H_subroundoff
@@ -2648,7 +2648,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   endif
 
   if (len_trim(CS%v_trunc_file) > 0) then
-    do_any_write =.false.
+    do_any_write = .false.
     trunc_any = .false.
 
 
@@ -3064,57 +3064,57 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
       'Mixed Layer Thickness at Meridional Velocity Points for Viscosity', &
       thickness_units, conversion=US%Z_to_m)
 
- if (lfpmix) then
-  CS%id_uE_h = register_diag_field('ocean_model', 'uE_h' , CS%diag%axesTL, &
-      Time, 'x-zonal Eulerian' , 'm s-1', conversion=US%L_T_to_m_s)
-  CS%id_vE_h = register_diag_field('ocean_model', 'vE_h' , CS%diag%axesTL, &
-      Time, 'y-merid Eulerian' , 'm s-1', conversion=US%L_T_to_m_s)
-  CS%id_uInc_h = register_diag_field('ocean_model','uInc_h',CS%diag%axesTL, &
-      Time, 'x-zonal Eulerian' , 'm s-1', conversion=US%L_T_to_m_s)
-  CS%id_vInc_h = register_diag_field('ocean_model','vInc_h',CS%diag%axesTL, &
-      Time, 'x-zonal Eulerian' , 'm s-1', conversion=US%L_T_to_m_s)
-  CS%id_uStk = register_diag_field('ocean_model', 'uStk' , CS%diag%axesTL, &
-      Time, 'x-FP du increment' , 'm s-1', conversion=US%L_T_to_m_s)
-  CS%id_vStk = register_diag_field('ocean_model', 'vStk' , CS%diag%axesTL, &
-      Time, 'y-FP dv increment' , 'm s-1', conversion=US%L_T_to_m_s)
+  if (lfpmix) then
+    CS%id_uE_h = register_diag_field('ocean_model', 'uE_h', CS%diag%axesTL, &
+        Time, 'x-zonal Eulerian', 'm s-1', conversion=US%L_T_to_m_s)
+    CS%id_vE_h = register_diag_field('ocean_model', 'vE_h', CS%diag%axesTL, &
+        Time, 'y-merid Eulerian', 'm s-1', conversion=US%L_T_to_m_s)
+    CS%id_uInc_h = register_diag_field('ocean_model', 'uInc_h', CS%diag%axesTL, &
+        Time, 'x-zonal Eulerian', 'm s-1', conversion=US%L_T_to_m_s)
+    CS%id_vInc_h = register_diag_field('ocean_model', 'vInc_h', CS%diag%axesTL, &
+        Time, 'x-zonal Eulerian', 'm s-1', conversion=US%L_T_to_m_s)
+    CS%id_uStk = register_diag_field('ocean_model', 'uStk', CS%diag%axesTL, &
+        Time, 'x-FP du increment', 'm s-1', conversion=US%L_T_to_m_s)
+    CS%id_vStk = register_diag_field('ocean_model', 'vStk', CS%diag%axesTL, &
+        Time, 'y-FP dv increment', 'm s-1', conversion=US%L_T_to_m_s)
 
-  CS%id_FPtau2s = register_diag_field('ocean_model','Omega_tau2s',CS%diag%axesTi, &
-      Time, 'Stress direction from shear','radians')
-  CS%id_FPtau2w = register_diag_field('ocean_model','Omega_tau2w',CS%diag%axesTi, &
-      Time, 'Stress direction from wind','radians')
-  CS%id_uStk0 = register_diag_field('ocean_model', 'uStk0' , diag%axesT1, &
-      Time, 'Zonal Surface Stokes', 'm s-1', conversion=US%L_T_to_m_s)
-  CS%id_vStk0 = register_diag_field('ocean_model', 'vStk0' , diag%axesT1, &
-      Time, 'Merid Surface Stokes', 'm s-1', conversion=US%L_T_to_m_s)
+    CS%id_FPtau2s = register_diag_field('ocean_model', 'Omega_tau2s', CS%diag%axesTi, &
+        Time, 'Stress direction from shear', 'radians')
+    CS%id_FPtau2w = register_diag_field('ocean_model', 'Omega_tau2w', CS%diag%axesTi, &
+        Time, 'Stress direction from wind', 'radians')
+    CS%id_uStk0 = register_diag_field('ocean_model', 'uStk0', diag%axesT1, &
+        Time, 'Zonal Surface Stokes', 'm s-1', conversion=US%L_T_to_m_s)
+    CS%id_vStk0 = register_diag_field('ocean_model', 'vStk0', diag%axesT1, &
+        Time, 'Merid Surface Stokes', 'm s-1', conversion=US%L_T_to_m_s)
   endif
 
   CS%id_du_dt_visc = register_diag_field('ocean_model', 'du_dt_visc', diag%axesCuL, Time, &
       'Zonal Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_du_dt_visc > 0) call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_du_dt_visc > 0) call safe_alloc_ptr(ADp%du_dt_visc, IsdB, IedB, jsd, jed, nz)
   CS%id_dv_dt_visc = register_diag_field('ocean_model', 'dv_dt_visc', diag%axesCvL, Time, &
       'Meridional Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_dv_dt_visc > 0) call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+  if (CS%id_dv_dt_visc > 0) call safe_alloc_ptr(ADp%dv_dt_visc, isd, ied, JsdB, JedB, nz)
   CS%id_GLwork = register_diag_field('ocean_model', 'GLwork', diag%axesTL, Time, &
       'Sign-definite Kinetic Energy Source from GL90 Vertical Viscosity', &
       'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   CS%id_du_dt_visc_gl90 = register_diag_field('ocean_model', 'du_dt_visc_gl90', diag%axesCuL, Time, &
       'Zonal Acceleration from GL90 Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
   if ((CS%id_du_dt_visc_gl90 > 0) .or. (CS%id_GLwork > 0)) then
-    call safe_alloc_ptr(ADp%du_dt_visc_gl90,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%du_dt_visc_gl90, IsdB, IedB, jsd, jed, nz)
+    call safe_alloc_ptr(ADp%du_dt_visc, IsdB, IedB, jsd, jed, nz)
   endif
   CS%id_dv_dt_visc_gl90 = register_diag_field('ocean_model', 'dv_dt_visc_gl90', diag%axesCvL, Time, &
       'Meridional Acceleration from GL90 Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
   if ((CS%id_dv_dt_visc_gl90 > 0) .or. (CS%id_GLwork > 0)) then
-    call safe_alloc_ptr(ADp%dv_dt_visc_gl90,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%dv_dt_visc_gl90, isd, ied, JsdB, JedB, nz)
+    call safe_alloc_ptr(ADp%dv_dt_visc, isd, ied, JsdB, JedB, nz)
   endif
   CS%id_du_dt_str = register_diag_field('ocean_model', 'du_dt_str', diag%axesCuL, Time, &
       'Zonal Acceleration from Surface Wind Stresses', 'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_du_dt_str > 0) call safe_alloc_ptr(ADp%du_dt_str,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_du_dt_str > 0) call safe_alloc_ptr(ADp%du_dt_str, IsdB, IedB, jsd, jed, nz)
   CS%id_dv_dt_str = register_diag_field('ocean_model', 'dv_dt_str', diag%axesCvL, Time, &
       'Meridional Acceleration from Surface Wind Stresses', 'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_dv_dt_str > 0) call safe_alloc_ptr(ADp%dv_dt_str,isd,ied,JsdB,JedB,nz)
+  if (CS%id_dv_dt_str > 0) call safe_alloc_ptr(ADp%dv_dt_str, isd, ied, JsdB, JedB, nz)
 
   CS%id_taux_bot = register_diag_field('ocean_model', 'taux_bot', diag%axesCu1, &
       Time, 'Zonal Bottom Stress from Ocean to Earth', &
@@ -3127,80 +3127,80 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   !    'Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', &
   !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if (CS%id_hf_du_dt_visc > 0) then
-  !  call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
-  !  call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  !  call safe_alloc_ptr(ADp%du_dt_visc, IsdB, IedB, jsd, jed, nz)
+  !  call safe_alloc_ptr(ADp%diag_hfrac_u, IsdB, IedB, jsd, jed, nz)
   !endif
 
   !CS%id_hf_dv_dt_visc = register_diag_field('ocean_model', 'hf_dv_dt_visc', diag%axesCvL, Time, &
   !    'Fractional Thickness-weighted Meridional Acceleration from Vertical Viscosity', &
   !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if (CS%id_hf_dv_dt_visc > 0) then
-  !  call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
-  !  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+  !  call safe_alloc_ptr(ADp%dv_dt_visc, isd, ied, JsdB, JedB, nz)
+  !  call safe_alloc_ptr(ADp%diag_hfrac_v, isd, ied, JsdB, JedB, nz)
   !endif
 
   CS%id_hf_du_dt_visc_2d = register_diag_field('ocean_model', 'hf_du_dt_visc_2d', diag%axesCu1, Time, &
       'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', &
       'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_du_dt_visc_2d > 0) then
-    call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%du_dt_visc, IsdB, IedB, jsd, jed, nz)
+    call safe_alloc_ptr(ADp%diag_hfrac_u, IsdB, IedB, jsd, jed, nz)
   endif
 
   CS%id_hf_dv_dt_visc_2d = register_diag_field('ocean_model', 'hf_dv_dt_visc_2d', diag%axesCv1, Time, &
       'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Vertical Viscosity', &
       'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_dv_dt_visc_2d > 0) then
-    call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%dv_dt_visc, isd, ied, JsdB, JedB, nz)
+    call safe_alloc_ptr(ADp%diag_hfrac_v, isd, ied, JsdB, JedB, nz)
   endif
 
   CS%id_h_du_dt_visc = register_diag_field('ocean_model', 'h_du_dt_visc', diag%axesCuL, Time, &
       'Thickness Multiplied Zonal Acceleration from Horizontal Viscosity', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if (CS%id_h_du_dt_visc > 0) then
-    call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%du_dt_visc, IsdB, IedB, jsd, jed, nz)
+    call safe_alloc_ptr(ADp%diag_hu, IsdB, IedB, jsd, jed, nz)
   endif
 
   CS%id_h_dv_dt_visc = register_diag_field('ocean_model', 'h_dv_dt_visc', diag%axesCvL, Time, &
       'Thickness Multiplied Meridional Acceleration from Horizontal Viscosity', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if (CS%id_h_dv_dt_visc > 0) then
-    call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%dv_dt_visc, isd, ied, JsdB, JedB, nz)
+    call safe_alloc_ptr(ADp%diag_hv, isd, ied, JsdB, JedB, nz)
   endif
 
   CS%id_h_du_dt_str = register_diag_field('ocean_model', 'h_du_dt_str', diag%axesCuL, Time, &
       'Thickness Multiplied Zonal Acceleration from Surface Wind Stresses', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if (CS%id_h_du_dt_str > 0) then
-    call safe_alloc_ptr(ADp%du_dt_str,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%du_dt_str, IsdB, IedB, jsd, jed, nz)
+    call safe_alloc_ptr(ADp%diag_hu, IsdB, IedB, jsd, jed, nz)
   endif
 
   CS%id_h_dv_dt_str = register_diag_field('ocean_model', 'h_dv_dt_str', diag%axesCvL, Time, &
       'Thickness Multiplied Meridional Acceleration from Surface Wind Stresses', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if (CS%id_h_dv_dt_str > 0) then
-    call safe_alloc_ptr(ADp%dv_dt_str,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%dv_dt_str, isd, ied, JsdB, JedB, nz)
+    call safe_alloc_ptr(ADp%diag_hv, isd, ied, JsdB, JedB, nz)
   endif
 
   CS%id_du_dt_str_visc_rem = register_diag_field('ocean_model', 'du_dt_str_visc_rem', diag%axesCuL, Time, &
       'Zonal Acceleration from Surface Wind Stresses multiplied by viscous remnant', &
       'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_du_dt_str_visc_rem > 0) then
-    call safe_alloc_ptr(ADp%du_dt_str,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(ADp%visc_rem_u,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%du_dt_str, IsdB, IedB, jsd, jed, nz)
+    call safe_alloc_ptr(ADp%visc_rem_u, IsdB, IedB, jsd, jed, nz)
   endif
 
   CS%id_dv_dt_str_visc_rem = register_diag_field('ocean_model', 'dv_dt_str_visc_rem', diag%axesCvL, Time, &
       'Meridional Acceleration from Surface Wind Stresses multiplied by viscous remnant', &
       'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_dv_dt_str_visc_rem > 0) then
-    call safe_alloc_ptr(ADp%dv_dt_str,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(ADp%visc_rem_v,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%dv_dt_str, isd, ied, JsdB, JedB, nz)
+    call safe_alloc_ptr(ADp%visc_rem_v, isd, ied, JsdB, JedB, nz)
   endif
 
   if ((len_trim(CS%u_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &

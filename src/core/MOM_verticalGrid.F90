@@ -120,7 +120,7 @@ subroutine verticalGridInit( param_file, GV, US )
   character(len=16) :: mdl = 'MOM_verticalGrid'
 
   if (associated(GV)) call MOM_error(FATAL, &
-     'verticalGridInit: called with an associated GV pointer.')
+      'verticalGridInit: called with an associated GV pointer.')
   allocate(GV)
 
   ! Read all relevant parameters and write them to the model log.

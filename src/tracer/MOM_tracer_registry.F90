@@ -140,7 +140,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
                                                                 !! indicating to use the scheme from MOM_tracer_advect
 
   logical :: mand
-  type(tracer_type), pointer :: Tr=>NULL()
+  type(tracer_type), pointer :: Tr => NULL()
   character(len=256) :: mesg    ! Message for error messages.
 
   if (.not. associated(Reg)) call tracer_registry_init(param_file, Reg)
@@ -148,7 +148,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   if (Reg%ntr>=MAX_FIELDS_) then
     write(mesg,'("Increase MAX_FIELDS_ in MOM_memory.h to at least ",I0," to allow for &
         &all the tracers being registered via register_tracer.")') Reg%ntr+1
-    call MOM_error(FATAL,"MOM register_tracer: "//mesg)
+    call MOM_error(FATAL, "MOM register_tracer: "//mesg)
   endif
   Reg%ntr = Reg%ntr + 1
 
@@ -177,7 +177,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
                        cmor_longname=Tr%cmor_longname, caller="register_tracer")
     Tr%cmor_units = Tr%units
   else
-    call MOM_error(FATAL,"MOM register_tracer: Either name or "//&
+    call MOM_error(FATAL, "MOM register_tracer: Either name or "//&
                    "tr_desc must be present when registering a tracer.")
   endif
 
@@ -315,7 +315,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
   character(len=120) :: var_lname      ! A temporary longname for a diagnostic.
   character(len=120) :: cmor_var_lname ! The temporary CMOR long name for a diagnostic
   real :: conversion ! Temporary term while we address a bug [conc m CU-1 H-1 ~> 1] or [conc kg m-2 CU-1 H-1 ~> 1]
-  type(tracer_type), pointer :: Tr=>NULL()
+  type(tracer_type), pointer :: Tr => NULL()
   integer :: i, j, k, is, ie, js, je, nz, m, m2, nTr_in
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -332,7 +332,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
 !    call query_vardesc(Tr%vd, name, units=units, longname=longname, &
 !                       cmor_field_name=cmorname, cmor_longname=cmor_longname, &
 !                       caller="register_tracer_diagnostics")
-    name = Tr%name ; units=adjustl(Tr%units) ; longname = Tr%longname
+    name = Tr%name ; units = adjustl(Tr%units) ; longname = Tr%longname
     cmorname = Tr%cmor_name ; cmor_longname = Tr%cmor_longname
     shortnm = Tr%flux_nameroot
     flux_longname = Tr%flux_longname
@@ -449,16 +449,16 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
         trim(units) // " m", conversion=Tr%conc_scale*US%Z_to_m)
     Tr%id_surf = register_diag_field("ocean_model", trim(shortnm)//"_SURF", &
         diag%axesT1, Time, "Surface values of "// trim(longname), trim(units), conversion=Tr%conc_scale)
-    if (Tr%id_adx > 0) call safe_alloc_ptr(Tr%ad_x,IsdB,IedB,jsd,jed,nz)
-    if (Tr%id_ady > 0) call safe_alloc_ptr(Tr%ad_y,isd,ied,JsdB,JedB,nz)
-    if (Tr%id_adx_resolved > 0) call safe_alloc_ptr(Tr%ad_x_resolved,IsdB,IedB,jsd,jed,nz)
-    if (Tr%id_ady_resolved > 0) call safe_alloc_ptr(Tr%ad_y_resolved,isd,ied,JsdB,JedB,nz)
-    if (Tr%id_adx_param > 0) call safe_alloc_ptr(Tr%ad_x_param,IsdB,IedB,jsd,jed,nz)
-    if (Tr%id_ady_param > 0) call safe_alloc_ptr(Tr%ad_y_param,isd,ied,JsdB,JedB,nz)
-    if (Tr%id_dfx > 0) call safe_alloc_ptr(Tr%df_x,IsdB,IedB,jsd,jed,nz)
-    if (Tr%id_dfy > 0) call safe_alloc_ptr(Tr%df_y,isd,ied,JsdB,JedB,nz)
-    if (Tr%id_hbd_dfx > 0) call safe_alloc_ptr(Tr%hbd_dfx,IsdB,IedB,jsd,jed,nz)
-    if (Tr%id_hbd_dfy > 0) call safe_alloc_ptr(Tr%hbd_dfy,isd,ied,JsdB,JedB,nz)
+    if (Tr%id_adx > 0) call safe_alloc_ptr(Tr%ad_x, IsdB, IedB, jsd, jed, nz)
+    if (Tr%id_ady > 0) call safe_alloc_ptr(Tr%ad_y, isd, ied, JsdB, JedB, nz)
+    if (Tr%id_adx_resolved > 0) call safe_alloc_ptr(Tr%ad_x_resolved, IsdB, IedB, jsd, jed, nz)
+    if (Tr%id_ady_resolved > 0) call safe_alloc_ptr(Tr%ad_y_resolved, isd, ied, JsdB, JedB, nz)
+    if (Tr%id_adx_param > 0) call safe_alloc_ptr(Tr%ad_x_param, IsdB, IedB, jsd, jed, nz)
+    if (Tr%id_ady_param > 0) call safe_alloc_ptr(Tr%ad_y_param, isd, ied, JsdB, JedB, nz)
+    if (Tr%id_dfx > 0) call safe_alloc_ptr(Tr%df_x, IsdB, IedB, jsd, jed, nz)
+    if (Tr%id_dfy > 0) call safe_alloc_ptr(Tr%df_y, isd, ied, JsdB, JedB, nz)
+    if (Tr%id_hbd_dfx > 0) call safe_alloc_ptr(Tr%hbd_dfx, IsdB, IedB, jsd, jed, nz)
+    if (Tr%id_hbd_dfy > 0) call safe_alloc_ptr(Tr%hbd_dfy, isd, ied, JsdB, JedB, nz)
 
     Tr%id_adx_2d = register_diag_field("ocean_model", trim(shortnm)//"_adx_2d", &
         diag%axesCu1, Time, &
@@ -487,12 +487,12 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
         "scheme for "//trim(flux_longname), flux_units, conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T, &
         x_cell_method='sum')
 
-    if (Tr%id_adx_2d > 0) call safe_alloc_ptr(Tr%ad2d_x,IsdB,IedB,jsd,jed)
-    if (Tr%id_ady_2d > 0) call safe_alloc_ptr(Tr%ad2d_y,isd,ied,JsdB,JedB)
-    if (Tr%id_dfx_2d > 0) call safe_alloc_ptr(Tr%df2d_x,IsdB,IedB,jsd,jed)
-    if (Tr%id_dfy_2d > 0) call safe_alloc_ptr(Tr%df2d_y,isd,ied,JsdB,JedB)
-    if (Tr%id_hbd_dfx_2d > 0) call safe_alloc_ptr(Tr%hbd_dfx_2d,IsdB,IedB,jsd,jed)
-    if (Tr%id_hbd_dfy_2d > 0) call safe_alloc_ptr(Tr%hbd_dfy_2d,isd,ied,JsdB,JedB)
+    if (Tr%id_adx_2d > 0) call safe_alloc_ptr(Tr%ad2d_x, IsdB, IedB, jsd, jed)
+    if (Tr%id_ady_2d > 0) call safe_alloc_ptr(Tr%ad2d_y, isd, ied, JsdB, JedB)
+    if (Tr%id_dfx_2d > 0) call safe_alloc_ptr(Tr%df2d_x, IsdB, IedB, jsd, jed)
+    if (Tr%id_dfy_2d > 0) call safe_alloc_ptr(Tr%df2d_y, isd, ied, JsdB, JedB)
+    if (Tr%id_hbd_dfx_2d > 0) call safe_alloc_ptr(Tr%hbd_dfx_2d, IsdB, IedB, jsd, jed)
+    if (Tr%id_hbd_dfy_2d > 0) call safe_alloc_ptr(Tr%hbd_dfy_2d, isd, ied, JsdB, JedB)
 
     Tr%id_adv_xy = register_diag_field('ocean_model', trim(shortnm)//"_advection_xy", &
         diag%axesTL, Time, &
@@ -504,7 +504,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
         'Vertical sum of horizontal convergence of residual mean advective fluxes of '//&
         trim(lowercase(flux_longname)), conv_units, conversion=Tr%conv_scale*US%s_to_T)
     if ((Tr%id_adv_xy > 0) .or. (Tr%id_adv_xy_2d > 0)) &
-      call safe_alloc_ptr(Tr%advection_xy,isd,ied,jsd,jed,nz)
+      call safe_alloc_ptr(Tr%advection_xy, isd, ied, jsd, jed, nz)
 
     Tr%id_tendency = register_diag_field('ocean_model', trim(shortnm)//'_tendency', &
         diag%axesTL, Time, &
@@ -512,7 +512,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
         trim(units)//' s-1', conversion=Tr%conc_scale*US%s_to_T)
 
     if (Tr%id_tendency > 0) then
-      call safe_alloc_ptr(Tr%t_prev,isd,ied,jsd,jed,nz)
+      call safe_alloc_ptr(Tr%t_prev, isd, ied, jsd, jed, nz)
       do k=1,nz ; do j=js,je ; do i=is,ie
         Tr%t_prev(i,j,k) = Tr%t(i,j,k)
       enddo ; enddo ; enddo
@@ -603,7 +603,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
           cmor_standard_name=cmor_long_std(cmor_var_lname), cmor_long_name=cmor_var_lname)
     endif
     if ((Tr%id_trxh_tendency > 0) .or. (Tr%id_trxh_tendency_2d > 0)) then
-      call safe_alloc_ptr(Tr%Trxh_prev,isd,ied,jsd,jed,nz)
+      call safe_alloc_ptr(Tr%Trxh_prev, isd, ied, jsd, jed, nz)
       do k=1,nz ; do j=js,je ; do i=is,ie
         Tr%Trxh_prev(i,j,k) = Tr%t(i,j,k) * h(i,j,k)
       enddo ; enddo ; enddo
@@ -612,7 +612,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
     ! Vertical regridding/remapping tendencies
     if (use_ALE .and. Tr%remap_tr) then
       var_lname = "Vertical remapping tracer concentration tendency for "//trim(Reg%Tr(m)%name)
-      Tr%id_remap_conc= register_diag_field('ocean_model', &
+      Tr%id_remap_conc = register_diag_field('ocean_model', &
           trim(Tr%flux_nameroot)//'_tendency_vert_remap', diag%axesTL, Time, var_lname, &
           trim(units)//' s-1', conversion=Tr%conc_scale*US%s_to_T)
 
@@ -631,7 +631,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
 
     if (use_ALE .and. (Reg%ntr<MAX_FIELDS_) .and. Tr%remap_tr) then
       unit2 = trim(units)//"2"
-      if (index(units(1:len_trim(units))," ") > 0) unit2 = "("//trim(units)//")2"
+      if (index(units(1:len_trim(units)), " ") > 0) unit2 = "("//trim(units)//")2"
       Tr%id_tr_vardec = register_diag_field('ocean_model', trim(shortnm)//"_vardec", diag%axesTL, &
           Time, "ALE variance decay for "//lowercase(longname), &
           trim(unit2)//" s-1", conversion=Tr%conc_scale**2*US%s_to_T)
@@ -639,7 +639,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
         ! Set up a new tracer for this tracer squared
         m2 = Reg%ntr+1
         Tr%ind_tr_squared = m2
-        call safe_alloc_ptr(Reg%Tr(m2)%t,isd,ied,jsd,jed,nz) ; Reg%Tr(m2)%t(:,:,:) = 0.0
+        call safe_alloc_ptr(Reg%Tr(m2)%t, isd, ied, jsd, jed, nz) ; Reg%Tr(m2)%t(:,:,:) = 0.0
         Reg%Tr(m2)%name = trim(shortnm)//"2"
         Reg%Tr(m2)%longname = "Squared "//trim(longname)
         Reg%Tr(m2)%units = unit2
@@ -740,7 +740,7 @@ subroutine post_tracer_diagnostics_at_sync(Reg, h, diag_prev, diag, G, GV, dt)
   real    :: work2d(SZI_(G),SZJ_(G)) ! The vertically integrated time tendency of a diagnostic
                                      ! in [CU H T-1 ~> conc m s-1 or conc kg m-2 s-1]
   real    :: Idt ! The inverse of the time step [T-1 ~> s-1]
-  type(tracer_type), pointer :: Tr=>NULL()
+  type(tracer_type), pointer :: Tr => NULL()
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -792,7 +792,7 @@ subroutine post_tracer_transport_diagnostics(G, GV, Reg, h_diag, diag)
   integer :: i, j, k, is, ie, js, je, nz, m
   real    :: work2d(SZI_(G),SZJ_(G))      ! The vertically integrated convergence of lateral advective
                                           ! tracer fluxes [CU H T-1 ~> conc m s-1 or conc kg m-2 s-1]
-  type(tracer_type), pointer :: Tr=>NULL()
+  type(tracer_type), pointer :: Tr => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -843,7 +843,7 @@ subroutine post_tracer_integral_diagnostics(G, GV, US, Reg, h_diag, tv, diag)
   real    :: zbot(SZI_(G),SZJ_(G))    ! position of the bottom interface [Z ~> m]
   real    :: Z_100  ! 100 m in depth units [Z ~> m]
   logical :: dz_needed, dz100_used
-  type(tracer_type), pointer :: Tr=>NULL()
+  type(tracer_type), pointer :: Tr => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -1027,7 +1027,7 @@ subroutine tracer_name_lookup(Reg, n, tr_ptr, name)
     endif
   enddo
 
-  call MOM_error(FATAL,"MOM cannot find registered tracer: "//name)
+  call MOM_error(FATAL, "MOM cannot find registered tracer: "//name)
 
 end subroutine tracer_name_lookup
 
@@ -1053,7 +1053,7 @@ subroutine tracer_registry_init(param_file, Reg)
   if (init_calls > 1) then
     write(mesg,'("tracer_registry_init called ",I0, &
       &" times with different registry pointers.")') init_calls
-    if (is_root_pe()) call MOM_error(WARNING,"MOM_tracer "//mesg)
+    if (is_root_pe()) call MOM_error(WARNING, "MOM_tracer "//mesg)
   endif
 
 end subroutine tracer_registry_init

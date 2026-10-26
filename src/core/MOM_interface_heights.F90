@@ -65,13 +65,13 @@ subroutine find_dz_for_eta(h, tv, G, GV, US, dz_lay, halo_size)
                                   ! rescaling factor derived from eta_to_m [T2 Z L-2 ~> s2 m-1]
   integer :: i, j, k, isv, iev, jsv, jev, nz, halo
 
-  halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
+  halo = 0 ; if (present(halo_size)) halo = max(0, halo_size)
 
   isv = G%isc-halo ; iev = G%iec+halo ; jsv = G%jsc-halo ; jev = G%jec+halo
   nz = GV%ke
 
   if ((isv<G%isd) .or. (iev>G%ied) .or. (jsv<G%jsd) .or. (jev>G%jed)) &
-    call MOM_error(FATAL,"find_dz_for_eta called with an overly large halo_size.")
+    call MOM_error(FATAL, "find_dz_for_eta called with an overly large halo_size.")
 
   if (GV%Boussinesq) then
     do k=1,nz ; do j=jsv,jev ; do i=isv,iev
@@ -147,13 +147,13 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, dZref)
                     ! dZ_ref is 0 unless the optional argument dZref is present.
   integer :: i, j, k, isv, iev, jsv, jev, nz, halo
 
-  halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
+  halo = 0 ; if (present(halo_size)) halo = max(0, halo_size)
 
   isv = G%isc-halo ; iev = G%iec+halo ; jsv = G%jsc-halo ; jev = G%jec+halo
   nz = GV%ke
 
   if ((isv<G%isd) .or. (iev>G%ied) .or. (jsv<G%jsd) .or. (jev>G%jed)) &
-    call MOM_error(FATAL,"find_eta called with an overly large halo_size.")
+    call MOM_error(FATAL, "find_eta called with an overly large halo_size.")
 
   dZ_ref = 0.0 ; if (present(dZref)) dZ_ref = dZref
 
@@ -241,7 +241,7 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, dZref)
                     ! dZ_ref is 0 unless the optional argument dZref is present.
   integer :: i, j, k, is, ie, js, je, nz, halo
 
-  halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
+  halo = 0 ; if (present(halo_size)) halo = max(0, halo_size)
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   nz = GV%ke
 
@@ -313,7 +313,7 @@ subroutine calc_derived_thermo(tv, h, G, GV, US, halo, debug)
   integer :: i, j, k, is, ie, js, je, halos, nz
 
   do_debug = .false. ; if (present(debug)) do_debug = debug
-  halos = 0 ; if (present(halo)) halos = max(0,halo)
+  halos = 0 ; if (present(halo)) halos = max(0, halo)
   is = G%isc-halos ; ie = G%iec+halos ; js = G%jsc-halos ; je = G%jec+halos ; nz = GV%ke
 
   if (allocated(tv%Spv_avg) .and. associated(tv%eqn_of_state)) then
@@ -374,7 +374,7 @@ subroutine find_col_avg_SpV(h, SpV_avg, tv, G, GV, US, halo_size)
   character(len=128) :: mesg    ! A string for error messages
   integer :: i, j, k, is, ie, js, je, nz, halo
 
-  halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
+  halo = 0 ; if (present(halo_size)) halo = max(0, halo_size)
 
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   nz = GV%ke
@@ -686,7 +686,7 @@ subroutine dz_to_thickness_tv(dz, tv, h, G, GV, US, halo_size)
   ! Local variables
   integer :: i, j, k, is, ie, js, je, halo, nz
 
-  halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
+  halo = 0 ; if (present(halo_size)) halo = max(0, halo_size)
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo ; nz = GV%ke
 
   if (GV%Boussinesq) then
@@ -745,7 +745,7 @@ subroutine dz_to_thickness_EOS(dz, Temp, Saln, EoS, h, G, GV, US, halo_size, p_s
   integer :: i, j, k, is, ie, js, je, halo, nz
   integer :: itt, max_itt
 
-  halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
+  halo = 0 ; if (present(halo_size)) halo = max(0, halo_size)
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo ; nz = GV%ke
   max_itt = 10
 
@@ -856,7 +856,7 @@ subroutine dz_to_thickness_simple(dz, h, G, GV, US, halo_size, layer_mode)
                       ! in pure isopycnal layered mode with no state variables or equation of state.
   integer :: i, j, k, is, ie, js, je, halo, nz
 
-  halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
+  halo = 0 ; if (present(halo_size)) halo = max(0, halo_size)
   layered = .false. ; if (present(layer_mode)) layered = layer_mode
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo ; nz = GV%ke
 
@@ -897,7 +897,7 @@ subroutine thickness_to_dz_3d(h, tv, dz, G, GV, US, halo_size)
   character(len=128) :: mesg    ! A string for error messages
   integer :: i, j, k, is, ie, js, je, halo, nz
 
-  halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
+  halo = 0 ; if (present(halo_size)) halo = max(0, halo_size)
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo ; nz = GV%ke
 
   if ((.not.GV%Boussinesq) .and. allocated(tv%SpV_avg))  then
@@ -929,7 +929,7 @@ end subroutine thickness_to_dz_3d
 subroutine thickness_to_dz_jslice(h, tv, dz, j, G, GV, halo_size)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
-   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h  !< Input thicknesses in thickness units [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv !< A structure pointing to various
                                                !! thermodynamic variables
@@ -944,7 +944,7 @@ subroutine thickness_to_dz_jslice(h, tv, dz, j, G, GV, halo_size)
   character(len=128) :: mesg    ! A string for error messages
   integer :: i, k, is, ie, halo, nz
 
-  halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
+  halo = 0 ; if (present(halo_size)) halo = max(0, halo_size)
   is = G%isc-halo ; ie = G%iec+halo ; nz = GV%ke
 
   if ((.not.GV%Boussinesq) .and. allocated(tv%SpV_avg))  then

@@ -294,7 +294,7 @@ subroutine create_MOM_file(IO_handle, filename, vars, novars, fields, &
   integer        :: position, numaxes, pack, thread, k, n, m
   integer        :: num_extra_dims ! The number of extra possible dimensions from extra_axes
   integer        :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
-  integer        :: var_periods, num_periods=0
+  integer        :: var_periods, num_periods = 0
   real, dimension(:), allocatable :: axis_val ! Axis label values [various]
   real, pointer, dimension(:) :: &
     gridLatT => NULL(), & ! The latitude of T or B points for the purpose of labeling
@@ -493,7 +493,7 @@ subroutine create_MOM_file(IO_handle, filename, vars, novars, fields, &
                           longname=extra_axes(m)%longname, cartesian=extra_axes(m)%cartesian)
     else
       ! FMS requires that non-time axes have variables that label their values, even if they are trivial.
-      allocate (axis_val(extra_axes(m)%ax_size))
+      allocate(axis_val(extra_axes(m)%ax_size))
       do k=1,extra_axes(m)%ax_size ; axis_val(k) = real(k) ; enddo
       more_axes(m) = IO_handle%register_axis(extra_axes(m)%name, units=extra_axes(m)%units, &
                           longname=extra_axes(m)%longname, cartesian=extra_axes(m)%cartesian, &
@@ -698,7 +698,7 @@ subroutine reopen_MOM_file(IO_handle, filename, vars, novars, fields, &
   if (check_name(length-2:length) /= ".nc") check_name = trim(check_name)//".nc"
   if (thread /= SINGLE_FILE) check_name = trim(check_name)//".0000"
 
-  inquire(file=check_name,EXIST=exists)
+  inquire(file=check_name, EXIST=exists)
 
   if (.not.exists) then
     call create_MOM_file(IO_handle, filename, vars, novars, fields, &
@@ -726,16 +726,16 @@ subroutine reopen_MOM_file(IO_handle, filename, vars, novars, fields, &
     call IO_handle%get_file_info(nvar=nvar)
 
     if (nvar == -1) then
-      write (mesg,*) "Reopening file ",trim(filename)," apparently had ",nvar,&
-                     " variables. Clobbering and creating file with ",novars," instead."
-      call MOM_error(WARNING,"MOM_io: "//mesg)
+      write(mesg,*) "Reopening file ",trim(filename)," apparently had ",nvar,&
+                    " variables. Clobbering and creating file with ",novars," instead."
+      call MOM_error(WARNING, "MOM_io: "//mesg)
       call create_MOM_file(IO_handle, filename, vars, novars, fields, &
           threading, timeunit, G=G, dG=dG, GV=GV, extra_axes=extra_axes, &
           global_atts=global_atts)
     elseif (nvar /= novars) then
-      write (mesg,*) "Reopening file ",trim(filename)," with ",novars,&
-                     " variables instead of ",nvar,"."
-      call MOM_error(FATAL,"MOM_io: "//mesg)
+      write(mesg,*) "Reopening file ",trim(filename)," with ",novars,&
+                    " variables instead of ",nvar,"."
+      call MOM_error(FATAL, "MOM_io: "//mesg)
     endif
 
     if (nvar > 0) call IO_handle%get_file_fields(fields(1:nvar))
@@ -901,7 +901,7 @@ subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, d
     deallocate(dimids) ; return
   endif
 
-  do n = 1, min(ndims,size(sizes))
+  do n = 1, min(ndims, size(sizes))
     status = NF90_Inquire_Dimension(ncid, dimids(n), name=dimname, len=sizes(n))
     if (status /= NF90_NOERR) call MOM_error(WARNING, trim(hdr) // trim(NF90_STRERROR(status)) //&
         " Getting dimension length for "//trim(varname)//" in "//trim(filename))
@@ -1704,7 +1704,7 @@ subroutine verify_variable_units(filename, varname, expected_units, msg, ierr, a
   character(len=*), optional, intent(in)    :: alt_units !< Alterate acceptable units of variable
 
   ! Local variables
-  character (len=200) :: units
+  character(len=200) :: units
   logical :: units_correct, success
   integer :: i, ncid, status, vid
 
@@ -1886,7 +1886,7 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   if (present(conversion)) vd%conversion = conversion
 
   if (present(dim_names)) then
-    do n=1,min(5,size(dim_names)) ; if (len_trim(dim_names(n)) > 0) then
+    do n = 1, min(5, size(dim_names)) ; if (len_trim(dim_names(n)) > 0) then
       call safe_string_copy(dim_names(n), vd%dim_names(n), "vd%dim_names of "//trim(vd%name), cllr)
     endif ; enddo
   endif
@@ -1975,7 +1975,7 @@ end subroutine delete_axis_info
 
 
 !> Retrieve the information from an axis_info type.
-subroutine get_axis_info(axis,name,longname,units,cartesian,ax_size,ax_data)
+subroutine get_axis_info(axis, name, longname, units, cartesian, ax_size, ax_data)
   type(axis_info), intent(in) :: axis                               !< An axis type
   character(len=*), intent(out), optional    :: name                !< The axis name.
   character(len=*), intent(out), optional    :: longname            !< The axis longname.
@@ -2097,7 +2097,7 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
     if (position == -1) position = position_from_horgrid(vd%hor_grid)
   endif
   if (present(dim_names)) then
-    do n=1,min(5,size(dim_names))
+    do n = 1, min(5, size(dim_names))
       call safe_string_copy(vd%dim_names(n), dim_names(n), "vd%dim_names of "//trim(vd%name), cllr)
     enddo
   endif
@@ -3108,7 +3108,7 @@ function ensembler(name, ens_no_in) result(en_nm)
   integer :: n, is
 
   en_nm = trim(name)
-  if (index(name,"%") == 0) return
+  if (index(name, "%") == 0) return
 
   if (present(ens_no_in)) then
     ens_no = ens_no_in
@@ -3118,7 +3118,7 @@ function ensembler(name, ens_no_in) result(en_nm)
 
   write(ens_num_char, '(I0)') ens_no
   do
-    is = index(en_nm,"%E")
+    is = index(en_nm, "%E")
     if (is == 0) exit
     if (len(en_nm) < len(trim(en_nm)) + len(trim(ens_num_char)) - 2) &
       call MOM_error(FATAL, "MOM_io ensembler: name "//trim(name)// &
@@ -3127,13 +3127,13 @@ function ensembler(name, ens_no_in) result(en_nm)
     en_nm = tmp
   enddo
 
-  if (index(name,"%") == 0) return
+  if (index(name, "%") == 0) return
 
   write(ens_num_char, '(I10.10)') ens_no
   do n=1,9 ; do
     write(code_str, '("%",I1,"E")') n
 
-    is = index(en_nm,code_str)
+    is = index(en_nm, code_str)
     if (is == 0) exit
     if (ens_no < 10**n) then
       if (len(en_nm) < len(trim(en_nm)) + n-3) call MOM_error(FATAL, &
@@ -3217,54 +3217,54 @@ subroutine get_var_axes_info(filename, fieldname, axes_info)
   call open_file_to_read(filename, ncid, success=success)
 
   rcode = NF90_INQ_VARID(ncid, trim(fieldname), varid)
-  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(fieldname)//&
+  if (rcode /= 0) call MOM_error(FATAL, "error finding variable "//trim(fieldname)//&
                                  " in file "//trim(filename)//" in hinterp_extrap")
 
   rcode = NF90_INQUIRE_VARIABLE(ncid, varid, ndims=ndims, dimids=dims)
   if (rcode /= 0) call MOM_error(FATAL, "Error inquiring about the dimensions of "//trim(fieldname)//&
                                  " in file "//trim(filename)//" in hinterp_extrap")
-  if (ndims < 3) call MOM_error(FATAL,"Variable "//trim(fieldname)//" in file "//trim(filename)// &
+  if (ndims < 3) call MOM_error(FATAL, "Variable "//trim(fieldname)//" in file "//trim(filename)// &
                                 " has too few dimensions to be read as a 3-d array.")
   rcode = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
-  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 1 data for "// &
+  if (rcode /= 0) call MOM_error(FATAL, "error reading dimension 1 data for "// &
                 trim(fieldname)//" in file "// trim(filename)//" in hinterp_extrap")
   rcode = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
-  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
+  if (rcode /= 0) call MOM_error(FATAL, "error finding variable "//trim(dim_name(1))//&
                                  " in file "//trim(filename)//" in hinterp_extrap")
   rcode = NF90_INQUIRE_DIMENSION(ncid, dims(2), dim_name(2), len=jd)
-  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 2 data for "// &
+  if (rcode /= 0) call MOM_error(FATAL, "error reading dimension 2 data for "// &
                 trim(fieldname)//" in file "// trim(filename)//" in hinterp_extrap")
   rcode = NF90_INQ_VARID(ncid, dim_name(2), dim_id(2))
-  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(2))//&
+  if (rcode /= 0) call MOM_error(FATAL, "error finding variable "//trim(dim_name(2))//&
                                  " in file "//trim(filename)//" in hinterp_extrap")
   rcode = NF90_INQUIRE_DIMENSION(ncid, dims(3), dim_name(3), len=kd)
-  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 3 data for "// &
+  if (rcode /= 0) call MOM_error(FATAL, "error reading dimension 3 data for "// &
                 trim(fieldname)//" in file "// trim(filename)//" in hinterp_extrap")
   rcode = NF90_INQ_VARID(ncid, dim_name(3), dim_id(3))
-  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(3))//&
+  if (rcode /= 0) call MOM_error(FATAL, "error finding variable "//trim(dim_name(3))//&
                                  " in file "//trim(filename)//" in hinterp_extrap")
   allocate(x(id), y(jd), z(kd))
 
   start = 1 ; count = 1 ; count(1) = id
   rcode = NF90_GET_VAR(ncid, dim_id(1), x, start, count)
-  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 1 values for var_name "// &
+  if (rcode /= 0) call MOM_error(FATAL, "error reading dimension 1 values for var_name "// &
                 trim(fieldname)//",dim_name "//trim(dim_name(1))//" in file "// trim(filename)//" in hinterp_extrap")
   start = 1 ; count = 1 ; count(1) = jd
   rcode = NF90_GET_VAR(ncid, dim_id(2), y, start, count)
-  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 2 values for var_name "// &
+  if (rcode /= 0) call MOM_error(FATAL, "error reading dimension 2 values for var_name "// &
                 trim(fieldname)//",dim_name "//trim(dim_name(2))//" in file "// trim(filename)//" in  hinterp_extrap")
   start = 1 ; count = 1 ; count(1) = kd
   rcode = NF90_GET_VAR(ncid, dim_id(3), z, start, count)
-  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 3 values for var_name "// &
+  if (rcode /= 0) call MOM_error(FATAL, "error reading dimension 3 values for var_name "// &
                 trim(fieldname//",dim_name "//trim(dim_name(3)))//" in file "// trim(filename)//" in  hinterp_extrap")
 
-  call set_axis_info(axes_info(1), name=trim(dim_name(1)), ax_size=id, ax_data=x,cartesian='X')
-  call set_axis_info(axes_info(2), name=trim(dim_name(2)), ax_size=jd, ax_data=y,cartesian='Y')
-  call set_axis_info(axes_info(3), name=trim(dim_name(3)), ax_size=kd, ax_data=z,cartesian='Z')
+  call set_axis_info(axes_info(1), name=trim(dim_name(1)), ax_size=id, ax_data=x, cartesian='X')
+  call set_axis_info(axes_info(2), name=trim(dim_name(2)), ax_size=jd, ax_data=y, cartesian='Y')
+  call set_axis_info(axes_info(3), name=trim(dim_name(3)), ax_size=kd, ax_data=z, cartesian='Z')
 
   call close_file_to_read(ncid, filename)
 
-  deallocate(x,y,z)
+  deallocate(x, y, z)
 
 end subroutine get_var_axes_info
 !> \namespace mom_io

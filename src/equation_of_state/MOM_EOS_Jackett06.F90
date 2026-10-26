@@ -92,7 +92,7 @@ real elemental function density_elem_Jackett06(this, T, S, pressure)
   real :: T2      ! Temperature squared [degC2]
   real :: S1_2    ! Limited square root of salinity [PSU1/2]
 
-  S1_2 = sqrt(max(0.0,s))
+  S1_2 = sqrt(max(0.0, s))
   T2 = T*T
 
   num_STP = (T*(RN010 + T*(RN020 + T*RN030)) + &
@@ -128,7 +128,7 @@ real elemental function density_anomaly_elem_Jackett06(this, T, S, pressure, rho
   real :: S1_2    ! Limited square root of salinity [PSU1/2]
   real :: rho0    ! The surface density of fresh water at 0 degC, perhaps less the refernce density [kg m-3]
 
-  S1_2 = sqrt(max(0.0,s))
+  S1_2 = sqrt(max(0.0, s))
   T2 = T*T
 
   num_STP = (T*(RN010 + T*(RN020 + T*RN030)) + &
@@ -163,7 +163,7 @@ real elemental function spec_vol_elem_Jackett06(this, T, S, pressure)
   real :: T2      ! Temperature squared [degC2]
   real :: S1_2    ! Limited square root of salinity [PSU1/2]
 
-  S1_2 = sqrt(max(0.0,s))
+  S1_2 = sqrt(max(0.0, s))
   T2 = T*T
 
   num_STP = (T*(RN010 + T*(RN020 + T*RN030)) + &
@@ -197,7 +197,7 @@ real elemental function spec_vol_anomaly_elem_Jackett06(this, T, S, pressure, sp
   real :: T2      ! Temperature squared [degC2]
   real :: S1_2    ! Limited square root of salinity [PSU1/2]
 
-  S1_2 = sqrt(max(0.0,s))
+  S1_2 = sqrt(max(0.0, s))
   T2 = T*T
 
   num_STP = (T*(RN010 + T*(RN020 + T*RN030)) + &
@@ -236,7 +236,7 @@ elemental subroutine calculate_density_derivs_elem_Jackett06(this, T, S, pressur
   real :: T2      ! Temperature squared [degC2]
   real :: S1_2    ! Limited square root of salinity [PSU1/2]
 
-  S1_2 = sqrt(max(0.0,s))
+  S1_2 = sqrt(max(0.0, s))
   T2 = T*T
 
   num = RN000 + ((T*(RN010 + T*(RN020 + T*RN030)) + &
@@ -312,7 +312,7 @@ elemental subroutine calculate_density_second_derivs_elem_Jackett06(this, T, S, 
   real :: I_denom3    ! The inverse of the cube of the denominator of the rational expression
                       ! for density [nondim]
 
-  S1_2 = sqrt(max(0.0,s))
+  S1_2 = sqrt(max(0.0, s))
   T2 = T*T
 
   num = RN000 + ((T*(RN010 + T*(RN020 + T*RN030)) + &
@@ -395,7 +395,7 @@ elemental subroutine calculate_specvol_derivs_elem_Jackett06(this, T, S, pressur
   real :: T2      ! Temperature squared [degC2]
   real :: S1_2    ! Limited square root of salinity [PSU1/2]
 
-  S1_2 = sqrt(max(0.0,s))
+  S1_2 = sqrt(max(0.0, s))
   T2 = T*T
 
   num = RN000 + ((T*(RN010 + T*(RN020 + T*RN030)) + &
@@ -441,7 +441,7 @@ elemental subroutine calculate_compress_elem_Jackett06(this, T, S, pressure, rho
   real :: S1_2    ! Limited square root of salinity [PSU1/2]
   integer :: j
 
-  S1_2 = sqrt(max(0.0,s))
+  S1_2 = sqrt(max(0.0, s))
   T2 = T*T
 
   num = RN000 + ((T*(RN010 + T*(RN020 + T*RN030)) + &

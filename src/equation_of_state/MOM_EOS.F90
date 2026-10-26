@@ -126,11 +126,11 @@ type, public :: EOS_type ; private
   real :: dTFr_dS   !< The derivative of freezing point with salinity [degC ppt-1]
   real :: dTFr_dp   !< The derivative of freezing point with pressure [degC Pa-1]
 ! The following are logicals pertaining to definitions of the thermodynamic state variables
-  logical :: use_conT_absS =.false. !< True if the model internal temperature is the conservative temperature and
+  logical :: use_conT_absS = .false. !< True if the model internal temperature is the conservative temperature and
                            !! the salinity is absolute salinity.  These could be separated into two flags,
                            !! but right now it is controlled by one input parameter and there is no known
                            !! need to have one True and one False.
-  logical :: TFreeze_S_is_pracS =.true. !< True if the freezing point expression is formulated from practical salinity
+  logical :: TFreeze_S_is_pracS = .true. !< True if the freezing point expression is formulated from practical salinity
   logical :: TFreeze_T_is_potT = .true. !< True if the freezing point expression yields a potential temperature
 
   logical :: use_Wright_2nd_deriv_bug = .false.  !< If true, use a separate subroutine that
@@ -581,7 +581,7 @@ subroutine calculate_TFreeze_scalar(S, pressure, T_fr, EOS, pres_scale, scale_fr
   if (EOS%use_conT_absS .and. EOS%TFreeze_T_is_potT) then
     ! absS is set only if EOS%use_conT_absS is True
     ! absS and T_fr have physical units here and don't need converted
-    T_fr = gsw_ct_from_pt(absS,T_fr)
+    T_fr = gsw_ct_from_pt(absS, T_fr)
   endif
 
   if (present(scale_from_EOS)) then ; if (scale_from_EOS) then
@@ -656,7 +656,7 @@ subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS, pres_sca
 
   if (EOS%use_conT_absS .and. EOS%TFreeze_T_is_potT) then
     ! absS is set only if EOS%use_conT_absS is True!
-    T_fr(:) = gsw_ct_from_pt(absS(:),T_fr(:))
+    T_fr(:) = gsw_ct_from_pt(absS(:), T_fr(:))
   endif
 
 
@@ -736,7 +736,7 @@ subroutine calculate_TFreeze_1d(S, pressure, T_fr, EOS, dom)
   if (EOS%use_conT_absS .and. EOS%TFreeze_T_is_potT) then
     ! absS is set only if EOS%use_conT_absS is True!
     ! absS is in ppt and T_fr is in degC at this point.
-    T_fr(:) = gsw_ct_from_pt(absS(:),T_fr(:))
+    T_fr(:) = gsw_ct_from_pt(absS(:), T_fr(:))
   endif
 
 
@@ -1680,16 +1680,16 @@ subroutine EOS_init(param_file, EOS, US, use_conT_absS)
   end select
 
   if (EOS%form_of_TFreeze == TFREEZE_LINEAR) then
-    call get_param(param_file, mdl, "TFREEZE_S0_P0",EOS%TFr_S0_P0, &
+    call get_param(param_file, mdl, "TFREEZE_S0_P0", EOS%TFr_S0_P0, &
                  "When TFREEZE_FORM="//trim(TFREEZE_LINEAR_STRING)//", "//&
                  "this is the freezing potential temperature at "//&
                  "S=0, P=0.", units="degC", default=0.0)
-    call get_param(param_file, mdl, "DTFREEZE_DS",EOS%dTFr_dS, &
+    call get_param(param_file, mdl, "DTFREEZE_DS", EOS%dTFr_dS, &
                  "When TFREEZE_FORM="//trim(TFREEZE_LINEAR_STRING)//", "//&
                  "this is the derivative of the freezing potential "//&
                  "temperature with salinity.", &
                  units="degC ppt-1", default=-0.054)
-    call get_param(param_file, mdl, "DTFREEZE_DP",EOS%dTFr_dP, &
+    call get_param(param_file, mdl, "DTFREEZE_DP", EOS%dTFr_dP, &
                  "When TFREEZE_FORM="//trim(TFREEZE_LINEAR_STRING)//", "//&
                  "this is the derivative of the freezing potential "//&
                  "temperature with pressure.", &
@@ -1697,10 +1697,10 @@ subroutine EOS_init(param_file, EOS, US, use_conT_absS)
   endif
 
   if ((EOS%form_of_TFreeze==TFREEZE_TEOSPOLY) .or. (EOS%form_of_TFreeze==TFREEZE_TEOS10)) then
-     ! Which default is appropriate for Millero?
-     EOS_TS_default = .false.
+    ! Which default is appropriate for Millero?
+    EOS_TS_default = .false.
   else
-     EOS_TS_default = .true.
+    EOS_TS_default = .true.
   endif
   call get_param(param_file, mdl, "TFREEZE_S_IS_PRACS", EOS%TFreeze_S_is_pracS, &
                "When True, the model will check if the model internal salinity is "//&

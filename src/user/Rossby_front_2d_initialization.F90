@@ -112,7 +112,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read
         enddo ; enddo
 
       case default
-        call MOM_error(FATAL,"Rossby_front_initialize: "// &
+        call MOM_error(FATAL, "Rossby_front_initialize: "// &
         "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
 
     end select
@@ -154,7 +154,7 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, US, &
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
                  default=35.0, units="ppt", scale=US%ppt_to_S, do_not_log=just_read)

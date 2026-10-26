@@ -134,7 +134,7 @@ subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answer_dat
     sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + h_neglect )
 
     if ( (sigma_l * sigma_r) > 0.0 ) then
-      slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
+      slope = sign( min(abs(sigma_l), abs(sigma_c), abs(sigma_r)), sigma_c )
     else
       slope = 0.0
     endif

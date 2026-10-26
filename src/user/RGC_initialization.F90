@@ -121,7 +121,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
       Idamp(i,j) = 0.0
     elseif (G%geoLonT(i,j) >= (G%len_lon - lensponge) .AND. G%geoLonT(i,j) <= G%len_lon) then
       dummy1 = (G%geoLonT(i,j)-(G%len_lon - lensponge))/(lensponge)
-      Idamp(i,j) = (1.0/TNUDG) * max(0.0,dummy1)
+      Idamp(i,j) = (1.0/TNUDG) * max(0.0, dummy1)
     else
       Idamp(i,j) = 0.0
     endif

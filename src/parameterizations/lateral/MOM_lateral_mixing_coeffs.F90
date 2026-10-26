@@ -179,12 +179,12 @@ type, public :: VarMix_CS
   ! Diagnostics
   !>@{
   !! Diagnostic identifier
-  integer :: id_SN_u=-1, id_SN_v=-1, id_L2u=-1, id_L2v=-1, id_Res_fn = -1
-  integer :: id_N2_u=-1, id_N2_v=-1, id_S2_u=-1, id_S2_v=-1
-  integer :: id_dzu=-1, id_dzv=-1, id_dzSxN=-1, id_dzSyN=-1
-  integer :: id_Rd_dx=-1, id_KH_u_QG = -1, id_KH_v_QG = -1
-  integer :: id_sqg_struct=-1, id_BS_struct=-1, id_khth_struct=-1, id_khtr_struct=-1
-  integer :: id_kdgl90_struct=-1
+  integer :: id_SN_u = -1, id_SN_v = -1, id_L2u = -1, id_L2v = -1, id_Res_fn = -1
+  integer :: id_N2_u = -1, id_N2_v = -1, id_S2_u = -1, id_S2_v = -1
+  integer :: id_dzu = -1, id_dzv = -1, id_dzSxN = -1, id_dzSyN = -1
+  integer :: id_Rd_dx = -1, id_KH_u_QG = -1, id_KH_v_QG = -1
+  integer :: id_sqg_struct = -1, id_BS_struct = -1, id_khth_struct = -1, id_khtr_struct = -1
+  integer :: id_kdgl90_struct = -1
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
   !>@}
@@ -273,7 +273,7 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS, MEKE, OBC, dt)
     if (.not. allocated(CS%cg1)) call MOM_error(FATAL, &
       "calc_resoln_function: %cg1 is not associated with Resoln_scaled_Kh.")
     if (CS%khth_use_ebt_struct .or. CS%kdgl90_use_ebt_struct &
-     .or. CS%khtr_use_ebt_struct .or. CS%BS_EBT_power>0.) then
+        .or. CS%khtr_use_ebt_struct .or. CS%BS_EBT_power>0.) then
       if (.not. allocated(CS%ebt_struct)) call MOM_error(FATAL, &
         "calc_resoln_function: %ebt_struct is not associated with RESOLN_USE_EBT.")
       if (CS%Resoln_use_ebt) then
@@ -614,7 +614,7 @@ subroutine calc_sqg_struct(h, tv, G, GV, US, CS, dt, MEKE, OBC)
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(in)    :: tv !<Thermodynamic variables
-   real,                                     intent(in)    :: dt !< Time increment [T ~> s]
+  real,                                      intent(in)    :: dt !< Time increment [T ~> s]
   type(VarMix_CS),                           intent(inout) :: CS !< Variable mixing control struct
   type(MEKE_type),                           intent(in)    :: MEKE !< MEKE struct
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundaries control structure
@@ -1259,12 +1259,12 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e)
     do j=js-1,je+1 ; do I=is-1,ie
       E_x(I,j) = (e(i+1,j,K)-e(i,j,K))*G%IdxCu(I,j)
       ! Mask slopes where interface intersects topography
-      if (min(h(i,j,k),h(i+1,j,k)) < H_cutoff) E_x(I,j) = 0.
+      if (min(h(i,j,k), h(i+1,j,k)) < H_cutoff) E_x(I,j) = 0.
     enddo ; enddo
     do J=js-1,je ; do i=is-1,ie+1
       E_y(i,J) = (e(i,j+1,K)-e(i,j,K))*G%IdyCv(i,J)
       ! Mask slopes where interface intersects topography
-      if (min(h(i,j,k),h(i,j+1,k)) < H_cutoff) E_y(i,J) = 0.
+      if (min(h(i,j,k), h(i,j+1,k)) < H_cutoff) E_y(i,J) = 0.
     enddo ; enddo
 
     ! Calculate N*S*h from this layer and add to the sum

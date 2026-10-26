@@ -111,9 +111,9 @@ logical function summarize(this, label)
   if (this%state) then
     write(this%stdout,'(a," : ",a,", ",i4," failed of ",i4," tested")') &
          'FAIL', trim(label), this%num_tests_failed, this%num_tests_checked
-    write(this%stdout,'(a,100i4)') 'Failed tests:',(this%ifailed(i),i=1,min(100,this%num_tests_failed))
+    write(this%stdout,'(a,100i4)') 'Failed tests:', (this%ifailed(i), i=1, min(100, this%num_tests_failed))
     write(this%stdout,'(a,a)') 'First failed test: ',trim(this%label_first_fail)
-    write(this%stderr,'(a,100i4)') 'Failed tests:',(this%ifailed(i),i=1,min(100,this%num_tests_failed))
+    write(this%stderr,'(a,100i4)') 'Failed tests:', (this%ifailed(i), i=1, min(100, this%num_tests_failed))
     write(this%stderr,'(a,a)') 'First failed test: ',trim(this%label_first_fail)
     write(this%stderr,'(a," : ",a)') trim(label),'FAILED'
   else

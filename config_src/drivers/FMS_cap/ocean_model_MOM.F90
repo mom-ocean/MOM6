@@ -97,7 +97,7 @@ type, public ::  ocean_public_type
                                  !! this instance of an ocean model, for example
                                  !! in ensembles when writing messages.
   integer, pointer, dimension(:) :: pelist => NULL()   !< The list of ocean PEs.
-  logical, pointer, dimension(:,:) :: maskmap =>NULL() !< A pointer to an array
+  logical, pointer, dimension(:,:) :: maskmap => NULL() !< A pointer to an array
                     !! indicating which logical processors are actually used for
                     !! the ocean code. The other logical processors would be all
                     !! land points and are not assigned to actual processors.
@@ -119,7 +119,7 @@ type, public ::  ocean_public_type
     v_surf => NULL(), & !< j-velocity at the locations indicated by stagger [m s-1].
     sea_lev => NULL(), & !< Sea level in m after correction for surface pressure,
                         !! i.e. dzt(1) + eta_t + patm/rho0/grav [m]
-    frazil =>NULL(), &  !< Accumulated heating [J m-2] from frazil
+    frazil => NULL(), & !< Accumulated heating [J m-2] from frazil
                         !! formation in the ocean.
     melt_potential => NULL(), & !< Instantaneous heat used to melt sea ice [J m-2].
     OBLD => NULL(),   & !< Ocean boundary layer depth [m].
@@ -336,7 +336,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
   if (uppercase(stagger(1:1)) == 'A') then ; Ocean_sfc%stagger = AGRID
   elseif (uppercase(stagger(1:1)) == 'B') then ; Ocean_sfc%stagger = BGRID_NE
   elseif (uppercase(stagger(1:1)) == 'C') then ; Ocean_sfc%stagger = CGRID_NE
-  else ; call MOM_error(FATAL,"ocean_model_init: OCEAN_SURFACE_STAGGER = "// &
+  else ; call MOM_error(FATAL, "ocean_model_init: OCEAN_SURFACE_STAGGER = "// &
                         trim(stagger)//" is invalid.") ; endif
 
   call get_param(param_file, mdl, "RHO_0", Rho0, &
@@ -367,9 +367,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
                  units="m", default=-1.0, scale=OS%US%m_to_Z, do_not_log=.true.)
 
   if (HFrz > 0.0) then
-    use_melt_pot=.true.
+    use_melt_pot = .true.
   else
-    use_melt_pot=.false.
+    use_melt_pot = .false.
   endif
 
   !allocate(OS%sfc_state)
@@ -424,7 +424,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
   if (present(calve_ice_shelf_bergs)) then
     if (calve_ice_shelf_bergs) then
       call convert_shelf_state_to_ocean_type(Ocean_sfc, OS%Ice_shelf_CSp, OS%US)
-      OS%calve_ice_shelf_bergs=.true.
+      OS%calve_ice_shelf_bergs = .true.
     endif
   endif
 
@@ -566,7 +566,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
                                  OS%grid, OS%US, OS%forcing_CSp, OS%sfc_state)
 
       if (OS%use_ice_shelf) &
-        call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time,dt_coupling, OS%Ice_shelf_CSp)
+        call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
       if (OS%icebergs_alter_ocean) &
         call iceberg_fluxes(OS%grid, OS%US, OS%flux_tmp, OS%use_ice_shelf, &
                             OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
@@ -623,7 +623,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
       dt_therm = dt_coupling * floor(OS%dt_therm / dt_coupling + 0.001)
       nts = floor(dt_therm/dt_dyn + 0.001)
     else
-      nts = MAX(1,MIN(n_max,floor(OS%dt_therm/dt_dyn + 0.001)))
+      nts = MAX(1, MIN(n_max, floor(OS%dt_therm/dt_dyn + 0.001)))
       n_last_thermo = 0
     endif
 
@@ -633,8 +633,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
         if (thermo_does_span_coupling) call MOM_error(FATAL, &
             "MOM is not yet set up to have restarts that work with "//&
             "THERMO_SPANS_COUPLING and DIABATIC_FIRST.")
-        if (modulo(n-1,nts)==0) then
-          dtdia = dt_dyn*min(nts,n_max-(n-1))
+        if (modulo(n-1, nts) == 0) then
+          dtdia = dt_dyn * min(nts, n_max-(n-1))
           call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dtdia, OS%MOM_CSp, &
                         Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
@@ -652,7 +652,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
         if (thermo_does_span_coupling) then
           dtdia = dt_therm
           step_thermo = MOM_state_is_synchronized(OS%MOM_CSp, adv_dyn=.true.)
-        elseif ((modulo(n,nts)==0) .or. (n==n_max)) then
+        elseif ((modulo(n, nts) == 0) .or. (n == n_max)) then
           dtdia = dt_dyn*(n - n_last_thermo)
           n_last_thermo = n
           step_thermo = .true.
@@ -694,7 +694,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
 !  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US, &
 !                                   OS%fluxes%p_surf_full, OS%press_to_z)
   call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US)
-  if (OS%calve_ice_shelf_bergs) call convert_shelf_state_to_ocean_type(Ocean_sfc,OS%Ice_shelf_CSp, OS%US)
+  if (OS%calve_ice_shelf_bergs) call convert_shelf_state_to_ocean_type(Ocean_sfc, OS%Ice_shelf_CSp, OS%US)
   Time1 = OS%Time ; if (do_dyn) Time1 = OS%Time_dyn
   call coupler_type_send_data(Ocean_sfc%fields, Time1)
 
@@ -716,7 +716,7 @@ subroutine ocean_model_restart(OS, timestamp)
       "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
       "restart files can only be created after the buoyancy forcing is applied.")
 
-  if (BTEST(OS%Restart_control,1)) then
+  if (BTEST(OS%Restart_control, 1)) then
     call save_MOM_restart(OS%MOM_CSp, OS%dirs%restart_output_dir, OS%Time, &
         OS%grid, time_stamped=.true., GV=OS%GV)
     call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
@@ -725,7 +725,7 @@ subroutine ocean_model_restart(OS, timestamp)
       call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir, .true.)
     endif
   endif
-  if (BTEST(OS%Restart_control,0)) then
+  if (BTEST(OS%Restart_control, 0)) then
     call save_MOM_restart(OS%MOM_CSp, OS%dirs%restart_output_dir, OS%Time, &
         OS%grid, GV=OS%GV)
     call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
@@ -811,17 +811,17 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, gas_field
 
   call get_domain_extent(Ocean_sfc%Domain, isc, iec, jsc, jec)
 
-  allocate ( Ocean_sfc%t_surf (isc:iec,jsc:jec), &
-             Ocean_sfc%s_surf (isc:iec,jsc:jec), &
-             Ocean_sfc%u_surf (isc:iec,jsc:jec), &
-             Ocean_sfc%v_surf (isc:iec,jsc:jec), &
-             Ocean_sfc%sea_lev(isc:iec,jsc:jec), &
-             Ocean_sfc%calving(isc:iec,jsc:jec), &
-             Ocean_sfc%calving_hflx(isc:iec,jsc:jec), &
-             Ocean_sfc%area   (isc:iec,jsc:jec), &
-             Ocean_sfc%melt_potential(isc:iec,jsc:jec), &
-             Ocean_sfc%OBLD   (isc:iec,jsc:jec), &
-             Ocean_sfc%frazil (isc:iec,jsc:jec))
+  allocate(Ocean_sfc%t_surf(isc:iec,jsc:jec), &
+           Ocean_sfc%s_surf(isc:iec,jsc:jec), &
+           Ocean_sfc%u_surf(isc:iec,jsc:jec), &
+           Ocean_sfc%v_surf(isc:iec,jsc:jec), &
+           Ocean_sfc%sea_lev(isc:iec,jsc:jec), &
+           Ocean_sfc%calving(isc:iec,jsc:jec), &
+           Ocean_sfc%calving_hflx(isc:iec,jsc:jec), &
+           Ocean_sfc%area(isc:iec,jsc:jec), &
+           Ocean_sfc%melt_potential(isc:iec,jsc:jec), &
+           Ocean_sfc%OBLD(isc:iec,jsc:jec), &
+           Ocean_sfc%frazil(isc:iec,jsc:jec))
 
   Ocean_sfc%t_surf(:,:)  = 0.0  ! time averaged sst (Kelvin) passed to atmosphere/ice model
   Ocean_sfc%s_surf(:,:)  = 0.0  ! time averaged sss (psu) passed to atmosphere/ice models
@@ -838,7 +838,7 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, gas_field
 
   if (present(gas_fields_ocn)) then
     call coupler_type_spawn(gas_fields_ocn, Ocean_sfc%fields, (/isc,isc,iec,iec/), &
-                              (/jsc,jsc,jec,jec/), suffix = '_ocn', as_needed=.true.)
+                            (/jsc,jsc,jec,jec/), suffix='_ocn', as_needed=.true.)
   endif
 
 end subroutine initialize_ocean_public_type
@@ -976,7 +976,7 @@ subroutine convert_shelf_state_to_ocean_type(Ocean_sfc, CS, US)
 
   call get_domain_extent(Ocean_sfc%Domain, isc_bnd, iec_bnd, jsc_bnd, jec_bnd)
 
-  call ice_sheet_calving_to_ocean_sfc(CS,US,Ocean_sfc%calving(isc_bnd:iec_bnd,jsc_bnd:jec_bnd),&
+  call ice_sheet_calving_to_ocean_sfc(CS, US, Ocean_sfc%calving(isc_bnd:iec_bnd,jsc_bnd:jec_bnd), &
     Ocean_sfc%calving_hflx(isc_bnd:iec_bnd,jsc_bnd:jec_bnd))
 
 end subroutine convert_shelf_state_to_ocean_type
@@ -1128,7 +1128,7 @@ subroutine ocean_model_data2D_get(OS, Ocean, name, array2D, isc, jsc)
     case('obld')
       array2D(isc:,jsc:) = Ocean%OBLD(isc:,jsc:)
     case default
-      call MOM_error(FATAL,'get_ocean_grid_data2D: unknown argument name='//name)
+      call MOM_error(FATAL, 'get_ocean_grid_data2D: unknown argument name='//name)
   end select
 
 end subroutine ocean_model_data2D_get
@@ -1149,7 +1149,7 @@ subroutine ocean_model_data1D_get(OS, Ocean, name, value)
   case('c_p')
     value = OS%C_p
   case default
-    call MOM_error(FATAL,'get_ocean_grid_data1D: unknown argument name='//name)
+    call MOM_error(FATAL, 'get_ocean_grid_data1D: unknown argument name='//name)
   end select
 
 end subroutine ocean_model_data1D_get
@@ -1258,7 +1258,7 @@ subroutine ocean_model_get_UV_surf(OS, Ocean, name, array2D, isc, jsc)
       array2D(i,j) = G%mask2dCv(I+i0,J+j0) * sfc_state%v(i+i0,J+j0)
     enddo ; enddo
   case default
-    call MOM_error(FATAL,'ocean_model_get_UV_surf: unknown argument name='//name)
+    call MOM_error(FATAL, 'ocean_model_get_UV_surf: unknown argument name='//name)
   end select
 
 end subroutine ocean_model_get_UV_surf

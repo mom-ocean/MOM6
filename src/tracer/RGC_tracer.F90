@@ -46,7 +46,7 @@ integer, parameter :: NTR = 1 !< The number of tracers in this module.
 !> tracer control structure
 type, public :: RGC_tracer_CS ; private
   logical :: coupled_tracers = .false.  !< These tracers are not offered to the coupler.
-  character(len = 200) :: tracer_IC_file !< The full path to the IC file, or " " to initialize internally.
+  character(len=200) :: tracer_IC_file !< The full path to the IC file, or " " to initialize internally.
   type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry.
   real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package [kg kg-1]
@@ -194,12 +194,12 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
           CS%tr(i,j,k,m) = 0.0
         enddo ; enddo ; enddo
       enddo
-      m=1
+      m = 1
       do j=js,je ; do i=is,ie
-         !set tracer to 1.0 in the surface of the continental shelf
-         if (G%geoLonT(i,j) <= (CS%CSL)) then
-            CS%tr(i,j,1,m) = 1.0 !first layer
-         endif
+        ! set tracer to 1.0 in the surface of the continental shelf
+        if (G%geoLonT(i,j) <= (CS%CSL)) then
+          CS%tr(i,j,1,m) = 1.0 ! first layer
+        endif
       enddo ; enddo
 
     endif
@@ -287,7 +287,7 @@ subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, 
 
   if (.not.associated(CS)) return
 
-  m=1
+  m = 1
   do j=js,je ; do i=is,ie
     ! set tracer to 1.0 in the surface of the continental shelf
     if (G%geoLonT(i,j) <= (CS%CSL)) then

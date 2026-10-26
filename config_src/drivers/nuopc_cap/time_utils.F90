@@ -39,7 +39,7 @@ public esmf2fms_time
 public fms2esmf_time
 public string_to_date
 
-character(len=*),parameter :: u_FILE_u = &
+character(len=*), parameter :: u_FILE_u = &
      __FILE__
 
 contains
@@ -98,7 +98,7 @@ function esmf2fms_time_t(time)
 
   call ESMF_TimeGet(time, yy=yy, mm=mm, dd=dd, h=h, m=m, s=s, &
       calkindflag=calkind, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
 
   esmf2fms_time_t = set_date(yy, mm, dd, h, m, s)
 
@@ -116,7 +116,7 @@ function esmf2fms_timestep(timestep)
   integer                            :: rc
 
   call ESMF_TimeIntervalGet(timestep, s=s, calkindflag=calkind, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
 
   esmf2fms_timestep = set_time(s, 0)
 
@@ -144,7 +144,7 @@ function fms2esmf_time(time, calkind)
 
   call ESMF_TimeSet(fms2esmf_time, yy=yy, mm=mm, d=d, h=h, m=m, s=s, &
       calkindflag=l_calkind, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
 
 end function fms2esmf_time
 
@@ -156,7 +156,7 @@ function string_to_date(string, rc)
   type(time_type)                         :: string_to_date!< FMS time structure
 
   ! Local variables
-  integer                                 :: yr,mon,day,hr,min,sec
+  integer                                 :: yr, mon, day, hr, min, sec
 
   if (present(rc)) rc = ESMF_SUCCESS
 

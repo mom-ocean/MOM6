@@ -164,7 +164,7 @@ subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre)
     bottom_flux(i,j,k) = -(eb(i,j,k)-ea(i,j,k+1))
   enddo ; enddo ; enddo
 
-  k=nz
+  k = nz
   do j=js-1,je+1 ; do i=is-1,ie+1
     top_flux(i,j,k) = -(ea(i,j,k)-eb(i,j,k-1))
     bottom_flux(i,j,k) = -eb(i,j,k)
@@ -411,10 +411,10 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
             uh_sum = uh_remain + uh2d(I,k_rev)
             if (uh_sum<0.0) then ! Transport to the left
               hup = h2d(i+1,k_rev)
-              hlos = max(0.0,uh2d(I+1,k_rev))
+              hlos = max(0.0, uh2d(I+1,k_rev))
               if ((((hup - hlos) + uh_sum) < 0.0) .and. &
                   ((0.5*hup + uh_sum) < 0.0)) then
-                uh2d(I,k_rev) = min(-0.5*hup,-hup+hlos,0.0)
+                uh2d(I,k_rev) = min(-0.5*hup, -hup+hlos, 0.0)
                 uh_remain = uh_sum - uh2d(I,k_rev)
               else
                 uh2d(I,k_rev) = uh_sum
@@ -423,10 +423,10 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
               endif
             else ! Transport to the right
               hup = h2d(i,k_rev)
-              hlos = max(0.0,-uh2d(I-1,k_rev))
+              hlos = max(0.0, -uh2d(I-1,k_rev))
               if ((((hup - hlos) - uh_sum) < 0.0) .and. &
                   ((0.5*hup - uh_sum) < 0.0)) then
-                uh2d(I,k_rev) = max(0.5*hup,hup-hlos,0.0)
+                uh2d(I,k_rev) = max(0.5*hup, hup-hlos, 0.0)
                 uh_remain = uh_sum - uh2d(I,k_rev)
               else
                 uh2d(I,k_rev) = uh_sum
@@ -442,7 +442,7 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
             uh2d(I,k+1) = uh2d(I,k+1) + uh_remain
           else
             uh2d(I,k) = uh2d(I,k) + uh_remain
-            call MOM_error(WARNING,"Water column cannot accommodate UH redistribution. Tracer may not be conserved")
+            call MOM_error(WARNING, "Water column cannot accommodate UH redistribution. Tracer may not be conserved")
           endif
         endif
       enddo ! k-loop
@@ -451,7 +451,7 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
       ! within the tolerance limit
       uh_neglect = GV%Angstrom_H * min(G%areaT(i,j), G%areaT(i+1,j))
       if (abs(uh_col - sum(uh2d(I,:))) > uh_neglect) then
-        call MOM_error(WARNING,"Column integral of uh does not match after upwards redistribution")
+        call MOM_error(WARNING, "Column integral of uh does not match after upwards redistribution")
       endif
 
     enddo ! i-loop
@@ -507,10 +507,10 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
             vh_sum = vh_remain + vh2d(J,k_rev)
             if (vh_sum<0.0) then ! Transport to the left
               hup = h2d(j+1,k_rev)
-              hlos = MAX(0.0,vh2d(J+1,k_rev))
+              hlos = MAX(0.0, vh2d(J+1,k_rev))
               if ((((hup - hlos) + vh_sum) < 0.0) .and. &
                   ((0.5*hup + vh_sum) < 0.0)) then
-                vh2d(J,k_rev) = MIN(-0.5*hup,-hup+hlos,0.0)
+                vh2d(J,k_rev) = MIN(-0.5*hup, -hup+hlos, 0.0)
                 vh_remain = vh_sum - vh2d(J,k_rev)
               else
                 vh2d(J,k_rev) = vh_sum
@@ -519,10 +519,10 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
               endif
             else ! Transport to the right
               hup = h2d(j,k_rev)
-              hlos = MAX(0.0,-vh2d(J-1,k_rev))
+              hlos = MAX(0.0, -vh2d(J-1,k_rev))
               if ((((hup - hlos) - vh_sum) < 0.0) .and. &
                   ((0.5*hup - vh_sum) < 0.0)) then
-                vh2d(J,k_rev) = MAX(0.5*hup,hup-hlos,0.0)
+                vh2d(J,k_rev) = MAX(0.5*hup, hup-hlos, 0.0)
                 vh_remain = vh_sum - vh2d(J,k_rev)
               else
                 vh2d(J,k_rev) = vh_sum
@@ -535,11 +535,11 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
         endif
 
         if (abs(vh_remain) > 0.0) then
-         if (k<nz) then
+          if (k<nz) then
             vh2d(J,k+1) = vh2d(J,k+1) + vh_remain
           else
             vh2d(J,k) = vh2d(J,k) + vh_remain
-            call MOM_error(WARNING,"Water column cannot accommodate VH redistribution. Tracer will not be conserved")
+            call MOM_error(WARNING, "Water column cannot accommodate VH redistribution. Tracer will not be conserved")
           endif
         endif ! k-loop
       enddo
@@ -548,7 +548,7 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
       ! within the tolerance limit
       vh_neglect = GV%Angstrom_H * min(G%areaT(i,j), G%areaT(i,j+1))
       if ( ABS(vh_col-SUM(vh2d(J,:))) > vh_neglect) then
-        call MOM_error(WARNING,"Column integral of vh does not match after "//&
+        call MOM_error(WARNING, "Column integral of vh does not match after "//&
                                "upwards redistribution")
       endif
     enddo
@@ -713,9 +713,9 @@ subroutine update_offline_from_files(G, GV, US, nk_input, mean_file, sum_file, s
 
     fluxes%netMassOut(:,:) = 0.0
     fluxes%netMassIn(:,:) = 0.0
-    call MOM_read_data(surf_file,'massout_flux_sum',fluxes%netMassOut, G%Domain, &
+    call MOM_read_data(surf_file, 'massout_flux_sum', fluxes%netMassOut, G%Domain, &
                        timelevel=ridx_sum, scale=GV%kg_m2_to_H)
-    call MOM_read_data(surf_file,'massin_flux_sum', fluxes%netMassIn,  G%Domain, &
+    call MOM_read_data(surf_file, 'massin_flux_sum', fluxes%netMassIn, G%Domain, &
                        timelevel=ridx_sum, scale=GV%kg_m2_to_H)
 
     do j=js,je ; do i=is,ie
@@ -736,9 +736,9 @@ subroutine update_offline_from_files(G, GV, US, nk_input, mean_file, sum_file, s
     ! Need to double check, but set_opacity seems to only need the sum of the diffuse and
     ! direct fluxes in the visible and near-infrared bands. For convenience, we store the
     ! sum of the direct and diffuse fluxes in the 'dir' field and set the 'dif' fields to zero
-    call MOM_read_data(mean_file,'sw_vis', fluxes%sw_vis_dir, G%Domain, &
+    call MOM_read_data(mean_file, 'sw_vis', fluxes%sw_vis_dir, G%Domain, &
                        timelevel=ridx_sum, scale=US%W_m2_to_QRZ_T)
-    call MOM_read_data(mean_file,'sw_nir', fluxes%sw_nir_dir, G%Domain, &
+    call MOM_read_data(mean_file, 'sw_nir', fluxes%sw_nir_dir, G%Domain, &
                        timelevel=ridx_sum, scale=US%W_m2_to_QRZ_T)
     fluxes%sw_vis_dir(:,:) = fluxes%sw_vis_dir(:,:)*0.5
     fluxes%sw_vis_dif(:,:) = fluxes%sw_vis_dir(:,:)
@@ -754,11 +754,11 @@ subroutine update_offline_from_files(G, GV, US, nk_input, mean_file, sum_file, s
         fluxes%sw_nir_dif(i,j) = 0.0
       endif
     enddo ; enddo
-    call pass_var(fluxes%sw,G%Domain)
-    call pass_var(fluxes%sw_vis_dir,G%Domain)
-    call pass_var(fluxes%sw_vis_dif,G%Domain)
-    call pass_var(fluxes%sw_nir_dir,G%Domain)
-    call pass_var(fluxes%sw_nir_dif,G%Domain)
+    call pass_var(fluxes%sw, G%Domain)
+    call pass_var(fluxes%sw_vis_dir, G%Domain)
+    call pass_var(fluxes%sw_vis_dif, G%Domain)
+    call pass_var(fluxes%sw_nir_dir, G%Domain)
+    call pass_var(fluxes%sw_nir_dif, G%Domain)
   endif
 
 end subroutine update_offline_from_files
@@ -834,7 +834,7 @@ function next_modulo_time(inidx, numtime)
 
   integer                 :: next_modulo_time
 
-  read_index = mod(inidx+1,numtime)
+  read_index = mod(inidx+1, numtime)
   if (read_index < 0)  read_index = inidx-read_index
   if (read_index == 0) read_index = numtime
 

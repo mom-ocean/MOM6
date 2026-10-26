@@ -167,23 +167,23 @@ end type diag_grid_storage
 
 ! Integers to encode the total cell methods
 ! Note that vorticity points (the PPP and PPM methods) are not fully dealt with for downsampling.
-integer :: PPP=111  !< x:point,y:point,z:point
-!integer :: PPS=112 ! x:point,y:point,z:sum  , this kind of diagnostic is not currently present in diag_table.MOM6
-integer :: PPM=113  !< x:point,y:point,z:mean
-integer :: PSP=121  !< x:point,y:sum,z:point
-integer :: PSS=122  !< x:point,y:sum,z:point
-integer :: PSM=123  !< x:point,y:sum,z:mean
-integer :: PMP=131  !< x:point,y:mean,z:point
-integer :: PMM=133  !< x:point,y:mean,z:mean
-integer :: SPP=211  !< x:sum,y:point,z:point
-integer :: SPS=212  !< x:sum,y:point,z:sum
-integer :: SSP=221  !< x:sum,y:sum,z:point
-integer :: MPP=311  !< x:mean,y:point,z:point
-integer :: MPM=313  !< x:mean,y:point,z:mean
-integer :: MMP=331  !< x:mean,y:mean,z:point
-integer :: MMS=332  !< x:mean,y:mean,z:sum
-integer :: SSS=222  !< x:sum,y:sum,z:sum
-integer :: MMM=333  !< x:mean,y:mean,z:mean
+integer :: PPP = 111  !< x:point,y:point,z:point
+!integer :: PPS = 112 ! x:point,y:point,z:sum  , this kind of diagnostic is not currently present in diag_table.MOM6
+integer :: PPM = 113  !< x:point,y:point,z:mean
+integer :: PSP = 121  !< x:point,y:sum,z:point
+integer :: PSS = 122  !< x:point,y:sum,z:point
+integer :: PSM = 123  !< x:point,y:sum,z:mean
+integer :: PMP = 131  !< x:point,y:mean,z:point
+integer :: PMM = 133  !< x:point,y:mean,z:mean
+integer :: SPP = 211  !< x:sum,y:point,z:point
+integer :: SPS = 212  !< x:sum,y:point,z:sum
+integer :: SSP = 221  !< x:sum,y:sum,z:point
+integer :: MPP = 311  !< x:mean,y:point,z:point
+integer :: MPM = 313  !< x:mean,y:point,z:mean
+integer :: MMP = 331  !< x:mean,y:mean,z:point
+integer :: MMS = 332  !< x:mean,y:mean,z:sum
+integer :: SSS = 222  !< x:sum,y:sum,z:sum
+integer :: MMM = 333  !< x:mean,y:mean,z:mean
 
 !> This type is used to represent a diagnostic at the diag_mediator level.
 !!
@@ -631,16 +631,16 @@ subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
   ! Local variables
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh
   integer :: i, j, nz, dl, dlfac
-  real, dimension(:), pointer :: gridLonT_dsamp =>NULL() ! The longitude of downsampled T points for labeling
+  real, dimension(:), pointer :: gridLonT_dsamp => NULL() ! The longitude of downsampled T points for labeling
                                                          ! the output axes, often in units of [degrees_N] or
                                                          ! [km] or [m] or [gridpoints].
-  real, dimension(:), pointer :: gridLatT_dsamp =>NULL() ! The latitude of downsampled T points for labeling
+  real, dimension(:), pointer :: gridLatT_dsamp => NULL() ! The latitude of downsampled T points for labeling
                                                          ! the output axes, often in units of [degrees_N] or
                                                          ! [km] or [m] or [gridpoints].
-  real, dimension(:), pointer :: gridLonB_dsamp =>NULL() ! The longitude of downsampled B points for labeling
+  real, dimension(:), pointer :: gridLonB_dsamp => NULL() ! The longitude of downsampled B points for labeling
                                                          ! the output axes, often in units of [degrees_N] or
                                                          ! [km] or [m] or [gridpoints].
-  real, dimension(:), pointer :: gridLatB_dsamp =>NULL() ! The latitude of downsampled B points for labeling
+  real, dimension(:), pointer :: gridLatB_dsamp => NULL() ! The latitude of downsampled B points for labeling
                                                          ! the output axes, often in units of [degrees_N] or
                                                          ! [km] or [m] or [gridpoints].
 
@@ -1096,7 +1096,7 @@ subroutine define_axes_group(diag_cs, handles, axes, nz, vertical_coordinate_num
   n = size(handles)
   if (n<1 .or. n>3) call MOM_error(FATAL, "define_axes_group: wrong size for list of handles!")
   allocate( axes%handles(n) )
-  axes%id = ints_to_string(handles, max(n,3)) ! Identifying string
+  axes%id = ints_to_string(handles, max(n, 3)) ! Identifying string
   axes%rank = n
   axes%handles(:) = handles(:)
   axes%diag_cs => diag_cs ! A (circular) link back to the diag_cs structure
@@ -1210,7 +1210,7 @@ subroutine define_axes_group_dsamp(diag_cs, handles, axes, dl, nz, vertical_coor
   n = size(handles)
   if (n<1 .or. n>3) call MOM_error(FATAL, "define_axes_group: wrong size for list of handles!")
   allocate( axes%handles(n) )
-  axes%id = ints_to_string(handles, max(n,3)) ! Identifying string
+  axes%id = ints_to_string(handles, max(n, 3)) ! Identifying string
   axes%rank = n
   axes%handles(:) = handles(:)
   axes%diag_cs => diag_cs ! A (circular) link back to the diag_cs structure
@@ -1502,9 +1502,9 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   elseif ( size(field,1) == cszi + 1 ) then
     isv = 1 ; iev = cszi+1                  ! Symmetric computational domain
   else
-    write (mesg,*) " peculiar size ",size(field,1)," in i-direction\n"//&
+    write(mesg,*) " peculiar size ",size(field,1)," in i-direction\n"//&
        "does not match one of ", cszi, cszi+1, dszi, dszi+1
-    call MOM_error(FATAL,"post_data_2d_low: "//trim(diag%debug_str)//trim(mesg))
+    call MOM_error(FATAL, "post_data_2d_low: "//trim(diag%debug_str)//trim(mesg))
   endif
 
   if ( size(field,2) == dszj ) then
@@ -1516,9 +1516,9 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   elseif ( size(field,2) == cszj+1 ) then
     jsv = 1 ; jev = cszj+1                  ! Symmetric computational domain
   else
-    write (mesg,*) " peculiar size ",size(field,2)," in j-direction\n"//&
+    write(mesg,*) " peculiar size ",size(field,2)," in j-direction\n"//&
        "does not match one of ", cszj, cszj+1, dszj, dszj+1
-    call MOM_error(FATAL,"post_data_2d_low: "//trim(diag%debug_str)//trim(mesg))
+    call MOM_error(FATAL, "post_data_2d_low: "//trim(diag%debug_str)//trim(mesg))
   endif
 
   if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) then
@@ -1677,7 +1677,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
     if (diag%v_extensive .and. .not.diag%axes%is_native) then
       ! The field is vertically integrated and needs to be re-gridded
       if (present(mask)) then
-        call MOM_error(FATAL,"post_data_3d: no mask for regridded field.")
+        call MOM_error(FATAL, "post_data_3d: no mask for regridded field.")
       endif
 
       if (id_clock_diag_remap>0) call cpu_clock_begin(id_clock_diag_remap)
@@ -1708,7 +1708,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
     elseif (diag%axes%needs_remapping) then
       ! Remap this field to another vertical coordinate.
       if (present(mask)) then
-        call MOM_error(FATAL,"post_data_3d: no mask for regridded field.")
+        call MOM_error(FATAL, "post_data_3d: no mask for regridded field.")
       endif
 
       if (id_clock_diag_remap>0) call cpu_clock_begin(id_clock_diag_remap)
@@ -1737,7 +1737,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
     elseif (diag%axes%needs_interpolating) then
       ! Interpolate this field to another vertical coordinate.
       if (present(mask)) then
-        call MOM_error(FATAL,"post_data_3d: no mask for regridded field.")
+        call MOM_error(FATAL, "post_data_3d: no mask for regridded field.")
       endif
 
       if (id_clock_diag_remap>0) call cpu_clock_begin(id_clock_diag_remap)
@@ -1782,7 +1782,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
                                                 !! in internally scaled arbitrary units [A ~> a]
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
-  real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask [nondim]
+  real, optional, target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask [nondim]
 
   ! Local variables
   real, dimension(:,:,:), pointer :: locfield ! The field being offered in arbitrary unscaled units [a]
@@ -1826,9 +1826,9 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   elseif ( size(field,1) == cszi + 1 ) then
     isv = 1 ; iev = cszi+1                  ! Symmetric computational domain
   else
-    write (mesg,*) " peculiar size ",size(field,1)," in i-direction\n"//&
+    write(mesg,*) " peculiar size ",size(field,1)," in i-direction\n"//&
        "does not match one of ", cszi, cszi+1, dszi, dszi+1
-    call MOM_error(FATAL,"post_data_3d_low: "//trim(diag%debug_str)//trim(mesg))
+    call MOM_error(FATAL, "post_data_3d_low: "//trim(diag%debug_str)//trim(mesg))
   endif
 
   if ( size(field,2) == dszj ) then
@@ -1840,9 +1840,9 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   elseif ( size(field,2) == cszj+1 ) then
     jsv = 1 ; jev = cszj+1                  ! Symmetric computational domain
   else
-    write (mesg,*) " peculiar size ",size(field,2)," in j-direction\n"//&
+    write(mesg,*) " peculiar size ",size(field,2)," in j-direction\n"//&
        "does not match one of ", cszj, cszj+1, dszj, dszj+1
-    call MOM_error(FATAL,"post_data_3d_low: "//trim(diag%debug_str)//trim(mesg))
+    call MOM_error(FATAL, "post_data_3d_low: "//trim(diag%debug_str)//trim(mesg))
   endif
 
   ks = lbound(field,3) ; ke = ubound(field,3)
@@ -2462,7 +2462,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
         axes_d2 => diag_cs%dsamp(dl)%axesCv1
       else
         !Niki: Should we worry about these, e.g., diag_to_Z_CS?
-        call MOM_error(WARNING,"register_diag_field: Could not find a proper axes for " &
+        call MOM_error(WARNING, "register_diag_field: Could not find a proper axes for " &
               //trim(new_module_name)//"-"//trim(field_name))
       endif
     endif
@@ -2869,9 +2869,9 @@ integer function xyz_method(axes, x_cell_method, y_cell_method, v_cell_method, v
     if (present(v_cell_method)) call MOM_error(FATAL, "xyz_method: " // &
        'Vertical cell method was specified along with the vertically extensive flag.')
     if (v_extensive) then
-      mstr='sum'
+      mstr = 'sum'
     else
-      mstr='mean'
+      mstr = 'mean'
     endif
   elseif (present(v_cell_method)) then
     mstr = v_cell_method
@@ -2945,16 +2945,16 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
         call get_MOM_diag_axis_name(axes%handles(1), axis_name)
         call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(x_cell_method)
-        if (trim(x_cell_method)=='mean') x_mean=.true.
-        if (trim(x_cell_method)=='sum') x_sum=.true.
+        if (trim(x_cell_method) == 'mean') x_mean = .true.
+        if (trim(x_cell_method) == 'sum') x_sum = .true.
       endif
     else
       if (len(trim(axes%x_cell_method))>0) then
         call get_MOM_diag_axis_name(axes%handles(1), axis_name)
         call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%x_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%x_cell_method)
-        if (trim(axes%x_cell_method)=='mean') x_mean=.true.
-        if (trim(axes%x_cell_method)=='sum') x_sum=.true.
+        if (trim(axes%x_cell_method) == 'mean') x_mean = .true.
+        if (trim(axes%x_cell_method) == 'sum') x_sum = .true.
       endif
     endif
     if (present(y_cell_method)) then
@@ -2962,16 +2962,16 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
         call get_MOM_diag_axis_name(axes%handles(2), axis_name)
         call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(y_cell_method)
-        if (trim(y_cell_method)=='mean') y_mean=.true.
-        if (trim(y_cell_method)=='sum') y_sum=.true.
+        if (trim(y_cell_method) == 'mean') y_mean = .true.
+        if (trim(y_cell_method) == 'sum') y_sum = .true.
       endif
     else
       if (len(trim(axes%y_cell_method))>0) then
         call get_MOM_diag_axis_name(axes%handles(2), axis_name)
         call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%y_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%y_cell_method)
-        if (trim(axes%y_cell_method)=='mean') y_mean=.true.
-        if (trim(axes%y_cell_method)=='sum') y_sum=.true.
+        if (trim(axes%y_cell_method) == 'mean') y_mean = .true.
+        if (trim(axes%y_cell_method) == 'sum') y_sum = .true.
       endif
     endif
     if (present(v_cell_method)) then
@@ -3423,7 +3423,7 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
       end select
 
     case default
-      call MOM_error(FATAL,&
+      call MOM_error(FATAL, &
         "ocean_register_diag: unknown z_grid component "//trim(z_grid))
   end select
 
@@ -4374,18 +4374,18 @@ subroutine downsample_diag_masks_set(G, nz, diag_cs)
   do dl=1, diag_cs%num_diag_dsamp_levels
     dlfac = diag_cs%diag_dsamp_levels(dl) !Actual downsampling factor for this level
     ! 2d mask
-    call downsample_mask(G%mask2dT, diag_cs%dsamp(dl)%mask2dT,  dlfac, MMP, G%isc, G%jsc, G%isd, G%jsd, &
+    call downsample_mask(G%mask2dT, diag_cs%dsamp(dl)%mask2dT, dlfac, MMP, G%isc, G%jsc, G%isd, G%jsd, &
                          G%HId(dl)%isc, G%HId(dl)%iec, G%HId(dl)%jsc, G%HId(dl)%jec, G%HId(dl)%isd, G%HId(dl)%ied, &
                          G%HId(dl)%jsd, G%HId(dl)%jed)
-    call downsample_mask(G%mask2dBu, diag_cs%dsamp(dl)%mask2dBu, dlfac, PPP,G%IscB, G%JscB, G%IsdB, G%JsdB, &
-                         G%HId(dl)%IscB,G%HId(dl)%IecB, G%HId(dl)%JscB,G%HId(dl)%JecB,G%HId(dl)%IsdB,G%HId(dl)%IedB, &
-                         G%HId(dl)%JsdB,G%HId(dl)%JedB)
+    call downsample_mask(G%mask2dBu, diag_cs%dsamp(dl)%mask2dBu, dlfac, PPP, G%IscB, G%JscB, G%IsdB, G%JsdB, &
+                         G%HId(dl)%IscB,G%HId(dl)%IecB, G%HId(dl)%JscB,G%HId(dl)%JecB, G%HId(dl)%IsdB, G%HId(dl)%IedB, &
+                         G%HId(dl)%JsdB, G%HId(dl)%JedB)
     call downsample_mask(G%mask2dCu, diag_cs%dsamp(dl)%mask2dCu, dlfac, PMP, G%IscB, G%jsc, G%IsdB, G%jsd, &
-                         G%HId(dl)%IscB,G%HId(dl)%IecB, G%HId(dl)%jsc, G%HId(dl)%jec,G%HId(dl)%IsdB,G%HId(dl)%IedB, &
+                         G%HId(dl)%IscB, G%HId(dl)%IecB, G%HId(dl)%jsc, G%HId(dl)%jec, G%HId(dl)%IsdB, G%HId(dl)%IedB, &
                          G%HId(dl)%jsd, G%HId(dl)%jed)
-    call downsample_mask(G%mask2dCv, diag_cs%dsamp(dl)%mask2dCv, dlfac, MPP, G %isc ,G%JscB, G%isd, G%JsdB, &
-                         G%HId(dl)%isc ,G%HId(dl)%iec, G%HId(dl)%JscB,G%HId(dl)%JecB,G%HId(dl)%isd ,G%HId(dl)%ied, &
-                         G%HId(dl)%JsdB,G%HId(dl)%JedB)
+    call downsample_mask(G%mask2dCv, diag_cs%dsamp(dl)%mask2dCv, dlfac, MPP, G%isc, G%JscB, G%isd, G%JsdB, &
+                         G%HId(dl)%isc, G%HId(dl)%iec, G%HId(dl)%JscB, G%HId(dl)%JecB, G%HId(dl)%isd, G%HId(dl)%ied, &
+                         G%HId(dl)%JsdB, G%HId(dl)%JedB)
     ! 3d native masks are needed by diag_manager but the native variables
     ! can only be masked 2d - for ocean points, all layers exists.
     allocate(diag_cs%dsamp(dl)%mask3dTL(G%HId(dl)%isd:G%HId(dl)%ied,G%HId(dl)%jsd:G%HId(dl)%jed,1:nz))
@@ -4436,11 +4436,11 @@ subroutine downsample_diag_indices_get(fo1, fo2, dl, diag_cs, isv, iev, jsv, jev
   if (first_check) then
     if (mod(diag_cs%ie-diag_cs%is+1, dlfac) /= 0 .OR. &
         mod(diag_cs%je-diag_cs%js+1, dlfac) /= 0) then
-      write (mesg,*) "Non-commensurate downsampled domain is not supported. "//&
+      write(mesg,*) "Non-commensurate downsampled domain is not supported. "//&
              "Please choose a layout such that NIGLOBAL/Layout_X and NJGLOBAL/Layout_Y are both divisible by dL=", &
              dlfac,&
              " Current domain extents: ", diag_cs%is,diag_cs%ie, diag_cs%js,diag_cs%je
-      call MOM_error(FATAL,"downsample_diag_indices_get: "//trim(mesg))
+      call MOM_error(FATAL, "downsample_diag_indices_get: "//trim(mesg))
     endif
     first_check = .false.
   endif
@@ -4454,8 +4454,8 @@ subroutine downsample_diag_indices_get(fo1, fo2, dl, diag_cs, isv, iev, jsv, jev
   f2 = fo2/dlfac
   ! Correction for the symmetric case
   if (diag_cs%G%symmetric) then
-    f1 = f1 + mod(fo1,dlfac)
-    f2 = f2 + mod(fo2,dlfac)
+    f1 = f1 + mod(fo1, dlfac)
+    f2 = f2 + mod(fo2, dlfac)
   endif
 
   ! Find the range of indices in the downsampled computational domain.
@@ -4468,9 +4468,9 @@ subroutine downsample_diag_indices_get(fo1, fo2, dl, diag_cs, isv, iev, jsv, jev
   elseif ( f1 == cszi + 1 ) then
     isv = 1 ; iev = (diag_cs%dsamp(dl)%iec-diag_cs%dsamp(dl)%isc) +2  ! Symmetric computational domain
   else
-    write (mesg,*) " dl =",dl,",dL =",dlfac,",fo1 =",fo1," f1 =",f1," peculiar size for diag field in i-direction\n"//&
+    write(mesg,*) " dl =",dl,",dL =",dlfac,",fo1 =",fo1," f1 =",f1," peculiar size for diag field in i-direction\n"//&
           "does not match one of ", cszi, cszi+1, dszi, dszi+1
-    call MOM_error(FATAL,"downsample_diag_indices_get: "//trim(mesg))
+    call MOM_error(FATAL, "downsample_diag_indices_get: "//trim(mesg))
   endif
   if ( f2 == dszj ) then
     jsv = diag_cs%dsamp(dl)%jsc ; jev = diag_cs%dsamp(dl)%jec     ! Data domain
@@ -4481,9 +4481,9 @@ subroutine downsample_diag_indices_get(fo1, fo2, dl, diag_cs, isv, iev, jsv, jev
   elseif ( f2 == cszj + 1 ) then
     jsv = 1 ; jev = (diag_cs%dsamp(dl)%jec-diag_cs%dsamp(dl)%jsc) +2  ! Symmetric computational domain
   else
-    write (mesg,*) " dl =",dl,",dL =",dlfac,",fo2 =",fo2," f2 =",f2," peculiar size for diag field in j-direction\n"//&
+    write(mesg,*) " dl =",dl,",dL =",dlfac,",fo2 =",fo2," f2 =",f2," peculiar size for diag field in j-direction\n"//&
           "does not match one of ", cszj, cszj+1, dszj, dszj+1
-    call MOM_error(FATAL,"downsample_diag_indices_get: "//trim(mesg))
+    call MOM_error(FATAL, "downsample_diag_indices_get: "//trim(mesg))
   endif
 end subroutine downsample_diag_indices_get
 
@@ -4500,7 +4500,7 @@ subroutine downsample_diag_field_3d(locfield, locfield_dsamp, dl, diag_cs, diag,
   integer, intent(inout) :: iev            !< i-end index for diagnostics
   integer, intent(inout) :: jsv            !< j-start index for diagnostics
   integer, intent(inout) :: jev            !< j-end index for diagnostics
-  real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask [nondim]
+  real, optional, target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask [nondim]
   ! Local variables
   real, dimension(:,:,:), pointer :: locmask ! A pointer to the mask [nondim]
   integer :: f1, f2, isv_o, jsv_o
@@ -4539,7 +4539,7 @@ subroutine downsample_diag_field_2d(locfield, locfield_dsamp, dl, diag_cs, diag,
   integer, intent(inout) :: iev            !< i-end index for diagnostics
   integer, intent(inout) :: jsv            !< j-start index for diagnostics
   integer, intent(inout) :: jev            !< j-end index for diagnostics
-  real,    optional,target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask [nondim].
+  real, optional, target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask [nondim].
   ! Local variables
   real, dimension(:,:), pointer :: locmask ! A pointer to the mask [nondim]
   integer :: f1, f2, isv_o, jsv_o
@@ -4758,7 +4758,7 @@ subroutine downsample_field_3d(field_in, field_out, dL, method, mask, diag_cs, d
                          (sum_1d(wt_1d(1:dL), dL) + eps_face)  ! Eps_face avoids division by 0.
     enddo ; enddo ; enddo
   else
-    write (mesg,*) " unknown sampling method: ",method
+    write(mesg,*) " unknown sampling method: ",method
     call MOM_error(FATAL, "downsample_field_3d: "//trim(mesg)//" "//trim(diag%debug_str))
   endif
 
@@ -4819,8 +4819,8 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
   f2 = f_in2 / dL
   ! Correction for the symmetric case
   if (diag_cs%G%symmetric) then
-    f1 = f1 + mod(f_in1,dl)
-    f2 = f2 + mod(f_in2,dl)
+    f1 = f1 + mod(f_in1, dl)
+    f2 = f2 + mod(f_in2, dl)
   endif
   allocate(field_out(1:f1,1:f2))
 
@@ -4890,7 +4890,7 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
                       (sum_1d(wt_1d(1:dL), dL) + Eps_len)  ! Eps_len avoids division by 0.
     enddo ; enddo
   else
-    write (mesg,*) " unknown sampling method: ",method
+    write(mesg,*) " unknown sampling method: ",method
     call MOM_error(FATAL, "downsample_field_2d: "//trim(mesg)//" "//trim(diag%debug_str))
   endif
 

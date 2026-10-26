@@ -105,7 +105,7 @@ program MOM6
   ! simulation does not exceed its CPU time limit.  nmax is determined by
   ! evaluating the CPU time used between successive calls to write_cputime.
   ! Initially it is set to be very large.
-  integer :: nmax=2000000000
+  integer :: nmax = 2000000000
 
   ! A structure containing several relevant directory paths.
   type(directories) :: dirs
@@ -157,7 +157,7 @@ program MOM6
   type(param_file_type) :: param_file      ! The structure indicating the file(s)
                                            ! containing all run-time parameters.
 
-  integer :: calendar_type=-1              ! A coded integer indicating the calendar type.
+  integer :: calendar_type = -1            ! A coded integer indicating the calendar type.
 
   integer :: unit, io_status, ierr
   integer :: initClock, mainClock, termClock
@@ -191,10 +191,10 @@ program MOM6
   character(len=40)  :: mod_name = "MOM_main (MOM_driver)" ! This module's name.
 
   ! These are the variables that might be read via the namelist capability.
-  integer :: date_init(6)=0                ! The start date of the whole simulation.
+  integer :: date_init(6) = 0              ! The start date of the whole simulation.
   character(len=16) :: calendar = 'julian' ! The name of the calendar type.
-  integer :: years=0, months=0, days=0     ! These may determine the segment run
-  integer :: hours=0, minutes=0, seconds=0 ! length, if read from a namelist.
+  integer :: years = 0, months = 0, days = 0     ! These may determine the segment run
+  integer :: hours = 0, minutes = 0, seconds = 0 ! length, if read from a namelist.
   integer :: ocean_nthreads = 1
   logical :: use_hyper_thread = .false.
   namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds, &
@@ -225,7 +225,7 @@ program MOM6
     call open_ASCII_file(unit, 'input.nml', action=READONLY_FILE)
     read(unit, ocean_solo_nml, iostat=io_status)
     call close_file(unit)
-    ierr = check_nml_error(io_status,'ocean_solo_nml')
+    ierr = check_nml_error(io_status, 'ocean_solo_nml')
     if (is_root_pe() .and. (years+months+days+hours+minutes+seconds > 0)) write(*,ocean_solo_nml)
   endif
 
@@ -260,9 +260,9 @@ program MOM6
     elseif (calendar(1:10)=='THIRTY_DAY') then ;  calendar_type = THIRTY_DAY_MONTHS
     elseif (calendar(1:11)=='NO_CALENDAR') then ; calendar_type = NO_CALENDAR
     elseif (calendar(1:1) /= ' ') then
-      call MOM_error(FATAL,'MOM_driver: Invalid namelist value '//trim(calendar)//' for calendar')
+      call MOM_error(FATAL, 'MOM_driver: Invalid namelist value '//trim(calendar)//' for calendar')
     else
-      call MOM_error(FATAL,'MOM_driver: No namelist value for calendar')
+      call MOM_error(FATAL, 'MOM_driver: No namelist value for calendar')
     endif
     call set_calendar_type(calendar_type)
   endif
@@ -325,7 +325,7 @@ program MOM6
 
 
   call get_param(param_file, mod_name, "USE_WAVES", Use_Waves, &
-       "If true, enables surface wave modules.",default=.false.)
+       "If true, enables surface wave modules.", default=.false.)
   ! MOM_wave_interface_init is called regardless of the value of USE_WAVES because
   ! it also initializes statistical waves.
   call MOM_wave_interface_init(Time, grid, GV, US, param_file, Waves_CSp, diag)
@@ -348,7 +348,7 @@ program MOM6
                    units="s", scale=US%s_to_T, fail_if_missing=.true.)
     dt = dt_forcing
   endif
-  ntstep = MAX(1,ceiling(dt_forcing/dt - 0.001))
+  ntstep = MAX(1, ceiling(dt_forcing/dt - 0.001))
 
   Time_step_ocean = real_to_time(dt_forcing, unscale=US%T_to_s)
   elapsed_time_master = (abs(dt_forcing - time_to_real(Time_step_ocean, scale=US%s_to_T)) > 1.0e-12*dt_forcing)
@@ -439,7 +439,7 @@ program MOM6
 
   if (cpu_steps > 0) call write_cputime(Time, 0, write_CPU_CSp)
 
-  if (((.not.BTEST(Restart_control,1)) .and. (.not.BTEST(Restart_control,0))) &
+  if (((.not.BTEST(Restart_control, 1)) .and. (.not.BTEST(Restart_control, 0))) &
       .or. (Restart_control < 0)) permit_incr_restart = .false.
 
   if (restint > real_to_time(0.0)) then
@@ -458,7 +458,7 @@ program MOM6
 
   ns = 1
   do while ((ns < nmax) .and. (Time < Time_end))
-    call callTree_enter("Main loop, MOM_driver.F90",ns)
+    call callTree_enter("Main loop, MOM_driver.F90", ns)
 
     ! Set the forcing for the next steps.
     if (.not. offline_tracer_mode) then
@@ -495,14 +495,14 @@ program MOM6
       n_max = 1 ; if (dt_forcing > dt) n_max = ceiling(dt_forcing/dt - 0.001)
       dt_dyn = dt_forcing / real(n_max)
 
-      nts = MAX(1,MIN(n_max,floor(dt_therm/dt_dyn + 0.001)))
+      nts = MAX(1, MIN(n_max, floor(dt_therm/dt_dyn + 0.001)))
       n_last_thermo = 0
 
       Time2 = Time1 ; t_elapsed_seg = 0.0
       do n=1,n_max
         if (diabatic_first) then
-          if (modulo(n-1,nts)==0) then
-            dtdia = dt_dyn*min(ntstep,n_max-(n-1))
+          if (modulo(n-1, nts) == 0) then
+            dtdia = dt_dyn * min(ntstep, n_max-(n-1))
             call step_MOM(forces, fluxes, sfc_state, Time2, dtdia, MOM_CSp, &
                           do_dynamics=.false., do_thermodynamics=.true., &
                           start_cycle=(n==1), end_cycle=.false., cycle_length=dt_forcing)
@@ -516,7 +516,7 @@ program MOM6
                         do_dynamics=.true., do_thermodynamics=.false., &
                         start_cycle=(n==1), end_cycle=.false., cycle_length=dt_forcing)
 
-          if ((modulo(n,nts)==0) .or. (n==n_max)) then
+          if ((modulo(n, nts) == 0) .or. (n == n_max)) then
             dtdia = dt_dyn*(n - n_last_thermo)
             ! Back up Time2 to the start of the thermodynamic segment.
             if (n > n_last_thermo+1) &
@@ -572,7 +572,7 @@ program MOM6
 !  See if it is time to write out a restart file - timestamped or not.
     if ((permit_incr_restart) .and. (fluxes%fluxes_used) .and. &
         (Time + (Time_step_ocean/2) > restart_time)) then
-      if (BTEST(Restart_control,1)) then
+      if (BTEST(Restart_control, 1)) then
         call save_MOM_restart(MOM_CSp, dirs%restart_output_dir, Time, grid, &
             time_stamped=.true., GV=GV)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
@@ -580,7 +580,7 @@ program MOM6
         if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                     dirs%restart_output_dir, .true.)
       endif
-      if (BTEST(Restart_control,0)) then
+      if (BTEST(Restart_control, 0)) then
         call save_MOM_restart(MOM_CSp, dirs%restart_output_dir, Time, grid, GV=GV)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir)

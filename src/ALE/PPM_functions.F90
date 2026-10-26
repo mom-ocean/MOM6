@@ -106,7 +106,7 @@ subroutine PPM_limiter_standard( N, h, u, edge_values, h_neglect, answer_date )
     ! This checks that the difference in edge values is representable
     ! and avoids overshoot problems due to round off.
     !### The 1.e-60 needs to have units of [A], so this dimensionally inconsistent.
-    if ( abs( edge_r - edge_l )<max(1.e-60,epsilon(u_c)*abs(u_c)) ) then
+    if ( abs( edge_r - edge_l ) < max(1.e-60, epsilon(u_c)*abs(u_c)) ) then
       edge_l = u_c
       edge_r = u_c
     endif

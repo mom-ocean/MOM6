@@ -439,7 +439,7 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   dyn_p_surf = associated(p_surf_begin) .and. associated(p_surf_end)
   if (dyn_p_surf) then
     p_surf => p_surf_end
-    call safe_alloc_ptr(eta_PF_start,G%isd,G%ied,G%jsd,G%jed)
+    call safe_alloc_ptr(eta_PF_start, G%isd, G%ied, G%jsd, G%jed)
     eta_PF_start(:,:) = 0.0
   else
     p_surf => forces%p_surf
@@ -478,24 +478,24 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   call cpu_clock_begin(id_clock_pass)
   call create_group_pass(CS%pass_eta, eta, G%Domain, halo=1)
   call create_group_pass(CS%pass_visc_rem, CS%visc_rem_u, CS%visc_rem_v, G%Domain, &
-                         To_All+SCALAR_PAIR, CGRID_NE, halo=max(1,cont_stencil))
-  call create_group_pass(CS%pass_uvp, up, vp, G%Domain, halo=max(1,cont_stencil))
-  call create_group_pass(CS%pass_uv_inst, u_inst, v_inst, G%Domain, halo=max(2,cont_stencil))
+                         To_All+SCALAR_PAIR, CGRID_NE, halo=max(1, cont_stencil))
+  call create_group_pass(CS%pass_uvp, up, vp, G%Domain, halo=max(1, cont_stencil))
+  call create_group_pass(CS%pass_uv_inst, u_inst, v_inst, G%Domain, halo=max(2, cont_stencil))
 
   call create_group_pass(CS%pass_hp_uv, hp, G%Domain, halo=cor_stencil)
-  call create_group_pass(CS%pass_hp_uv, u_av, v_av, G%Domain, halo=max(cor_stencil,obc_stencil))
-  call create_group_pass(CS%pass_hp_uv, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(cor_stencil,obc_stencil))
+  call create_group_pass(CS%pass_hp_uv, u_av, v_av, G%Domain, halo=max(cor_stencil, obc_stencil))
+  call create_group_pass(CS%pass_hp_uv, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(cor_stencil, obc_stencil))
 
   call create_group_pass(CS%pass_hp_uhvh, hp, G%Domain, halo=cor_stencil)
-  call create_group_pass(CS%pass_hp_uhvh, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(cor_stencil,obc_stencil))
+  call create_group_pass(CS%pass_hp_uhvh, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(cor_stencil, obc_stencil))
   if (cor_stencil > 2) then
-    call create_group_pass(CS%pass_hp_uhvh, u_av, v_av, G%Domain, halo=max(cor_stencil,obc_stencil))
+    call create_group_pass(CS%pass_hp_uhvh, u_av, v_av, G%Domain, halo=max(cor_stencil, obc_stencil))
     call create_group_pass(CS%pass_hp_uhvh, h, G%Domain, halo=cor_stencil)
   endif
 
-  call create_group_pass(CS%pass_h_uv, h, G%Domain, halo=max(cor_stencil,cont_stencil))
-  call create_group_pass(CS%pass_h_uv, u_av, v_av, G%Domain, halo=max(cor_stencil,obc_stencil))
-  call create_group_pass(CS%pass_h_uv, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(cor_stencil,obc_stencil))
+  call create_group_pass(CS%pass_h_uv, h, G%Domain, halo=max(cor_stencil, cont_stencil))
+  call create_group_pass(CS%pass_h_uv, u_av, v_av, G%Domain, halo=max(cor_stencil, obc_stencil))
+  call create_group_pass(CS%pass_h_uv, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(cor_stencil, obc_stencil))
 
   call cpu_clock_end(id_clock_pass)
   !--- end set up for group halo pass
@@ -725,7 +725,7 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   if (CS%debug) then
     call uvchksum("Predictor 1 [uv]", up, vp, G%HI, haloshift=0, symmetric=sym, unscale=US%L_T_to_m_s)
     call hchksum(h, "Predictor 1 h", G%HI, haloshift=1, unscale=GV%H_to_MKS)
-    call uvchksum("Predictor 1 [uv]h", uh, vh, G%HI,haloshift=2, &
+    call uvchksum("Predictor 1 [uv]h", uh, vh, G%HI, haloshift=2, &
                   symmetric=sym, unscale=GV%H_to_MKS*US%L_to_m**2*US%s_to_T)
 !   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, US, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu_pred, CS%CAv_pred, CS%PFu, CS%PFv, &
@@ -742,7 +742,7 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
 ! u_av  <- u_av  + dt_pred d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
   if (CS%debug) then
-    call uvchksum("0 before vertvisc: [uv]p", up, vp, G%HI,haloshift=0, symmetric=sym, unscale=US%L_T_to_m_s)
+    call uvchksum("0 before vertvisc: [uv]p", up, vp, G%HI, haloshift=0, symmetric=sym, unscale=US%L_T_to_m_s)
   endif
 
   !  if (CS%fpmix) then
@@ -1214,8 +1214,8 @@ subroutine register_restarts_dyn_split_RK2b(HI, GV, US, param_file, CS, restart_
   ALLOC_(CS%du_av_inst(IsdB:IedB,jsd:jed)) ; CS%du_av_inst(:,:) = 0.0
   ALLOC_(CS%dv_av_inst(isd:ied,JsdB:JedB)) ; CS%dv_av_inst(:,:) = 0.0
 
-  allocate(CS%taux_bot(IsdB:IedB,jsd:jed), source = 0.0)
-  allocate(CS%tauy_bot(isd:ied,JsdB:JedB), source = 0.0)
+  allocate(CS%taux_bot(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(CS%tauy_bot(isd:ied,JsdB:JedB), source=0.0)
 
   ALLOC_(CS%eta(isd:ied,jsd:jed))       ; CS%eta(:,:)    = 0.0
 
@@ -1564,82 +1564,82 @@ subroutine initialize_dyn_split_RK2b(u, v, h, tv, uh, vh, eta, Time, G, GV, US, 
   !CS%id_hf_PFu = register_diag_field('ocean_model', 'hf_PFu', diag%axesCuL, Time, &
   !    'Fractional Thickness-weighted Zonal Pressure Force Acceleration', &
   !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if (CS%id_hf_PFu > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  !if (CS%id_hf_PFu > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u, IsdB, IedB, jsd, jed, nz)
 
   !CS%id_hf_PFv = register_diag_field('ocean_model', 'hf_PFv', diag%axesCvL, Time, &
   !    'Fractional Thickness-weighted Meridional Pressure Force Acceleration', &
   !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if (CS%id_hf_PFv > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+  !if (CS%id_hf_PFv > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v, isd, ied, JsdB, JedB, nz)
 
   !CS%id_hf_CAu = register_diag_field('ocean_model', 'hf_CAu', diag%axesCuL, Time, &
   !    'Fractional Thickness-weighted Zonal Coriolis and Advective Acceleration', &
   !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if (CS%id_hf_CAu > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  !if (CS%id_hf_CAu > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u, IsdB, IedB, jsd, jed, nz)
 
   !CS%id_hf_CAv = register_diag_field('ocean_model', 'hf_CAv', diag%axesCvL, Time, &
   !    'Fractional Thickness-weighted Meridional Coriolis and Advective Acceleration', &
   !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if (CS%id_hf_CAv > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+  !if (CS%id_hf_CAv > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v, isd, ied, JsdB, JedB, nz)
 
   CS%id_hf_PFu_2d = register_diag_field('ocean_model', 'hf_PFu_2d', diag%axesCu1, Time, &
       'Depth-sum Fractional Thickness-weighted Zonal Pressure Force Acceleration', &
       'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_PFu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_hf_PFu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u, IsdB, IedB, jsd, jed, nz)
 
   CS%id_hf_PFv_2d = register_diag_field('ocean_model', 'hf_PFv_2d', diag%axesCv1, Time, &
       'Depth-sum Fractional Thickness-weighted Meridional Pressure Force Acceleration', &
       'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_PFv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+  if (CS%id_hf_PFv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v, isd, ied, JsdB, JedB, nz)
 
   CS%id_h_PFu = register_diag_field('ocean_model', 'h_PFu', diag%axesCuL, Time, &
       'Thickness Multiplied Zonal Pressure Force Acceleration', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_h_PFu > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_h_PFu > 0) call safe_alloc_ptr(CS%ADp%diag_hu, IsdB, IedB, jsd, jed, nz)
 
   CS%id_h_PFv = register_diag_field('ocean_model', 'h_PFv', diag%axesCvL, Time, &
       'Thickness Multiplied Meridional Pressure Force Acceleration', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_h_PFv > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
+  if (CS%id_h_PFv > 0) call safe_alloc_ptr(CS%ADp%diag_hv, isd, ied, JsdB, JedB, nz)
 
   CS%id_intz_PFu_2d = register_diag_field('ocean_model', 'intz_PFu_2d', diag%axesCu1, Time, &
       'Depth-integral of Zonal Pressure Force Acceleration', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_intz_PFu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_intz_PFu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hu, IsdB, IedB, jsd, jed, nz)
 
   CS%id_intz_PFv_2d = register_diag_field('ocean_model', 'intz_PFv_2d', diag%axesCv1, Time, &
       'Depth-integral of Meridional Pressure Force Acceleration', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_intz_PFv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
+  if (CS%id_intz_PFv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv, isd, ied, JsdB, JedB, nz)
 
   CS%id_hf_CAu_2d = register_diag_field('ocean_model', 'hf_CAu_2d', diag%axesCu1, Time, &
       'Depth-sum Fractional Thickness-weighted Zonal Coriolis and Advective Acceleration', &
       'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_CAu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_hf_CAu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u, IsdB, IedB, jsd, jed, nz)
 
   CS%id_hf_CAv_2d = register_diag_field('ocean_model', 'hf_CAv_2d', diag%axesCv1, Time, &
       'Depth-sum Fractional Thickness-weighted Meridional Coriolis and Advective Acceleration', &
       'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_CAv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+  if (CS%id_hf_CAv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v, isd, ied, JsdB, JedB, nz)
 
   CS%id_h_CAu = register_diag_field('ocean_model', 'h_CAu', diag%axesCuL, Time, &
       'Thickness Multiplied Zonal Coriolis and Advective Acceleration', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_h_CAu > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_h_CAu > 0) call safe_alloc_ptr(CS%ADp%diag_hu, IsdB, IedB, jsd, jed, nz)
 
   CS%id_h_CAv = register_diag_field('ocean_model', 'h_CAv', diag%axesCvL, Time, &
       'Thickness Multiplied Meridional Coriolis and Advective Acceleration', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_h_CAv > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
+  if (CS%id_h_CAv > 0) call safe_alloc_ptr(CS%ADp%diag_hv, isd, ied, JsdB, JedB, nz)
 
   CS%id_intz_CAu_2d = register_diag_field('ocean_model', 'intz_CAu_2d', diag%axesCu1, Time, &
       'Depth-integral of Zonal Coriolis and Advective Acceleration', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_intz_CAu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_intz_CAu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hu, IsdB, IedB, jsd, jed, nz)
 
   CS%id_intz_CAv_2d = register_diag_field('ocean_model', 'intz_CAv_2d', diag%axesCv1, Time, &
       'Depth-integral of Meridional Coriolis and Advective Acceleration', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_intz_CAv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
+  if (CS%id_intz_CAv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv, isd, ied, JsdB, JedB, nz)
 
   CS%id_uav = register_diag_field('ocean_model', 'uav', diag%axesCuL, Time, &
       'Barotropic-step Averaged Zonal Velocity', 'm s-1', conversion=US%L_T_to_m_s)
@@ -1654,69 +1654,69 @@ subroutine initialize_dyn_split_RK2b(u, v, h, tv, uh, vh, eta, Time, G, GV, US, 
   !CS%id_hf_u_BT_accel = register_diag_field('ocean_model', 'hf_u_BT_accel', diag%axesCuL, Time, &
   !    'Fractional Thickness-weighted Barotropic Anomaly Zonal Acceleration', &
   !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if (CS%id_hf_u_BT_accel > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  !if (CS%id_hf_u_BT_accel > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u, IsdB, IedB, jsd, jed, nz)
 
   !CS%id_hf_v_BT_accel = register_diag_field('ocean_model', 'hf_v_BT_accel', diag%axesCvL, Time, &
   !    'Fractional Thickness-weighted Barotropic Anomaly Meridional Acceleration', &
   !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if (CS%id_hf_v_BT_accel > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+  !if (CS%id_hf_v_BT_accel > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v, isd, ied, JsdB, JedB, nz)
 
   CS%id_hf_u_BT_accel_2d = register_diag_field('ocean_model', 'hf_u_BT_accel_2d', diag%axesCu1, Time, &
       'Depth-sum Fractional Thickness-weighted Barotropic Anomaly Zonal Acceleration', &
       'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_u_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_hf_u_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u, IsdB, IedB, jsd, jed, nz)
 
   CS%id_hf_v_BT_accel_2d = register_diag_field('ocean_model', 'hf_v_BT_accel_2d', diag%axesCv1, Time, &
       'Depth-sum Fractional Thickness-weighted Barotropic Anomaly Meridional Acceleration', &
       'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_v_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+  if (CS%id_hf_v_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v, isd, ied, JsdB, JedB, nz)
 
   CS%id_h_u_BT_accel = register_diag_field('ocean_model', 'h_u_BT_accel', diag%axesCuL, Time, &
       'Thickness Multiplied Barotropic Anomaly Zonal Acceleration', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_h_u_BT_accel > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_h_u_BT_accel > 0) call safe_alloc_ptr(CS%ADp%diag_hu, IsdB, IedB, jsd, jed, nz)
 
   CS%id_h_v_BT_accel = register_diag_field('ocean_model', 'h_v_BT_accel', diag%axesCvL, Time, &
       'Thickness Multiplied Barotropic Anomaly Meridional Acceleration', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_h_v_BT_accel > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
+  if (CS%id_h_v_BT_accel > 0) call safe_alloc_ptr(CS%ADp%diag_hv, isd, ied, JsdB, JedB, nz)
 
   CS%id_intz_u_BT_accel_2d = register_diag_field('ocean_model', 'intz_u_BT_accel_2d', diag%axesCu1, Time, &
       'Depth-integral of Barotropic Anomaly Zonal Acceleration', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_intz_u_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_intz_u_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hu, IsdB, IedB, jsd, jed, nz)
 
   CS%id_intz_v_BT_accel_2d = register_diag_field('ocean_model', 'intz_v_BT_accel_2d', diag%axesCv1, Time, &
       'Depth-integral of Barotropic Anomaly Meridional Acceleration', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_intz_v_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
+  if (CS%id_intz_v_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv, isd, ied, JsdB, JedB, nz)
 
   CS%id_PFu_visc_rem = register_diag_field('ocean_model', 'PFu_visc_rem', diag%axesCuL, Time, &
       'Zonal Pressure Force Acceleration multiplied by the viscous remnant', &
       'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_PFu_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_u,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_PFu_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_u, IsdB, IedB, jsd, jed, nz)
   CS%id_PFv_visc_rem = register_diag_field('ocean_model', 'PFv_visc_rem', diag%axesCvL, Time, &
       'Meridional Pressure Force Acceleration multiplied by the viscous remnant', &
       'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_PFv_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_v,isd,ied,JsdB,JedB,nz)
+  if (CS%id_PFv_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_v, isd, ied, JsdB, JedB, nz)
 
   CS%id_CAu_visc_rem = register_diag_field('ocean_model', 'CAu_visc_rem', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration multiplied by the viscous remnant', &
       'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_CAu_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_u,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_CAu_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_u, IsdB, IedB, jsd, jed, nz)
   CS%id_CAv_visc_rem = register_diag_field('ocean_model', 'CAv_visc_rem', diag%axesCvL, Time, &
       'Meridional Coriolis and Advective Acceleration multiplied by the viscous remnant', &
       'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_CAv_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_v,isd,ied,JsdB,JedB,nz)
+  if (CS%id_CAv_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_v, isd, ied, JsdB, JedB, nz)
 
   CS%id_u_BT_accel_visc_rem = register_diag_field('ocean_model', 'u_BT_accel_visc_rem', diag%axesCuL, Time, &
       'Barotropic Anomaly Zonal Acceleration multiplied by the viscous remnant', &
       'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_u_BT_accel_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_u,IsdB,IedB,jsd,jed,nz)
+  if (CS%id_u_BT_accel_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_u, IsdB, IedB, jsd, jed, nz)
   CS%id_v_BT_accel_visc_rem = register_diag_field('ocean_model', 'v_BT_accel_visc_rem', diag%axesCvL, Time, &
       'Barotropic Anomaly Meridional Acceleration multiplied by the viscous remnant', &
       'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_v_BT_accel_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_v,isd,ied,JsdB,JedB,nz)
+  if (CS%id_v_BT_accel_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_v, isd, ied, JsdB, JedB, nz)
 
   id_clock_Cor        = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
   id_clock_continuity = cpu_clock_id('(Ocean continuity equation)',      grain=CLOCK_MODULE)

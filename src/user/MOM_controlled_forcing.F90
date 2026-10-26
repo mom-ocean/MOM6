@@ -440,7 +440,7 @@ subroutine register_ctrl_forcing_restarts(G, US, param_file, CS, restart_CS)
   type(MOM_restart_CS), intent(inout) :: restart_CS !< MOM restart control struct
 
   logical :: controlled, use_temperature
-  character (len=8) :: period_str
+  character(len=8) :: period_str
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -487,7 +487,7 @@ subroutine register_ctrl_forcing_restarts(G, US, param_file, CS, restart_CS)
     allocate(CS%avg_SSS_anom(isd:ied,jsd:jed,CS%num_cycle), source=0.0)
     allocate(CS%avg_SSS(isd:ied,jsd:jed,CS%num_cycle), source=0.0)
 
-    write (period_str, '("p ",I0)') CS%num_cycle
+    write(period_str, '("p ",I0)') CS%num_cycle
 
     call register_restart_field(CS%heat_cyc, "Ctrl_heat_cycle", .false., restart_CS, &
                   longname="Cyclical Control Heating", &

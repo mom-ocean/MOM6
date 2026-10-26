@@ -92,10 +92,10 @@ end type INC_CS
 
 !> Control structure that contains a transpose of the ocean state across ensemble members.
 type, public :: ODA_CS ; private
-  type(ocean_control_struct), pointer :: Ocean_prior=> NULL() !< ensemble ocean prior states in DA space
-  type(ocean_control_struct), pointer :: Ocean_posterior=> NULL() !< ensemble ocean posterior states
+  type(ocean_control_struct), pointer :: Ocean_prior => NULL() !< ensemble ocean prior states in DA space
+  type(ocean_control_struct), pointer :: Ocean_posterior => NULL() !< ensemble ocean posterior states
                                                                   !! or increments to prior in DA space
-  type(ocean_control_struct), pointer :: Ocean_increment=> NULL() !< A separate structure for
+  type(ocean_control_struct), pointer :: Ocean_increment => NULL() !< A separate structure for
                                                                   !! increment diagnostics
   integer :: nk !< number of vertical layers used for DA
   type(ocean_grid_type), pointer :: Grid => NULL() !< MOM6 grid type and decomposition for the DA
@@ -125,7 +125,7 @@ type, public :: ODA_CS ; private
   logical :: do_bias_adjustment !< If true, use spatio-temporally varying climatological tendency
                                 !! adjustment for Temperature and Salinity
   real :: bias_adjustment_multiplier !< A scaling for the bias adjustment [nondim]
-  integer :: assim_method !< Method: NO_ASSIM,EAKF_ASSIM or OI_ASSIM
+  integer :: assim_method !< Method: NO_ASSIM, EAKF_ASSIM or OI_ASSIM
   integer :: ensemble_size !< Size of the ensemble
   integer :: ensemble_id = 0 !< id of the current ensemble member
   integer, pointer, dimension(:,:) :: ensemble_pelist !< PE list for ensemble members
@@ -135,12 +135,12 @@ type, public :: ODA_CS ; private
   type(ocean_profile_type), pointer :: Profiles => NULL() !< pointer to linked list of all available profiles
   type(ocean_profile_type), pointer :: CProfiles => NULL()!< pointer to linked list of current profiles
   type(kd_root), pointer :: kdroot => NULL() !< A structure for storing nearest neighbors
-  type(ALE_CS), pointer :: ALE_CS=>NULL() !< ALE control structure for DA
+  type(ALE_CS), pointer :: ALE_CS => NULL() !< ALE control structure for DA
   logical :: use_ALE_algorithm !< true is using ALE remapping
   type(regridding_CS) :: regridCS !< ALE control structure for regridding
   type(remapping_CS) :: remapCS !< ALE control structure for remapping
   type(time_type) :: Time !< Current Analysis time
-  type(diag_ctrl), pointer :: diag_cs=> NULL() !<Pointer to diagnostics control structure
+  type(diag_ctrl), pointer :: diag_cs => NULL() !<Pointer to diagnostics control structure
   type(INC_CS) :: INC_CS !< A Structure containing integer file handles for bias adjustment
   integer :: id_inc_t !< A diagnostic handle for the temperature climatological adjustment
   integer :: id_inc_s !< A diagnostic handle for the salinity climatological adjustment
@@ -153,7 +153,7 @@ end type ODA_CS
 
 
 !>@{  DA parameters
-integer, parameter :: NO_ASSIM = 0, OI_ASSIM=1, EAKF_ASSIM=2
+integer, parameter :: NO_ASSIM = 0, OI_ASSIM = 1, EAKF_ASSIM = 2
 !>@}
 character(len=40)  :: mdl = "MOM_oda_driver" !< This module's name.
 
@@ -172,8 +172,8 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
 
 ! Local variables
   type(thermo_var_ptrs) :: tv_dummy
-  type(dyn_horgrid_type), pointer :: dG=> NULL()
-  type(hor_index_type), pointer :: HI=> NULL()
+  type(dyn_horgrid_type), pointer :: dG => NULL()
+  type(hor_index_type), pointer :: HI => NULL()
   type(directories) :: dirs
 
   type(grid_type), pointer :: T_grid !< global tracer grid
@@ -197,25 +197,25 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   if (associated(CS)) call MOM_error(FATAL, 'Calling oda_init with associated control structure')
   allocate(CS)
 
-  id_clock_oda_init=cpu_clock_id('(ODA initialization)')
+  id_clock_oda_init = cpu_clock_id('(ODA initialization)')
   call cpu_clock_begin(id_clock_oda_init)
 
 ! Use ens1 parameters , this could be changed at a later time
 ! if it were desirable to have alternate parameters, e.g. for the grid
 ! for the analysis
-  call get_MOM_input(PF,dirs,ensemble_num=0)
+  call get_MOM_input(PF, dirs, ensemble_num=0)
   call unit_scaling_init(PF, CS%US)
 
   call get_param(PF, mdl, "ASSIM_METHOD", assim_method,  &
        "String which determines the data assimilation method "//&
        "Valid methods are: \'EAKF\',\'OI\', and \'NO_ASSIM\'", default='NO_ASSIM')
   call get_param(PF, mdl, "ASSIM_INTERVAL", CS%assim_interval,  &
-       "data assimilation update interval in hours",default=-1.0,units="hours",scale=3600.*US%s_to_T)
+       "data assimilation update interval in hours", default=-1.0, units="hours", scale=3600.*US%s_to_T)
   if (CS%assim_interval < 0.) then
-     call get_param(PF, mdl, "ASSIM_FREQUENCY", CS%assim_interval,  &
+    call get_param(PF, mdl, "ASSIM_FREQUENCY", CS%assim_interval,  &
           "data assimilation update  in hours. This parameter name will \n"//&
-          "be deprecated in the future. ASSIM_INTERVAL should be used instead.",default=-1.0, &
-          units="hours",scale=3600.*US%s_to_T)
+          "be deprecated in the future. ASSIM_INTERVAL should be used instead.", default=-1.0, &
+          units="hours", scale=3600.*US%s_to_T)
   endif
 
   call get_param(PF, mdl, "USE_REGRIDDING", CS%use_ALE_algorithm , &
@@ -286,7 +286,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
 
   ens_info = get_ensemble_size()
   CS%ensemble_size = ens_info(1)
-  npes_pm=ens_info(3)
+  npes_pm = ens_info(3)
   CS%ensemble_id = get_ensemble_id()
   !! Switch to global pelist
   allocate(CS%ensemble_pelist(CS%ensemble_size,npes_pm))
@@ -313,7 +313,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   call verticalGridInit( PF, CS%GV, CS%US )
   allocate(dG)
   call create_dyn_horgrid(dG, HI)
-  call clone_MOM_domain(CS%Grid%Domain, dG%Domain,symmetric=.false.)
+  call clone_MOM_domain(CS%Grid%Domain, dG%Domain, symmetric=.false.)
   call set_grid_metrics(dG, PF, CS%US)
   call MOM_initialize_topography(dG%bathyT, dG%max_depth, dG, PF, CS%US)
   call MOM_initialize_coord(CS%GV, CS%US, PF, tv_dummy, dG%max_depth)
@@ -326,11 +326,11 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   CS%nk = CS%GV%ke
   ! initialize storage for prior and posterior
   allocate(CS%Ocean_prior)
-  call init_ocean_ensemble(CS%Ocean_prior,CS%Grid,CS%GV,CS%ensemble_size)
+  call init_ocean_ensemble(CS%Ocean_prior, CS%Grid, CS%GV, CS%ensemble_size)
   allocate(CS%Ocean_posterior)
-  call init_ocean_ensemble(CS%Ocean_posterior,CS%Grid,CS%GV,CS%ensemble_size)
+  call init_ocean_ensemble(CS%Ocean_posterior, CS%Grid, CS%GV, CS%ensemble_size)
   allocate(CS%Ocean_increment)
-  call init_ocean_ensemble(CS%Ocean_increment,CS%Grid,CS%GV,CS%ensemble_size)
+  call init_ocean_ensemble(CS%Ocean_increment, CS%Grid, CS%GV, CS%ensemble_size)
 
 
   call get_param(PF, 'oda_driver', "REGRIDDING_COORDINATE_MODE", coord_mode, &
@@ -342,7 +342,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
        "If true, use the OM4 remapping-via-subcells algorithm for ODA. "//&
        "See REMAPPING_USE_OM4_SUBCELLS for more details. "//&
        "We recommend setting this option to false.", default=om4_remap_via_sub_cells)
-  call initialize_regridding(CS%regridCS, CS%G, CS%GV, CS%US, dG%max_depth,PF,'oda_driver',coord_mode,'','')
+  call initialize_regridding(CS%regridCS, CS%G, CS%GV, CS%US, dG%max_depth, PF, 'oda_driver', coord_mode, '', '')
 
   h_neglect = set_h_neglect(GV, CS%answer_date, h_neglect_edge)
   call initialize_remapping(CS%remapCS, remap_scheme, om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
@@ -351,8 +351,8 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   ! breaking with the MOM6 convention and using global indices
-  !call get_domain_extent(G%Domain,is,ie,js,je,isd,ied,jsd,jed,&
-  !                       isg,ieg,jsg,jeg,idg_offset,jdg_offset,symmetric)
+  !call get_domain_extent(G%Domain, is, ie, js, je, isd, ied, jsd, jed, &
+  !                       isg, ieg, jsg, jeg, idg_offset, jdg_offset, symmetric)
   !isd = isd+idg_offset ; ied = ied+idg_offset ! using global indexing within the DA module
   !jsd = jsd+jdg_offset ; jed = jed+jdg_offset ! TODO:  switch to local indexing? (mjh)
 
@@ -406,12 +406,12 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
 
     inc_file = trim(inputdir) // trim(bias_correction_file)
     CS%INC_CS%T = init_extern_field(inc_file, "temp_increment", &
-          correct_leap_year_inconsistency=.true.,verbose=.true.,domain=G%Domain%mpp_domain)
+          correct_leap_year_inconsistency=.true., verbose=.true., domain=G%Domain%mpp_domain)
     CS%INC_CS%S = init_extern_field(inc_file, "salt_increment", &
-          correct_leap_year_inconsistency=.true.,verbose=.true.,domain=G%Domain%mpp_domain)
+          correct_leap_year_inconsistency=.true., verbose=.true., domain=G%Domain%mpp_domain)
     call get_external_field_info(CS%INC_CS%T, size=fld_sz)
     CS%INC_CS%fldno = 2
-    if (CS%nk /= fld_sz(3)) call MOM_error(FATAL,'Increment levels /= ODA levels')
+    if (CS%nk /= fld_sz(3)) call MOM_error(FATAL, 'Increment levels /= ODA levels')
 
     allocate(CS%T_bc_tend(G%isd:G%ied,G%jsd:G%jed,CS%GV%ke), source=0.0)
     allocate(CS%S_bc_tend(G%isd:G%ied,G%jsd:G%jed,CS%GV%ke), source=0.0)
@@ -443,8 +443,8 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   ! return if not time for analysis
   if (Time < CS%Time) return
 
-  if (.not. associated(CS%Grid)) call MOM_ERROR(FATAL,'ODA_CS ensemble horizontal grid not associated')
-  if (.not. associated(CS%GV)) call MOM_ERROR(FATAL,'ODA_CS ensemble vertical grid not associated')
+  if (.not. associated(CS%Grid)) call MOM_ERROR(FATAL, 'ODA_CS ensemble horizontal grid not associated')
+  if (.not. associated(CS%GV)) call MOM_ERROR(FATAL, 'ODA_CS ensemble vertical grid not associated')
 
   !! switch to global pelist
   call set_PElist(CS%filter_pelist)
@@ -453,8 +453,8 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   ! computational domain for the analysis grid
   isc = CS%Grid%isc ; iec = CS%Grid%iec ; jsc = CS%Grid%jsc ; jec = CS%Grid%jec
   ! array extents for the ensemble member
-  !call get_domain_extent(CS%domains(CS%ensemble_id),is,ie,js,je,isd,ied,jsd,jed,&
-  !     isg,ieg,jsg,jeg,idg_offset,jdg_offset,symmetric)
+  !call get_domain_extent(CS%domains(CS%ensemble_id), is, ie, js, je, isd, ied, jsd, jed, &
+  !     isg, ieg, jsg, jeg, idg_offset, jdg_offset, symmetric)
   ! remap temperature and salinity from the ensemble member to the analysis grid
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     call remapping_core_h(CS%remapCS, GV%ke, h(i,j,:), tv%T(i,j,:), &
@@ -471,8 +471,8 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   enddo
 
   do m=1,CS%ensemble_size
-    call pass_var(CS%Ocean_prior%T(:,:,:,m),CS%Grid%domain)
-    call pass_var(CS%Ocean_prior%S(:,:,:,m),CS%Grid%domain)
+    call pass_var(CS%Ocean_prior%T(:,:,:,m), CS%Grid%domain)
+    call pass_var(CS%Ocean_prior%S(:,:,:,m), CS%Grid%domain)
   enddo
 
   !! switch back to ensemble member pelist
@@ -489,7 +489,7 @@ subroutine get_posterior_tracer(Time, CS, increment)
   type(ODA_CS), pointer :: CS !< ocean DA control structure
   logical, optional, intent(in) :: increment !< True if returning increment only
 
-  type(ocean_control_struct), pointer :: Ocean_increment=>NULL()
+  type(ocean_control_struct), pointer :: Ocean_increment => NULL()
   integer :: m
   logical :: get_inc
 
@@ -531,8 +531,8 @@ subroutine get_posterior_tracer(Time, CS, increment)
   !! switch back to ensemble member pelist
   call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
 
-  call pass_var(CS%T_tend,CS%domains(CS%ensemble_id))
-  call pass_var(CS%S_tend,CS%domains(CS%ensemble_id))
+  call pass_var(CS%T_tend, CS%domains(CS%ensemble_id))
+  call pass_var(CS%S_tend, CS%domains(CS%ensemble_id))
 
   !convert to a tendency (degC or PSU per second)
   CS%T_tend = CS%T_tend / (CS%assim_interval)
@@ -578,7 +578,7 @@ subroutine get_bias_correction_tracer(Time, US, CS)
   real, allocatable, dimension(:), target :: z_edges_in ! Cell edge depths for input data [Z ~> m]
   real :: missing_value ! A value indicating that there is no valid input data at this point [CU ~> conc]
   integer, dimension(3) :: fld_sz
-  integer :: i,j,k
+  integer :: i, j, k
 
 
   call cpu_clock_begin(id_clock_bias_adjustment)
@@ -591,7 +591,7 @@ subroutine get_bias_correction_tracer(Time, US, CS)
 
   ! This should be replaced to use mask_z instead of the following lines
   ! which are intended to zero land values using an arbitrary limit.
-  fld_sz=shape(T_bias)
+  fld_sz = shape(T_bias)
   if (CS%reproduce_2018_nmme) then
     do i=1,fld_sz(1)
       do j=1,fld_sz(2)
@@ -608,8 +608,8 @@ subroutine get_bias_correction_tracer(Time, US, CS)
       do j=1,fld_sz(2)
         do k=1,fld_sz(3)
           if (valid_flag(i,j,k)==0.) then
-            T_bias(i,j,k)=0.0
-            S_bias(i,j,k)=0.0
+            T_bias(i,j,k) = 0.0
+            S_bias(i,j,k) = 0.0
           endif
         enddo
       enddo
@@ -726,7 +726,7 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
     S_tend = S_tend + CS%S_bc_tend
   endif
 
-  isc=G%isc ; iec=G%iec ; jsc=G%jsc ; jec=G%jec
+  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
   do j=jsc,jec ; do i=isc,iec
     call remapping_core_h(CS%remapCS, CS%nk, CS%h(i,j,:), T_tend(i,j,:), &
                           G%ke, h(i,j,:), T_tend_inc(i,j,:))
@@ -770,7 +770,7 @@ end subroutine apply_oda_tracer_increments
 
     !    get global grid information from ocean_model
     T_grid=>NULL()
-    !if (associated(T_grid)) call MOM_error(FATAL,'MOM_oda_driver:set_up_global_tgrid called with associated T_grid')
+    !if (associated(T_grid)) call MOM_error(FATAL, 'MOM_oda_driver:set_up_global_tgrid called with associated T_grid')
 
     allocate(T_grid)
     T_grid%ni = CS%ni

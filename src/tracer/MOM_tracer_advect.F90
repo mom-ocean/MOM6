@@ -147,29 +147,29 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
        "register_tracer must be called before advect_tracer.")
   if (Reg%ntr==0) return
   call cpu_clock_begin(id_clock_advect)
-  x_first = (MOD(G%first_direction,2) == 0)
+  x_first = (MOD(G%first_direction, 2) == 0)
 
   ! Choose the maximum stencil from all the local advection scheme
   do m = 1,ntr
 
-     local_advect_scheme(m) = Reg%Tr(m)%advect_scheme
-     if (local_advect_scheme(m) < 0) local_advect_scheme(m) = CS%default_advect_scheme
+    local_advect_scheme(m) = Reg%Tr(m)%advect_scheme
+    if (local_advect_scheme(m) < 0) local_advect_scheme(m) = CS%default_advect_scheme
 
-     if (local_advect_scheme(m) == ADVECT_PLM) then
-       stencil_local = 2
-     elseif (local_advect_scheme(m) == ADVECT_PPM) then
-       stencil_local = 3
-     elseif (local_advect_scheme(m) == ADVECT_PPMH3) then
-       if (CS%useHuynhStencilBug) then
-         stencil_local = 2
-       else
-         stencil_local = 3
-       endif
-     endif
-     stencil = max(stencil, stencil_local)
+    if (local_advect_scheme(m) == ADVECT_PLM) then
+      stencil_local = 2
+    elseif (local_advect_scheme(m) == ADVECT_PPM) then
+      stencil_local = 3
+    elseif (local_advect_scheme(m) == ADVECT_PPMH3) then
+      if (CS%useHuynhStencilBug) then
+        stencil_local = 2
+      else
+        stencil_local = 3
+      endif
+    endif
+    stencil = max(stencil, stencil_local)
   enddo
 
-  if (min(is-isd,ied-ie,js-jsd,jed-je) < stencil) then
+  if (min(is-isd, ied-ie, js-jsd, jed-je) < stencil) then
     call MOM_error(FATAL, "MOM_tracer_advect: "//&
       "stencil is wider than the halo.")
   endif
@@ -199,7 +199,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
     do j=jsd,jed ; do I=IsdB,IedB ; uhr(I,j,k) = 0.0 ; enddo ; enddo
     do J=jsdB,jedB ; do i=Isd,Ied ; vhr(i,J,k) = 0.0 ; enddo ; enddo
     do j=jsd,jed ; do i=Isd,Ied ; hprev(i,j,k) = 0.0 ; enddo ; enddo
-    domore_k(k)=1
+    domore_k(k) = 1
     !  Put the remaining (total) thickness fluxes into uhr and vhr.
     do j=js,je ; do I=is-1,ie ; uhr(I,j,k) = uhtr(I,j,k) ; enddo ; enddo
     do J=js-1,je ; do i=is,ie ; vhr(i,J,k) = vhtr(i,J,k) ; enddo ; enddo
@@ -467,7 +467,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   logical :: do_i(SZI_(G),SZJ_(G))     ! If true, work on given points.
   logical :: usePLMslope
   integer :: i, j, m, n, i_up, stencil, ntr_id
-  type(OBC_segment_type), pointer :: segment=>NULL()
+  type(OBC_segment_type), pointer :: segment => NULL()
   logical, dimension(SZJ_(G),SZK_(GV)) :: domore_u_initial
 
   ! keep a local copy of the initial values of domore_u, which is to be used when computing ad2d_x
@@ -513,7 +513,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
            !endif
             Tp = Tr(m)%t(i+1,j,k) ; Tc = Tr(m)%t(i,j,k) ; Tm = Tr(m)%t(i-1,j,k)
             dMx = max( Tp, Tc, Tm ) - Tc
-            dMn= Tc - min( Tp, Tc, Tm )
+            dMn = Tc - min( Tp, Tc, Tm )
             slope_x(i,m) = G%mask2dCu(I,j)*G%mask2dCu(I-1,j) * &
                 sign( min(0.5*abs(Tp-Tm), 2.0*dMx, 2.0*dMn), Tp-Tm )
           enddo
@@ -532,7 +532,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     ! loop through open boundaries and recalculate flux terms
     if (associated(OBC)) then ; if (OBC%OBC_pe) then
       do n=1,OBC%number_of_segments
-        segment=>OBC%segment(n)
+        segment => OBC%segment(n)
         if (.not. associated(segment%tr_Reg)) cycle
         if (segment%is_E_or_W) then
           if (j>=segment%HI%jsd .and. j<=segment%HI%jed) then
@@ -552,7 +552,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                 do i=segment%HI%IsdB-1,segment%HI%IsdB+1
                   Tp = T_tmp(i+1,m) ; Tc = T_tmp(i,m) ; Tm = T_tmp(i-1,m)
                   dMx = max( Tp, Tc, Tm ) - Tc
-                  dMn= Tc - min( Tp, Tc, Tm )
+                  dMn = Tc - min( Tp, Tc, Tm )
                   slope_x(i,m) = G%mask2dCu(I,j)*G%mask2dCu(I-1,j) * &
                        sign( min(0.5*abs(Tp-Tm), 2.0*dMx, 2.0*dMn), Tp-Tm )
                 enddo
@@ -616,9 +616,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
             if (advect_schemes(m) == ADVECT_PPMH3) then
               aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
-              aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
+              aL = max( min(Tc, Tm), aL) ; aL = min( max(Tc, Tm), aL) ! Bound
               aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
-              aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
+              aR = max( min(Tc, Tp), aR) ; aR = min( max(Tc, Tp), aR) ! Bound
             else
               aL = 0.5 * ((Tm + Tc) + (slope_x(i_up-1,m) - slope_x(i_up,m)) / 3.)
               aR = 0.5 * ((Tc + Tp) + (slope_x(i_up,m) - slope_x(i_up+1,m)) / 3.)
@@ -670,7 +670,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     if (associated(OBC)) then ; if (OBC%OBC_pe) then
       if (OBC%specified_u_BCs_exist_globally .or. OBC%open_u_BCs_exist_globally) then
         do n=1,OBC%number_of_segments
-          segment=>OBC%segment(n)
+          segment => OBC%segment(n)
           if (.not. associated(segment%tr_Reg)) cycle
           if (segment%is_E_or_W) then
             if (j>=segment%HI%jsd .and. j<=segment%HI%jed) then
@@ -695,7 +695,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
       if (OBC%open_u_BCs_exist_globally) then
         do n=1,OBC%number_of_segments
-          segment=>OBC%segment(n)
+          segment => OBC%segment(n)
           I = segment%HI%IsdB
           if (segment%is_E_or_W .and. (j >= segment%HI%jsd .and. j<= segment%HI%jed)) then
             if (segment%specified) cycle
@@ -883,7 +883,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   logical :: do_i(SZI_(G), SZJ_(G))     ! If true, work on given points.
   logical :: usePLMslope
   integer :: i, j, j2, m, n, j_up, stencil, ntr_id
-  type(OBC_segment_type), pointer :: segment=>NULL()
+  type(OBC_segment_type), pointer :: segment => NULL()
   logical :: domore_v_initial(SZJB_(G)) ! Initial state of domore_v
 
   usePLMslope = .false.
@@ -959,7 +959,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   ! loop through open boundaries and recalculate flux terms
   if (associated(OBC)) then ; if (OBC%OBC_pe) then
     do n=1,OBC%number_of_segments
-      segment=>OBC%segment(n)
+      segment => OBC%segment(n)
       if (.not. associated(segment%tr_Reg)) cycle
       do i=is,ie
         if (segment%is_N_or_S) then
@@ -980,7 +980,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                 do j=segment%HI%JsdB-1,segment%HI%JsdB+1
                   Tp = T_tmp(i,m,j+1) ; Tc = T_tmp(i,m,j) ; Tm = T_tmp(i,m,j-1)
                   dMx = max( Tp, Tc, Tm ) - Tc
-                  dMn= Tc - min( Tp, Tc, Tm )
+                  dMn = Tc - min( Tp, Tc, Tm )
                   slope_y(i,m,j) = G%mask2dCv(i,J)*G%mask2dCv(i,J-1) * &
                        sign( min(0.5*abs(Tp-Tm), 2.0*dMx, 2.0*dMn), Tp-Tm )
                 enddo
@@ -1046,9 +1046,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
             if (advect_schemes(m) == ADVECT_PPMH3) then
               aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
-              aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
+              aL = max( min(Tc, Tm), aL) ; aL = min( max(Tc, Tm), aL) ! Bound
               aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
-              aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
+              aR = max( min(Tc, Tp), aR) ; aR = min( max(Tc, Tp), aR) ! Bound
             else
               aL = 0.5 * ((Tm + Tc) + (slope_y(i,m,j_up-1) - slope_y(i,m,j_up)) / 3.)
               aR = 0.5 * ((Tc + Tp) + (slope_y(i,m,j_up) - slope_y(i,m,j_up+1)) / 3.)
@@ -1100,7 +1100,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     if (associated(OBC)) then ; if (OBC%OBC_pe) then
       if (OBC%specified_v_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) then
         do n=1,OBC%number_of_segments
-          segment=>OBC%segment(n)
+          segment => OBC%segment(n)
           if (.not. segment%specified) cycle
           if (.not. associated(segment%tr_Reg)) cycle
           if (OBC%segment(n)%is_N_or_S) then
@@ -1126,7 +1126,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
       if (OBC%open_v_BCs_exist_globally) then
         do n=1,OBC%number_of_segments
-          segment=>OBC%segment(n)
+          segment => OBC%segment(n)
           if (segment%specified) cycle
           if (.not. associated(segment%tr_Reg)) cycle
           if (segment%is_N_or_S .and. (J >= segment%HI%JsdB .and. J<= segment%HI%JedB)) then

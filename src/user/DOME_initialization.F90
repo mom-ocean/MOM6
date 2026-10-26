@@ -138,7 +138,7 @@ subroutine DOME_initialize_thickness(h, depth_tot, G, GV, param_file, just_read)
 
   call MOM_mesg("  DOME_initialization.F90, DOME_initialize_thickness: setting thickness", 5)
 
-  e0(1)=0.0
+  e0(1) = 0.0
   do k=2,nz
     e0(K) = -G%max_depth * (real(k-1)-0.5)/real(nz-1)
   enddo

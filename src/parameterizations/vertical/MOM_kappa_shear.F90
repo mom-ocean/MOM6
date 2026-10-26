@@ -811,8 +811,8 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
         ! If all points have zero thickness, the thickness-weighted geometric mean is undefined, so use
         ! the non-thickness weighted geometric mean instead.
         kappa_io(i,j,K) = G%mask2dT(i,j) * sqrt(sqrt( &
-              (max(kappa_vertex(I-1,J-1,K),CS%VS_GeoMean_Kdmin) * max(kappa_vertex(I,J,K),CS%VS_GeoMean_Kdmin)) * &
-              (max(kappa_vertex(I-1,J,K),CS%VS_GeoMean_Kdmin) * max(kappa_vertex(I,J-1,K),CS%VS_GeoMean_Kdmin)) ))
+              (max(kappa_vertex(I-1,J-1,K), CS%VS_GeoMean_Kdmin) * max(kappa_vertex(I,J,K), CS%VS_GeoMean_Kdmin)) * &
+              (max(kappa_vertex(I-1,J,K), CS%VS_GeoMean_Kdmin) * max(kappa_vertex(I,J-1,K), CS%VS_GeoMean_Kdmin)) ))
       endif
     enddo ; enddo ; enddo
   elseif (CS%VS_ThicknessMean) then   ! Use thickness-weighted arithmetic mean diffusivities.
@@ -832,8 +832,8 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     !$OMP parallel do default(private) shared(nz,G,CS,kappa_io,kappa_vertex)
     do K=2,nz ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
       kappa_io(i,j,K) = G%mask2dT(i,j) * sqrt(sqrt( &
-            (max(kappa_vertex(I-1,J-1,K),CS%VS_GeoMean_Kdmin) * max(kappa_vertex(I,J,K),CS%VS_GeoMean_Kdmin)) * &
-            (max(kappa_vertex(I-1,J,K),CS%VS_GeoMean_Kdmin) * max(kappa_vertex(I,J-1,K),CS%VS_GeoMean_Kdmin)) ))
+            (max(kappa_vertex(I-1,J-1,K), CS%VS_GeoMean_Kdmin) * max(kappa_vertex(I,J,K), CS%VS_GeoMean_Kdmin)) * &
+            (max(kappa_vertex(I-1,J,K), CS%VS_GeoMean_Kdmin) * max(kappa_vertex(I,J-1,K), CS%VS_GeoMean_Kdmin)) ))
     enddo ; enddo ; enddo
   else   ! Use a non-thickness weighted arithmetic mean.
     !$OMP parallel do default(private) shared(nz,G,CS,kappa_io,kappa_vertex)
@@ -1238,7 +1238,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, hlay, dz_la
                                        T_test, S_test, N2, S2, GV, US, ks_int=ks_kappa, ke_int=ke_kappa)
         valid_dt = .true.
         Idtt = 1.0 / dt_test
-        do K=max(ks_kappa-1,2),min(ke_kappa+1,nzc)
+        do K = max(ks_kappa-1, 2), min(ke_kappa+1, nzc)
           if (N2(K) < Ri_crit * S2(K)) then ! Equivalent to Ri < Ri_crit.
             K_src(K) = (2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
                        ((Ri_crit*S2(K) - N2(K)) / (Ri_crit*S2(K) + CS%FRi_curvature*N2(K)))
@@ -1271,7 +1271,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, hlay, dz_la
                    N2, S2, GV, US, ks_int=ks_kappa, ke_int=ke_kappa)
           valid_dt = .true.
           Idtt = 1.0 / (dt_test+dt_inc)
-          do K=max(ks_kappa-1,2),min(ke_kappa+1,nzc)
+          do K = max(ks_kappa-1, 2) , min(ke_kappa+1, nzc)
             if (N2(K) < Ri_crit * S2(K)) then ! Equivalent to Ri < Ri_crit.
               K_src(K) = (2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
                          ((Ri_crit*S2(K) - N2(K)) / (Ri_crit*S2(K) + CS%FRi_curvature*N2(K)))
@@ -1417,8 +1417,8 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, dz, I_dz_int
   integer :: k, ks, ke
 
   ks = 1 ; ke = nz
-  if (present(ks_int)) ks = max(ks_int-1,1)
-  if (present(ke_int)) ke = min(ke_int,nz)
+  if (present(ks_int)) ks = max(ks_int-1, 1)
+  if (present(ke_int)) ke = min(ke_int, nz)
 
   if (ks > ke) return
 
@@ -1712,9 +1712,9 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, h_Int, dz_Int, dz_h_Int, I_L2_b
       ! version of the nonlinear sink terms, and implicit in the linear
       ! terms.
 
-      ke_tke = max(ke_kappa,ke_kappa_prev)+1
+      ke_tke = max(ke_kappa, ke_kappa_prev) + 1
       ! aQ is the coupling between adjacent interfaces [Z T-1 ~> m s-1].
-      do k=1,min(ke_tke,nz)
+      do k = 1, min(ke_tke, nz)
         aQ(k) = (0.5*(kappa(K)+kappa(K+1)) + kappa0) * Idz(k)
       enddo
       dQ(1) = -TKE(1)
@@ -1939,7 +1939,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, h_Int, dz_Int, dz_h_Int, I_L2_b
           endif
           dK(K) = 0.0
         ! Ensure that TKE+dQ will not drop below 0.5*TKE.
-          dQ(K) = max(e1(K)*dQ(K-1),-0.5*TKE(K))
+          dQ(K) = max(e1(K)*dQ(K-1), -0.5*TKE(K))
           TKE(K) = max(TKE(K) + dQ(K), TKE_min)
           if (abs(dQ(K)) < roundoff*TKE(K)) exit
         enddo
@@ -2006,7 +2006,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, h_Int, dz_Int, dz_h_Int, I_L2_b
       Newton_test = Newton_err ; if (do_Newton) Newton_test = 2.0*Newton_err
       was_Newton = do_Newton
       within_tolerance = .true. ; do_Newton = .true.
-      do K=min(ks_kappa,ks_kappa_prev),max(ke_kappa,ke_kappa_prev)
+      do K = min(ks_kappa, ks_kappa_prev), max(ke_kappa, ke_kappa_prev)
         kappa_mean = kappa0 + (kappa(K) - 0.5*dK(K))
         if (abs(dK(K)) > Newton_test * kappa_mean) then
           if (do_Newton) abort_Newton = .true.
@@ -2022,7 +2022,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, h_Int, dz_Int, dz_h_Int, I_L2_b
 
     else  ! Newton's method will not be used again, so no need to check.
       within_tolerance = .true.
-      do K=min(ks_kappa,ks_kappa_prev),max(ke_kappa,ke_kappa_prev)
+      do K = min(ks_kappa, ks_kappa_prev), max(ke_kappa, ke_kappa_prev)
         if (abs(dK(K)) > tol_err * (kappa0 + (kappa(K) - 0.5*dK(K)))) then
           within_tolerance = .false. ;  exit
         endif
@@ -2284,7 +2284,7 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
 
   CS%nkml = 1
   if (GV%nkml>0) then
-    call get_param(param_file, mdl, "KAPPA_SHEAR_MERGE_ML",merge_mixedlayer, &
+    call get_param(param_file, mdl, "KAPPA_SHEAR_MERGE_ML", merge_mixedlayer, &
                  "If true, combine the mixed layers together before solving the "//&
                  "kappa-shear equations.", default=.true., do_not_log=just_read)
     if (merge_mixedlayer) CS%nkml = GV%nkml
@@ -2295,36 +2295,36 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
 
   CS%diag => diag
 
-  CS%id_Kd_shear = register_diag_field('ocean_model','Kd_shear', diag%axesTi, Time, &
+  CS%id_Kd_shear = register_diag_field('ocean_model', 'Kd_shear', diag%axesTi, Time, &
       'Shear-driven Diapycnal Diffusivity at horizontal tracer points', 'm2 s-1', conversion=GV%HZ_T_to_m2_s)
   if (CS%KS_at_vertex) then
-    CS%id_TKE = register_diag_field('ocean_model','TKE_shear', diag%axesBi, Time, &
+    CS%id_TKE = register_diag_field('ocean_model', 'TKE_shear', diag%axesBi, Time, &
        'Shear-driven Turbulent Kinetic Energy at horizontal vertices', 'm2 s-2', conversion=US%Z_to_m**2*US%s_to_T**2)
-    CS%id_Kd_vertex = register_diag_field('ocean_model','Kd_shear_vertex', diag%axesBi, Time, &
+    CS%id_Kd_vertex = register_diag_field('ocean_model', 'Kd_shear_vertex', diag%axesBi, Time, &
          'Shear-driven Diapycnal Diffusivity at horizontal vertices', 'm2 s-1', conversion=GV%HZ_T_to_m2_s)
-    CS%id_S2_init = register_diag_field('ocean_model','S2_shear_in', diag%axesBi, Time, &
+    CS%id_S2_init = register_diag_field('ocean_model', 'S2_shear_in', diag%axesBi, Time, &
          'Interface shear squared at horizontal vertices, as input to kappa-shear', 's-2', conversion=US%s_to_T**2)
-    CS%id_N2_init = register_diag_field('ocean_model','N2_shear_in', diag%axesBi, Time, &
+    CS%id_N2_init = register_diag_field('ocean_model', 'N2_shear_in', diag%axesBi, Time, &
          'Interface stratification at horizontal vertices, as input to kappa-shear', 's-2', conversion=US%s_to_T**2)
-    CS%id_S2_mean = register_diag_field('ocean_model','S2_shear_mean', diag%axesBi, Time, &
+    CS%id_S2_mean = register_diag_field('ocean_model', 'S2_shear_mean', diag%axesBi, Time, &
          'Interface shear squared at horizontal vertices, averaged over timestep in kappa-shear', &
          's-2', conversion=US%s_to_T**2)
-    CS%id_N2_mean = register_diag_field('ocean_model','N2_shear_mean', diag%axesBi, Time, &
+    CS%id_N2_mean = register_diag_field('ocean_model', 'N2_shear_mean', diag%axesBi, Time, &
          'Interface stratification at horizontal vertices, averaged over timestep in kappa-shear', &
          's-2', conversion=US%s_to_T**2)
   else
-    CS%id_TKE = register_diag_field('ocean_model','TKE_shear', diag%axesTi, Time, &
+    CS%id_TKE = register_diag_field('ocean_model', 'TKE_shear', diag%axesTi, Time, &
          'Shear-driven Turbulent Kinetic Energy at horizontal tracer points', &
          'm2 s-2', conversion=US%Z_to_m**2*US%s_to_T**2)
-    CS%id_S2_init = register_diag_field('ocean_model','S2_shear_in', diag%axesTi, Time, &
+    CS%id_S2_init = register_diag_field('ocean_model', 'S2_shear_in', diag%axesTi, Time, &
          'Interface shear squared at horizontal tracer points, as input to kappa-shear', 's-2', conversion=US%s_to_T**2)
-    CS%id_N2_init = register_diag_field('ocean_model','N2_shear_in', diag%axesTi, Time, &
+    CS%id_N2_init = register_diag_field('ocean_model', 'N2_shear_in', diag%axesTi, Time, &
          'Interface stratification at horizontal tracer points, as input to kappa-shear', &
          's-2', conversion=US%s_to_T**2)
-    CS%id_S2_mean = register_diag_field('ocean_model','S2_shear_mean', diag%axesTi, Time, &
+    CS%id_S2_mean = register_diag_field('ocean_model', 'S2_shear_mean', diag%axesTi, Time, &
          'Interface shear squared at horizontal tracer points, averaged over timestep in kappa-shear', &
          's-2', conversion=US%s_to_T**2)
-    CS%id_N2_mean = register_diag_field('ocean_model','N2_shear_mean', diag%axesTi, Time, &
+    CS%id_N2_mean = register_diag_field('ocean_model', 'N2_shear_mean', diag%axesTi, Time, &
          'Interface stratification at horizontal tracer points, averaged ove timestep in kappa-shear', &
          's-2', conversion=US%s_to_T**2)
   endif

@@ -54,22 +54,22 @@ subroutine bcz_params(G, GV, US, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, 
 
   if (.not.just_read) &
     call log_version(param_file, mdl, version, 'Initialization of an analytic baroclinic zone')
-  call openParameterBlock(param_file,'BCZIC')
+  call openParameterBlock(param_file, 'BCZIC')
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
                  units='ppt', default=35., scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "DSDZ", dSdz, 'Salinity stratification', &
                  units='ppt m-1', default=0.0, scale=US%ppt_to_S*US%Z_to_m, do_not_log=just_read)
-  call get_param(param_file, mdl, "DELTA_S",delta_S, 'Salinity difference across baroclinic zone', &
+  call get_param(param_file, mdl, "DELTA_S", delta_S, 'Salinity difference across baroclinic zone', &
                  units='ppt', default=0.0, scale=US%ppt_to_S, do_not_log=just_read)
-  call get_param(param_file, mdl, "DSDX", dSdx,'Meridional salinity difference', &
+  call get_param(param_file, mdl, "DSDX", dSdx, 'Meridional salinity difference', &
                  units='ppt '//trim(G%x_ax_unit_short)//'-1', default=0.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "T_REF", T_ref, 'Reference temperature', &
                  units='degC', default=10., scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl, "DTDZ", dTdz, 'Temperature stratification', &
                  units='degC m-1', default=0.0, scale=US%degC_to_C*US%Z_to_m, do_not_log=just_read)
-  call get_param(param_file, mdl, "DELTA_T", delta_T,'Temperature difference across baroclinic zone', &
+  call get_param(param_file, mdl, "DELTA_T", delta_T, 'Temperature difference across baroclinic zone', &
                  units='degC', default=0.0, scale=US%degC_to_C, do_not_log=just_read)
-  call get_param(param_file, mdl, "DTDX", dTdx,'Meridional temperature difference', &
+  call get_param(param_file, mdl, "DTDX", dTdx, 'Meridional temperature difference', &
                  units='degC '//trim(G%x_ax_unit_short)//'-1', default=0.0, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl, "L_ZONE", L_zone, 'Width of baroclinic zone', &
                  units=G%y_ax_unit_short, default=0.5*G%len_lat, do_not_log=just_read)

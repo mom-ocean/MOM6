@@ -195,8 +195,8 @@ type, public :: set_diffusivity_CS ; private
   integer :: id_Kd_Work    = -1, id_KT_extra    = -1, id_KS_extra   = -1, id_R_rho    = -1
   integer :: id_Kd_bkgnd   = -1, id_Kv_bkgnd    = -1, id_Kd_leak    = -1
   integer :: id_Kd_quad    = -1, id_Kd_itidal   = -1, id_Kd_Froude  = -1, id_Kd_slope = -1
-  integer :: id_prof_leak  = -1, id_prof_quad   = -1, id_prof_itidal= -1
-  integer :: id_prof_Froude= -1, id_prof_slope  = -1, id_bbl_thick = -1, id_kbbl = -1
+  integer :: id_prof_leak  = -1, id_prof_quad   = -1, id_prof_itidal = -1
+  integer :: id_prof_Froude = -1, id_prof_slope = -1, id_bbl_thick = -1, id_kbbl = -1
   integer :: id_Kd_Work_added = -1
   !>@}
 
@@ -341,10 +341,10 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("set_diffusivity(), MOM_set_diffusivity.F90")
 
-  if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
+  if (.not.associated(CS)) call MOM_error(FATAL, "set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
-  if (.not.CS%initialized) call MOM_error(FATAL,"set_diffusivity: "//&
+  if (.not.CS%initialized) call MOM_error(FATAL, "set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
   if (CS%answer_date < 20190101) then
@@ -458,13 +458,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
     if (CS%debug) then
       call hchksum(tv%T, "before vert_fill_TS tv%T", G%HI, unscale=US%C_to_degC)
       call hchksum(tv%S, "before vert_fill_TS tv%S", G%HI, unscale=US%S_to_ppt)
-      call hchksum(h, "before vert_fill_TS h",G%HI, unscale=GV%H_to_m)
+      call hchksum(h, "before vert_fill_TS h", G%HI, unscale=GV%H_to_m)
     endif
     call vert_fill_TS(h, tv%T, tv%S, kappa_dt_fill, T_f, S_f, G, GV, US, larger_h_denom=.true.)
     if (CS%debug) then
       call hchksum(tv%T, "after vert_fill_TS tv%T", G%HI, unscale=US%C_to_degC)
       call hchksum(tv%S, "after vert_fill_TS tv%S", G%HI, unscale=US%S_to_ppt)
-      call hchksum(h, "after vert_fill_TS h",G%HI, unscale=GV%H_to_m)
+      call hchksum(h, "after vert_fill_TS h", G%HI, unscale=GV%H_to_m)
     endif
   endif
 
@@ -1444,7 +1444,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, maxTKE,
 
   do K=2,nz ; Rint(K) = 0.5*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
 
-  kb_min = max(GV%nk_rho_varies+1,2)
+  kb_min = max(GV%nk_rho_varies+1, 2)
 
   ! The turbulence decay scale is 0.5*ustar/f from K&E & MOM_vertvisc.F90
   ! Any turbulence that makes it into the mixed layers is assumed
@@ -1998,10 +1998,10 @@ subroutine set_BBL_TKE(u, v, h, tv, fluxes, visc, G, GV, US, CS, OBC)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  if (.not.associated(CS)) call MOM_error(FATAL,"set_BBL_TKE: "//&
+  if (.not.associated(CS)) call MOM_error(FATAL, "set_BBL_TKE: "//&
          "Module must be initialized before it is used.")
 
-  if (.not.CS%initialized) call MOM_error(FATAL,"set_BBL_TKE: "//&
+  if (.not.CS%initialized) call MOM_error(FATAL, "set_BBL_TKE: "//&
          "Module must be initialized before it is used.")
 
   if (.not.CS%bottomdraglaw .or. (CS%BBL_effic<=0.0 .and. CS%ePBL_BBL_effic<=0.0 .and. &
@@ -2251,7 +2251,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
           endif
         endif
 
-        ds_dsp1(i,k) = MAX(a(kmb+1),1e-5)
+        ds_dsp1(i,k) = MAX(a(kmb+1), 1e-5)
 
         do k3=2,kmb
 !           ds_dsp1(i,k3) = MAX(a(k3),1e-5)
@@ -2260,7 +2260,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
           ! though they don't exist.  They will be eliminated by the upcoming
           ! call to the mixedlayer code anyway.
           ! The indexing convention is appropriate for the interfaces.
-          ds_dsp1(i,k3) = MAX(a(k3),ds_dsp1(i,k))
+          ds_dsp1(i,k3) = MAX(a(k3), ds_dsp1(i,k))
         enddo
       endif ! (kb(i) <= nz-1)
     enddo ! I-loop.
@@ -2491,7 +2491,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "for an isopycnal layer-formulation.", &
                  default=.false., do_not_log=.not.TKE_to_Kd_used)
 
-   call get_param(param_file, mdl, "INTERNAL_TIDES", CS%use_int_tides, &
+  call get_param(param_file, mdl, "INTERNAL_TIDES", CS%use_int_tides, &
                  "If true, use the code that advances a separate set of "//&
                  "equations for the internal tide energy density.", default=.false.)
 
@@ -2648,7 +2648,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "profile of background diapycnal diffusivity with depth. "//&
                  "This is done via CVMix.", default=.false., do_not_log=.true.)
   if (CS%use_tidal_mixing .and. Bryan_Lewis_diffusivity) &
-    call MOM_error(FATAL,"MOM_Set_Diffusivity: "// &
+    call MOM_error(FATAL, "MOM_Set_Diffusivity: "// &
          "Bryan-Lewis and internal tidal dissipation are both enabled. Choose one.")
 
   CS%useKappaShear = kappa_shear_init(Time, G, GV, US, param_file, CS%diag, CS%kappaShear_CSp)

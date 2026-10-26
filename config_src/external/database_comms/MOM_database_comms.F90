@@ -31,7 +31,7 @@ subroutine database_comms_init(param_file, CS, client_in)
   type(dbclient_type), optional, intent(in   ) :: client_in !< If present, use a previously initialized
                                                           !! Database client
 
-  call MOM_error(WARNING,"dbcomms_init was compiled using the dummy module. If this was\n"//&
+  call MOM_error(WARNING, "dbcomms_init was compiled using the dummy module. If this was\n"//&
                        "a mistake, please follow the instructions in:\n"//&
                        "MOM6/config_src/external/dbclient/README.md")
 end subroutine database_comms_init

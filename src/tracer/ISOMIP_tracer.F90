@@ -44,7 +44,7 @@ integer, parameter :: ntr = 1 !< ntr is the number of tracers in this module.
 !> ISOMIP tracer package control structure
 type, public :: ISOMIP_tracer_CS ; private
   logical :: coupled_tracers = .false.  !< These tracers are not offered to the coupler.
-  character(len = 200) :: tracer_IC_file !< The full path to the IC file, or " " to initialize internally.
+  character(len=200) :: tracer_IC_file !< The full path to the IC file, or " " to initialize internally.
   type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the MOM tracer registry
   real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package, in [conc] (g m-3)?

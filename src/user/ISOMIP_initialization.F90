@@ -140,7 +140,7 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth, US)
 end subroutine ISOMIP_initialize_topography
 
 !> Initialization of thicknesses
-subroutine ISOMIP_initialize_thickness ( h, depth_tot, G, GV, US, param_file, tv, just_read)
+subroutine ISOMIP_initialize_thickness(h, depth_tot, G, GV, US, param_file, tv, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
@@ -173,9 +173,9 @@ subroutine ISOMIP_initialize_thickness ( h, depth_tot, G, GV, US, param_file, tv
   if (.not.just_read) &
     call MOM_mesg("ISOMIP_initialization.F90, ISOMIP_initialize_thickness: setting thickness")
 
-  call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
+  call get_param(param_file, mdl, "MIN_THICKNESS", min_thickness, &
                  'Minimum layer thickness', units='m', default=1.e-3, do_not_log=just_read, scale=US%m_to_Z)
-  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
 
   select case ( coordinateMode(verticalCoordinate) )
@@ -255,7 +255,7 @@ subroutine ISOMIP_initialize_thickness ( h, depth_tot, G, GV, US, param_file, tv
     enddo ; enddo
 
   case default
-      call MOM_error(FATAL,"isomip_initialize: "// &
+      call MOM_error(FATAL, "isomip_initialize: "// &
       "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
 
   end select
@@ -263,8 +263,8 @@ subroutine ISOMIP_initialize_thickness ( h, depth_tot, G, GV, US, param_file, tv
 end subroutine ISOMIP_initialize_thickness
 
 !> Initial values for temperature and salinity
-subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, US, param_file, &
-                                                    eqn_of_state, just_read)
+subroutine ISOMIP_initialize_temperature_salinity(T, S, h, depth_tot, G, GV, US, param_file, &
+                                                  eqn_of_state, just_read)
   type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
@@ -305,7 +305,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
 
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
-  call get_param(param_file, mdl, "ISOMIP_T_SUR",t_sur, &
+  call get_param(param_file, mdl, "ISOMIP_T_SUR", t_sur, &
                  "Temperature at the surface (interface)", &
                  units="degC", default=-1.9, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl, "ISOMIP_S_SUR", s_sur, &
@@ -422,7 +422,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
       enddo ; enddo
 
     case default
-      call MOM_error(FATAL,"isomip_initialize: "// &
+      call MOM_error(FATAL, "isomip_initialize: "// &
       "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
 
   end select
@@ -430,7 +430,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
   ! for debugging
   !i = G%iec ; j = G%jec
   !do k = 1,nz
-  !  call calculate_density(T(i,j,k), S(i,j,k),0.0,rho_tmp,eqn_of_state, scale=US%kg_m3_to_R)
+  !  call calculate_density(T(i,j,k), S(i,j,k), 0.0, rho_tmp, eqn_of_state, scale=US%kg_m3_to_R)
   !  write(mesg,*) 'k,h,T,S,rho,Rlay',k,US%Z_to_m*h(i,j,k),US%C_to_degC*T(i,j,k),US%S_to_ppt*S(i,j,k),rho_tmp,GV%Rlay(k)
   !  call MOM_mesg(mesg,5)
   !enddo
@@ -547,13 +547,13 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
 
   ! Compute min/max density using T_SUR/S_SUR and T_BOT/S_BOT
   call calculate_density(T_sur, S_sur, 0.0, rho_sur, tv%eqn_of_state)
-  !write (mesg,*) 'Surface density in sponge:', rho_sur
+  !write(mesg,*) 'Surface density in sponge:', rho_sur
   ! call MOM_mesg(mesg,5)
   call calculate_density(T_bot, S_bot, 0.0, rho_bot, tv%eqn_of_state)
-  !write (mesg,*) 'Bottom density in sponge:', rho_bot
+  !write(mesg,*) 'Bottom density in sponge:', rho_bot
   ! call MOM_mesg(mesg,5)
   rho_range = rho_bot - rho_sur
-  !write (mesg,*) 'Density range in sponge:', rho_range
+  !write(mesg,*) 'Density range in sponge:', rho_range
   ! call MOM_mesg(mesg,5)
 
   if (use_ALE) then
@@ -607,8 +607,8 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
         enddo ; enddo
 
       case default
-         call MOM_error(FATAL,"ISOMIP_initialize_sponges: "// &
-         "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
+        call MOM_error(FATAL, "ISOMIP_initialize_sponges: "// &
+            "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
 
     end select
 

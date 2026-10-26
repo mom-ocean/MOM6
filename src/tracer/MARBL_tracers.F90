@@ -355,13 +355,13 @@ subroutine configure_MARBL_tracers(GV, US, param_file, CS)
   ! (2) Read marbl settings file and call put_setting()
   ! (2a) only master task opens file
   if (is_root_PE()) then
-     ! read the marbl_in into buffer
-     open(unit=marbl_settings_in, file=CS%marbl_settings_file, iostat=read_error)
-     if (read_error .ne. 0) then
-        write(log_message, '(A, I0, 2A)') "IO ERROR ", read_error, " opening namelist file : ", &
-            trim(CS%marbl_settings_file)
-        call MOM_error(FATAL, log_message)
-     endif
+    ! read the marbl_in into buffer
+    open(unit=marbl_settings_in, file=CS%marbl_settings_file, iostat=read_error)
+    if (read_error .ne. 0) then
+      write(log_message, '(A, I0, 2A)') "IO ERROR ", read_error, " opening namelist file : ", &
+          trim(CS%marbl_settings_file)
+      call MOM_error(FATAL, log_message)
+    endif
   endif
 
   ! (2b) master task reads file and broadcasts line-by-line
@@ -382,14 +382,14 @@ subroutine configure_MARBL_tracers(GV, US, param_file, CS)
 
   ! (2c) we should always reach the EOF to capture the entire file...
   if (.not. is_iostat_end(read_error)) then
-     write(log_message, '(3A, I0)') "IO ERROR reading ", trim(CS%marbl_settings_file), ": ", &
+    write(log_message, '(3A, I0)') "IO ERROR reading ", trim(CS%marbl_settings_file), ": ", &
         read_error
-     call MOM_error(FATAL, log_message)
+    call MOM_error(FATAL, log_message)
   else
-     if (is_root_PE()) then
-       write(log_message, '(3A)') "Read '", trim(CS%marbl_settings_file), "' until EOF."
-       call MOM_error(NOTE, log_message)
-     endif
+    if (is_root_PE()) then
+      write(log_message, '(3A)') "Read '", trim(CS%marbl_settings_file), "' until EOF."
+      call MOM_error(NOTE, log_message)
+    endif
   endif
   if (is_root_PE()) close(marbl_settings_in)
 
@@ -398,10 +398,10 @@ subroutine configure_MARBL_tracers(GV, US, param_file, CS)
   ! (3a) call marbl%init()
   ! TODO: We want to strip gcm_delta_z, gcm_zw, and gcm_zt values out of
   !       init because MOM updates them every time step / every column
-  call MARBL_instances%init(gcm_num_levels = nz, gcm_num_PAR_subcols = CS%ice_ncat + 1, &
-      gcm_num_elements_surface_flux = 1, & ! FIXME: change to number of grid cells on MPI task
-      gcm_delta_z = GV%sInterface(2:nz+1) - GV%sInterface(1:nz), gcm_zw = GV%sInterface(2:nz+1), &
-      gcm_zt = GV%sLayer, unit_system_opt = "mks", lgcm_has_global_ops = .false.) ! FIXME: add global ops
+  call MARBL_instances%init(gcm_num_levels=nz, gcm_num_PAR_subcols=CS%ice_ncat + 1, &
+      gcm_num_elements_surface_flux=1, & ! FIXME: change to number of grid cells on MPI task
+      gcm_delta_z=GV%sInterface(2:nz+1) - GV%sInterface(1:nz), gcm_zw=GV%sInterface(2:nz+1), &
+      gcm_zt=GV%sLayer, unit_system_opt="mks", lgcm_has_global_ops=.false.) ! FIXME: add global ops
   ! Regardless of vertical grid, MOM6 will always use GV%ke levels in all columns
   MARBL_instances%domain%kmt = GV%ke
   if (MARBL_instances%StatusLog%labort_marbl) &
@@ -624,7 +624,7 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
   call get_param(param_file, mdl, "MARBL_TRACERS_IC_FILE", CS%IC_file, &
       "The file in which the MARBL tracers initial values can be found.", &
       default="ecosys_jan_IC_omip_latlon_1x1_180W_c230331.nc")
-  if (scan(CS%IC_file,'/') == 0) then
+  if (scan(CS%IC_file, '/') == 0) then
     ! Add the directory if CS%IC_file is not already a complete path.
     CS%IC_file = trim(slasher(inputdir))//trim(CS%IC_file)
     call log_param(param_file, mdl, "INPUTDIR/MARBL_TRACERS_IC_FILE", CS%IC_file)
@@ -642,7 +642,7 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
     call get_param(param_file, mdl, "MARBL_FESEDFLUX_FILE", CS%fesedflux_file, &
         "The file in which the iron sediment flux forcing field can be found.", &
         default="fesedflux.nc")
-    if (scan(CS%fesedflux_file,'/') == 0) then
+    if (scan(CS%fesedflux_file, '/') == 0) then
       ! Add the directory if CS%fesedflux_file is not already a complete path.
       CS%fesedflux_file = trim(slasher(inputdir))//trim(CS%fesedflux_file)
       call log_param(param_file, mdl, "INPUTDIR/MARBL_TRACERS_FESEDFLUX_FILE", CS%fesedflux_file)
@@ -651,7 +651,7 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
     call get_param(param_file, mdl, "MARBL_FESEDFLUXRED_FILE", CS%fesedfluxred_file, &
         "The file in which the iron sediment flux forcing field can be found.", &
         default="fesedfluxred.nc")
-    if (scan(CS%fesedfluxred_file,'/') == 0) then
+    if (scan(CS%fesedfluxred_file, '/') == 0) then
       ! Add the directory if CS%fesedflux_file is not already a complete path.
       CS%fesedfluxred_file = trim(slasher(inputdir))//trim(CS%fesedfluxred_file)
       call log_param(param_file, mdl, "INPUTDIR/MARBL_TRACERS_FESEDFLUXRED_FILE", CS%fesedfluxred_file)
@@ -660,7 +660,7 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
     call get_param(param_file, mdl, "MARBL_FEVENTFLUX_FILE", CS%feventflux_file, &
         "The file in which the iron vent flux forcing field can be found.", &
         default="feventflux.nc")
-    if (scan(CS%feventflux_file,'/') == 0) then
+    if (scan(CS%feventflux_file, '/') == 0) then
       ! Add the directory if CS%feventflux_file is not already a complete path.
       CS%feventflux_file = trim(slasher(inputdir))//trim(CS%feventflux_file)
       call log_param(param_file, mdl, "INPUTDIR/MARBL_TRACERS_FEVENTFLUX_FILE", CS%feventflux_file)
@@ -678,7 +678,7 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
           "The file in which the river fluxes can be found", &
           default="riv_nut.gnews_gnm.JRA025m_to_tx0.66v1_nnsm_e333r100_190910.20210405.nc")
       ! call get_param(param_file, mdl, "RIV_FLUX_OFFSET_YEAR", CS%riv)
-      if (scan(CS%riv_flux_dataset%file_name,'/') == 0) then
+      if (scan(CS%riv_flux_dataset%file_name, '/') == 0) then
         ! CS%riv_flux_dataset%file_name = trim(inputdir) // trim(CS%riv_flux_dataset%file_name)
         CS%riv_flux_dataset%file_name = trim(slasher(inputdir)) //&
             trim(CS%riv_flux_dataset%file_name)
@@ -736,7 +736,7 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
       call forcing_timeseries_set_time_type_vars(forcing_file_start_year, forcing_file_end_year, &
           forcing_file_data_ref_year, forcing_file_model_ref_year, forcing_file_forcing_year, &
           CS%d14c_dataset(m))
-      if (scan(CS%d14c_dataset(m)%file_name,'/') == 0) then
+      if (scan(CS%d14c_dataset(m)%file_name, '/') == 0) then
         ! Add the directory if CS%d14c_dataset%file_name is not already a complete path.
         CS%d14c_dataset(m)%file_name = trim(slasher(inputdir))//trim(CS%d14c_dataset(m)%file_name)
         call log_param(param_file, mdl, "INPUTDIR/D14C_FILE", CS%d14c_dataset(m)%file_name)
@@ -798,7 +798,7 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
           write(log_message, "(3A)") "'", trim(CS%restoring_I_tau_source), &
               "' is not a valid option for MARBL_TRACER_RESTORING_I_TAU_SOURCE"
           call MOM_error(FATAL, log_message)
-     end select
+      end select
     case DEFAULT
       write(log_message, "(3A)") "'", trim(CS%restoring_source), &
           "' is not a valid option for MARBL_TRACER_RESTORING_SOURCE"
@@ -822,7 +822,7 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
     call query_vardesc(CS%tr_desc(m), name=var_name, &
                        caller="register_MARBL_tracers")
     ! Register the tracer for horizontal advection, diffusion, and restarts.
-    call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, units = units, &
+    call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, units=units, &
                          tr_desc=CS%tr_desc(m), registry_diags=.true., &
                          restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit, &
                          Tr_out=CS%tracer_data(m)%tr_ptr)
@@ -1912,7 +1912,7 @@ subroutine MARBL_tracers_set_forcing(day_start, G, CS)
     ! Read d14c bands
     do m=1,3
       Time_forcing = map_model_time_to_forcing_time(day_start, CS%d14c_dataset(m))
-      call time_interp_external(CS%id_d14c(m),Time_forcing,CS%d14c_bands(m))
+      call time_interp_external(CS%id_d14c(m), Time_forcing, CS%d14c_bands(m))
     enddo
 
     ! Set d14c according to the bands
@@ -1933,7 +1933,7 @@ subroutine MARBL_tracers_set_forcing(day_start, G, CS)
     Time_forcing = map_model_time_to_forcing_time(day_start, CS%riv_flux_dataset)
 
     ! DIN river flux affects NO3, ALK, and ALK_ALT_CO2
-    call time_interp_external(CS%id_din_riv,Time_forcing,riv_flux_in)
+    call time_interp_external(CS%id_din_riv, Time_forcing, riv_flux_in)
 
     if (CS%tracer_inds%no3_ind > 0) then
       do j=js,je ; do i=is,ie
@@ -1953,14 +1953,14 @@ subroutine MARBL_tracers_set_forcing(day_start, G, CS)
       enddo ; enddo
     endif
 
-    call time_interp_external(CS%id_dip_riv,Time_forcing,riv_flux_in)
+    call time_interp_external(CS%id_dip_riv, Time_forcing, riv_flux_in)
     if (CS%tracer_inds%po4_ind > 0) then
       do j=js,je ; do i=is,ie
         CS%RIV_FLUXES(i,j,CS%tracer_inds%po4_ind) = G%mask2dT(i,j) * riv_flux_in(i,j)
       enddo ; enddo
     endif
 
-    call time_interp_external(CS%id_don_riv,Time_forcing,riv_flux_in)
+    call time_interp_external(CS%id_don_riv, Time_forcing, riv_flux_in)
     if (CS%tracer_inds%don_ind > 0) then
       do j=js,je ; do i=is,ie
         CS%RIV_FLUXES(i,j,CS%tracer_inds%don_ind) = G%mask2dT(i,j) * (1. - DONriv_refract) * &
@@ -1974,7 +1974,7 @@ subroutine MARBL_tracers_set_forcing(day_start, G, CS)
       enddo ; enddo
     endif
 
-    call time_interp_external(CS%id_dop_riv,Time_forcing,riv_flux_in)
+    call time_interp_external(CS%id_dop_riv, Time_forcing, riv_flux_in)
     if (CS%tracer_inds%dop_ind > 0) then
       do j=js,je ; do i=is,ie
         CS%RIV_FLUXES(i,j,CS%tracer_inds%dop_ind) = G%mask2dT(i,j) * (1. - DOPriv_refract) * &
@@ -1988,21 +1988,21 @@ subroutine MARBL_tracers_set_forcing(day_start, G, CS)
       enddo ; enddo
     endif
 
-    call time_interp_external(CS%id_dsi_riv,Time_forcing,riv_flux_in)
+    call time_interp_external(CS%id_dsi_riv, Time_forcing, riv_flux_in)
     if (CS%tracer_inds%sio3_ind > 0) then
       do j=js,je ; do i=is,ie
         CS%RIV_FLUXES(i,j,CS%tracer_inds%sio3_ind) = G%mask2dT(i,j) * riv_flux_in(i,j)
       enddo ; enddo
     endif
 
-    call time_interp_external(CS%id_dfe_riv,Time_forcing,riv_flux_in)
+    call time_interp_external(CS%id_dfe_riv, Time_forcing, riv_flux_in)
     if (CS%tracer_inds%fe_ind > 0) then
       do j=js,je ; do i=is,ie
         CS%RIV_FLUXES(i,j,CS%tracer_inds%fe_ind) = G%mask2dT(i,j) * riv_flux_in(i,j)
       enddo ; enddo
     endif
 
-    call time_interp_external(CS%id_dic_riv,Time_forcing,riv_flux_in)
+    call time_interp_external(CS%id_dic_riv, Time_forcing, riv_flux_in)
     if (CS%tracer_inds%dic_ind > 0) then
       do j=js,je ; do i=is,ie
         CS%RIV_FLUXES(i,j,CS%tracer_inds%dic_ind) = G%mask2dT(i,j) * riv_flux_in(i,j)
@@ -2014,7 +2014,7 @@ subroutine MARBL_tracers_set_forcing(day_start, G, CS)
       enddo ; enddo
     endif
 
-    call time_interp_external(CS%id_alk_riv,Time_forcing,riv_flux_in)
+    call time_interp_external(CS%id_alk_riv, Time_forcing, riv_flux_in)
     if (CS%tracer_inds%alk_ind > 0) then
       do j=js,je ; do i=is,ie
         CS%RIV_FLUXES(i,j,CS%tracer_inds%alk_ind) = CS%RIV_FLUXES(i,j,CS%tracer_inds%alk_ind) + &
@@ -2028,7 +2028,7 @@ subroutine MARBL_tracers_set_forcing(day_start, G, CS)
       enddo ; enddo
     endif
 
-    call time_interp_external(CS%id_doc_riv,Time_forcing,riv_flux_in)
+    call time_interp_external(CS%id_doc_riv, Time_forcing, riv_flux_in)
     if (CS%tracer_inds%doc_ind > 0) then
       do j=js,je ; do i=is,ie
         CS%RIV_FLUXES(i,j,CS%tracer_inds%doc_ind) = G%mask2dT(i,j) * (1. - DOCriv_refract) * &
@@ -2045,7 +2045,7 @@ subroutine MARBL_tracers_set_forcing(day_start, G, CS)
 
   ! Tracer restoring
   do m=1,CS%restore_count
-    call time_interp_external(CS%id_tracer_restoring(m),day_start,CS%restoring_in(:,:,:,m))
+    call time_interp_external(CS%id_tracer_restoring(m), day_start, CS%restoring_in(:,:,:,m))
     do k=1,CS%restoring_nz ; do j=js,je ; do i=is,ie
       CS%restoring_in(i,j,k,m) = G%mask2dT(i,j) * CS%restoring_in(i,j,k,m)
     enddo ; enddo ; enddo

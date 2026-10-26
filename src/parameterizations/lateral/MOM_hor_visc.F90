@@ -789,7 +789,7 @@ subroutine horizontal_viscosity_block(u, v, h, uh, vh, diffu, diffv, MEKE, VarMi
       J = OBC%segment(n)%HI%JsdB ; I = OBC%segment(n)%HI%IsdB
       if (apply_OBC_strain) then
         if (OBC%segment(n)%is_N_or_S .and. (J >= Js_vort) .and. (J <= Je_vort)) then
-          do kk=1,kke ; do I=max(OBC%segment(n)%HI%IsdB,Is_vort),min(OBC%segment(n)%HI%IedB,Ie_vort)
+          do kk=1,kke ; do I = max(OBC%segment(n)%HI%IsdB, Is_vort), min(OBC%segment(n)%HI%IedB, Ie_vort)
             k = ksb + kk - 1
 
             select case (OBC%strain_config)
@@ -818,7 +818,7 @@ subroutine horizontal_viscosity_block(u, v, h, uh, vh, diffu, diffv, MEKE, VarMi
             endif
           enddo ; enddo
         elseif (OBC%segment(n)%is_E_or_W .and. (I >= is_vort) .and. (I <= ie_vort)) then
-          do kk=1,kke ; do J=max(OBC%segment(n)%HI%JsdB,js_vort),min(OBC%segment(n)%HI%JedB,je_vort)
+          do kk=1,kke ; do J = max(OBC%segment(n)%HI%JsdB, js_vort), min(OBC%segment(n)%HI%JedB, je_vort)
             k = ksb + kk - 1
 
             select case (OBC%strain_config)
@@ -855,28 +855,28 @@ subroutine horizontal_viscosity_block(u, v, h, uh, vh, diffu, diffv, MEKE, VarMi
         ! are always zeroed out at OBC points, in which case the i-loop below
         ! becomes do i=is-1,ie+1. -RWH
         if ((J >= js-2) .and. (J <= Jeq+1)) then
-          do kk=1,kke ; do i=max(is-2,OBC%segment(n)%HI%isd),min(ie+2,OBC%segment(n)%HI%ied)
+          do kk=1,kke ; do i = max(is-2, OBC%segment(n)%HI%isd), min(ie+2, OBC%segment(n)%HI%ied)
             k = ksb + kk - 1
             h_v(i,J,kk) = h(i,j,k)
           enddo ; enddo
         endif
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
         if ((J >= js-2) .and. (J <= Jeq+1)) then
-          do kk=1,kke ; do i=max(is-2,OBC%segment(n)%HI%isd),min(ie+2,OBC%segment(n)%HI%ied)
+          do kk=1,kke ; do i = max(is-2, OBC%segment(n)%HI%isd), min(ie+2, OBC%segment(n)%HI%ied)
             k = ksb + kk - 1
             h_v(i,J,kk) = h(i,j+1,k)
           enddo ; enddo
         endif
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
         if ((I >= is-2) .and. (I <= Ieq+1)) then
-          do kk=1,kke ; do j=max(js-2,OBC%segment(n)%HI%jsd),min(je+2,OBC%segment(n)%HI%jed)
+          do kk=1,kke ; do j = max(js-2, OBC%segment(n)%HI%jsd), min(je+2, OBC%segment(n)%HI%jed)
             k = ksb + kk - 1
             h_u(I,j,kk) = h(i,j,k)
           enddo ; enddo
         endif
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
         if ((I >= is-2) .and. (I <= Ieq+1)) then
-          do kk=1,kke ; do j=max(js-2,OBC%segment(n)%HI%jsd),min(je+2,OBC%segment(n)%HI%jed)
+          do kk=1,kke ; do j = max(js-2, OBC%segment(n)%HI%jsd), min(je+2, OBC%segment(n)%HI%jed)
             k = ksb + kk - 1
             h_u(I,j,kk) = h(i+1,j,k)
           enddo ; enddo
@@ -888,25 +888,25 @@ subroutine horizontal_viscosity_block(u, v, h, uh, vh, diffu, diffv, MEKE, VarMi
       J = OBC%segment(n)%HI%JsdB ; I = OBC%segment(n)%HI%IsdB
       if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
         if ((J >= js-2) .and. (J <= je)) then
-          do kk=1,kke ; do I=max(is-2,OBC%segment(n)%HI%IsdB),min(Ieq+1,OBC%segment(n)%HI%IedB)
+          do kk=1,kke ; do I = max(is-2, OBC%segment(n)%HI%IsdB), min(Ieq+1, OBC%segment(n)%HI%IedB)
             h_u(I,j+1,kk) = h_u(I,j,kk)
           enddo ; enddo
         endif
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
         if ((J >= js-1) .and. (J <= je+1)) then
-          do kk=1,kke ; do I=max(is-2,OBC%segment(n)%HI%isd),min(Ieq+1,OBC%segment(n)%HI%ied)
+          do kk=1,kke ; do I = max(is-2, OBC%segment(n)%HI%isd), min(Ieq+1, OBC%segment(n)%HI%ied)
             h_u(I,j,kk) = h_u(I,j+1,kk)
           enddo ; enddo
         endif
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
         if ((I >= is-2) .and. (I <= ie)) then
-          do kk=1,kke ; do J=max(js-2,OBC%segment(n)%HI%jsd),min(Jeq+1,OBC%segment(n)%HI%jed)
+          do kk=1,kke ; do J = max(js-2, OBC%segment(n)%HI%jsd), min(Jeq+1, OBC%segment(n)%HI%jed)
             h_v(i+1,J,kk) = h_v(i,J,kk)
           enddo ; enddo
         endif
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
         if ((I >= is-1) .and. (I <= ie+1)) then
-          do kk=1,kke ; do J=max(js-2,OBC%segment(n)%HI%jsd),min(Jeq+1,OBC%segment(n)%HI%jed)
+          do kk=1,kke ; do J = max(js-2, OBC%segment(n)%HI%jsd), min(Jeq+1, OBC%segment(n)%HI%jed)
             h_v(i,J,kk) = h_v(i+1,J,kk)
           enddo ; enddo
         endif
@@ -2582,7 +2582,7 @@ subroutine hor_visc_Leithy_Ah(G, GV, CS, nkk, ksb, kke, is_Kh, ie_Kh, &
     Del2vort_h = 0.25 * ((Del2vort_q(I,J,kk) + Del2vort_q(I-1,J-1,kk)) + &
                          (Del2vort_q(I-1,J,kk) + Del2vort_q(I,J-1,kk)))
     AhLthy = CS%Biharm6_const_xx(i,j) * inv_PI6 * &
-            sqrt(max(0.,Del2vort_h**2 - m_leithy(i,j,kk)*vert_vort_mag_smooth(i,j,kk)**2))
+            sqrt(max(0., Del2vort_h**2 - m_leithy(i,j,kk)*vert_vort_mag_smooth(i,j,kk)**2))
     Ah(i,j,kk) = max(CS%Ah_bg_xx(i,j), AhLthy)
   enddo ; enddo ; enddo
   if (CS%smooth_Ah) then
@@ -3053,7 +3053,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "because it can contribute to numerical instabilities.", &
                  default=.false., do_not_log=.not.((CS%bound_Kh).and.(CS%bound_Ah)))
 
-  call get_param(param_file, mdl, "SMAG_BI_CONST",Smag_bi_const, &
+  call get_param(param_file, mdl, "SMAG_BI_CONST", Smag_bi_const, &
                  "The nondimensional biharmonic Smagorinsky constant, "//&
                  "typically 0.015 - 0.06.", units="nondim", default=0.0, &
                  fail_if_missing=CS%Smagorinsky_Ah, do_not_log=.not.CS%Smagorinsky_Ah)
@@ -3169,10 +3169,10 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
     call get_param(param_file, mdl, "LEITHY_WIDTH", CS%leithy_width, &
                    "Leith+E backscatter is zero below LEITHY_DEPTH+LEITHY_WIDTH.", &
                    units="m", scale=US%m_to_Z, default=400.0)
-    if (CS%leithy_width <= 0.0) call MOM_error(FATAL,"ERROR: LEITHY_WIDTH must be positive ")
+    if (CS%leithy_width <= 0.0) call MOM_error(FATAL, "ERROR: LEITHY_WIDTH must be positive ")
   endif
 
-  if (CS%use_GME .and. .not.split) call MOM_error(FATAL,"ERROR: Currently, USE_GME = True "// &
+  if (CS%use_GME .and. .not.split) call MOM_error(FATAL, "ERROR: Currently, USE_GME = True "// &
                                            "cannot be used with SPLIT=False.")
 
   if (CS%use_GME) then
@@ -3200,10 +3200,10 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   call get_param(param_file, mdl, "KILL_SWITCH_TIMESCALE", CS%KS_timescale, &
                  "A timescale for computing the CFL limit for viscosity "// &
                  "that determines when backscatter is shut off. Default is DT.", &
-                 default= dt ,  units="s", scale=US%s_to_T, do_not_log=.not.(CS%EY24_EBT_BS))
+                 default=dt, units="s", scale=US%s_to_T, do_not_log=.not.(CS%EY24_EBT_BS))
 
   if (CS%no_slip .and. CS%biharmonic) &
-    call MOM_error(FATAL,"ERROR: NOSLIP and BIHARMONIC cannot be defined "// &
+    call MOM_error(FATAL, "ERROR: NOSLIP and BIHARMONIC cannot be defined "// &
                          "at the same time in MOM.")
   if (.not.(CS%Laplacian .or. CS%biharmonic)) then
     ! Only issue inviscid warning if not in single column mode (usually 2x2 domain)
@@ -3459,9 +3459,9 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
         CS%biharm6_const_xx(i,j) = Leith_bi_const * (grid_sp_h3 * grid_sp_h3)
       endif
       if (CS%use_Leithy) then
-        CS%biharm6_const_xx(i,j) = Leith_bi_const * max(G%dxT(i,j),G%dyT(i,j))**6
-        CS%m_const_leithy(i,j) = 0.5 * sqrt(CS%c_K) * max(G%dxT(i,j),G%dyT(i,j))
-        CS%m_leithy_max(i,j) = (4. / max(G%dxT(i,j),G%dyT(i,j))**2) * &
+        CS%biharm6_const_xx(i,j) = Leith_bi_const * max(G%dxT(i,j), G%dyT(i,j))**6
+        CS%m_const_leithy(i,j) = 0.5 * sqrt(CS%c_K) * max(G%dxT(i,j), G%dyT(i,j))
+        CS%m_leithy_max(i,j) = (4. / max(G%dxT(i,j), G%dyT(i,j))**2) * &
                                G%mask2dBu(i,j  ) * G%mask2dBu(i-1,j  ) * &
                                G%mask2dBu(i,j-1) * G%mask2dBu(i-1,j-1)
       endif
@@ -3611,72 +3611,72 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   !    'Fractional Thickness-weighted Zonal Acceleration from Horizontal Viscosity', &
   !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if ((CS%id_hf_diffu > 0) .and. (present(ADp))) then
-  !  call safe_alloc_alloc(CS%hf_diffu,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
-  !  call safe_alloc_ptr(ADp%diag_hfrac_u,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
+  !  call safe_alloc_alloc(CS%hf_diffu, G%IsdB, G%IedB, G%jsd, G%jed, GV%ke)
+  !  call safe_alloc_ptr(ADp%diag_hfrac_u, G%IsdB, G%IedB, G%jsd, G%jed, GV%ke)
   !endif
 
   !CS%id_hf_diffv = register_diag_field('ocean_model', 'hf_diffv', diag%axesCvL, Time, &
   !    'Fractional Thickness-weighted Meridional Acceleration from Horizontal Viscosity', &
   !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if ((CS%id_hf_diffv > 0) .and. (present(ADp))) then
-  !  call safe_alloc_alloc(CS%hf_diffv,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
-  !  call safe_alloc_ptr(ADp%diag_hfrac_v,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
+  !  call safe_alloc_alloc(CS%hf_diffv, G%isd, G%ied, G%JsdB, G%JedB, GV%ke)
+  !  call safe_alloc_ptr(ADp%diag_hfrac_v, G%isd, G%ied, G%JsdB, G%JedB, GV%ke)
   !endif
 
   CS%id_hf_diffu_2d = register_diag_field('ocean_model', 'hf_diffu_2d', diag%axesCu1, Time, &
       'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Horizontal Viscosity', &
       'm s-2', conversion=US%L_T2_to_m_s2)
   if ((CS%id_hf_diffu_2d > 0) .and. (present(ADp))) then
-    call safe_alloc_ptr(ADp%diag_hfrac_u,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
+    call safe_alloc_ptr(ADp%diag_hfrac_u, G%IsdB, G%IedB, G%jsd, G%jed, GV%ke)
   endif
 
   CS%id_hf_diffv_2d = register_diag_field('ocean_model', 'hf_diffv_2d', diag%axesCv1, Time, &
       'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Horizontal Viscosity', &
       'm s-2', conversion=US%L_T2_to_m_s2)
   if ((CS%id_hf_diffv_2d > 0) .and. (present(ADp))) then
-    call safe_alloc_ptr(ADp%diag_hfrac_v,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
+    call safe_alloc_ptr(ADp%diag_hfrac_v, G%isd, G%ied, G%JsdB, G%JedB, GV%ke)
   endif
 
   CS%id_h_diffu = register_diag_field('ocean_model', 'h_diffu', diag%axesCuL, Time, &
       'Thickness Multiplied Zonal Acceleration from Horizontal Viscosity', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if ((CS%id_h_diffu > 0) .and. (present(ADp))) then
-    call safe_alloc_ptr(ADp%diag_hu,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
+    call safe_alloc_ptr(ADp%diag_hu, G%IsdB, G%IedB, G%jsd, G%jed, GV%ke)
   endif
 
   CS%id_h_diffv = register_diag_field('ocean_model', 'h_diffv', diag%axesCvL, Time, &
       'Thickness Multiplied Meridional Acceleration from Horizontal Viscosity', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if ((CS%id_h_diffv > 0) .and. (present(ADp))) then
-    call safe_alloc_ptr(ADp%diag_hv,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
+    call safe_alloc_ptr(ADp%diag_hv, G%isd, G%ied, G%JsdB, G%JedB, GV%ke)
   endif
 
   CS%id_intz_diffu_2d = register_diag_field('ocean_model', 'intz_diffu_2d', diag%axesCu1, Time, &
       'Depth-integral of Zonal Acceleration from Horizontal Viscosity', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if ((CS%id_intz_diffu_2d > 0) .and. (present(ADp))) then
-    call safe_alloc_ptr(ADp%diag_hu,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
+    call safe_alloc_ptr(ADp%diag_hu, G%IsdB, G%IedB, G%jsd, G%jed, GV%ke)
   endif
 
   CS%id_intz_diffv_2d = register_diag_field('ocean_model', 'intz_diffv_2d', diag%axesCv1, Time, &
       'Depth-integral of Meridional Acceleration from Horizontal Viscosity', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if ((CS%id_intz_diffv_2d > 0) .and. (present(ADp))) then
-    call safe_alloc_ptr(ADp%diag_hv,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
+    call safe_alloc_ptr(ADp%diag_hv, G%isd, G%ied, G%JsdB, G%JedB, GV%ke)
   endif
 
   CS%id_diffu_visc_rem = register_diag_field('ocean_model', 'diffu_visc_rem', diag%axesCuL, Time, &
       'Zonal Acceleration from Horizontal Viscosity multiplied by viscous remnant', &
       'm s-2', conversion=US%L_T2_to_m_s2)
   if ((CS%id_diffu_visc_rem > 0) .and. (present(ADp))) then
-    call safe_alloc_ptr(ADp%visc_rem_u,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
+    call safe_alloc_ptr(ADp%visc_rem_u, G%IsdB, G%IedB, G%jsd, G%jed, GV%ke)
   endif
 
   CS%id_diffv_visc_rem = register_diag_field('ocean_model', 'diffv_visc_rem', diag%axesCvL, Time, &
       'Meridional Acceleration from Horizontal Viscosity multiplied by viscous remnant', &
       'm s-2', conversion=US%L_T2_to_m_s2)
   if ((CS%id_diffv_visc_rem > 0) .and. (present(ADp))) then
-    call safe_alloc_ptr(ADp%visc_rem_v,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
+    call safe_alloc_ptr(ADp%visc_rem_v, G%isd, G%ied, G%JsdB, G%JedB, GV%ke)
   endif
 
   if (CS%biharmonic) then
@@ -3750,7 +3750,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
         'GME coefficient at h Points', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
     CS%id_GME_coeff_q = register_diag_field('ocean_model', 'GME_coeff_q', diag%axesBL, Time, &
         'GME coefficient at q Points', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
-    CS%id_FrictWork_GME = register_diag_field('ocean_model','FrictWork_GME',diag%axesTL,Time,&
+    CS%id_FrictWork_GME = register_diag_field('ocean_model', 'FrictWork_GME', diag%axesTL, Time, &
         'Integral work done by lateral friction terms in GME (excluding diffusion of energy)', &
         'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
   endif
@@ -3762,20 +3762,20 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
         'Backscatter coefficient at q points', units='m2 s-1', conversion=US%L_to_m**2*US%s_to_T)
   endif
 
-  CS%id_FrictWork = register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
+  CS%id_FrictWork = register_diag_field('ocean_model', 'FrictWork', diag%axesTL, Time, &
       'Integral work done by lateral friction terms. If GME is turned on, this '//&
       'includes the GME contribution.', &
       'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
-  CS%id_FrictWorkIntz = register_diag_field('ocean_model','FrictWorkIntz',diag%axesT1,Time,      &
+  CS%id_FrictWorkIntz = register_diag_field('ocean_model', 'FrictWorkIntz', diag%axesT1, Time, &
       'Depth integrated work done by lateral friction', &
       'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2, &
       cmor_field_name='dispkexyfo',                                                              &
-      cmor_long_name='Depth integrated ocean kinetic energy dissipation due to lateral friction',&
+      cmor_long_name='Depth integrated ocean kinetic energy dissipation due to lateral friction', &
       cmor_standard_name='ocean_kinetic_energy_dissipation_per_unit_area_due_to_xy_friction')
-  CS%id_FrictWork_bh = register_diag_field('ocean_model','FrictWork_bh',diag%axesTL,Time,&
+  CS%id_FrictWork_bh = register_diag_field('ocean_model', 'FrictWork_bh', diag%axesTL, Time,&
       'Integral work done by the biharmonic lateral friction terms.', &
       'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
-  CS%id_FrictWorkIntz_bh = register_diag_field('ocean_model','FrictWorkIntz_bh',diag%axesT1,Time,&
+  CS%id_FrictWorkIntz_bh = register_diag_field('ocean_model', 'FrictWorkIntz_bh', diag%axesT1, Time, &
       'Depth integrated work done by the biharmonic lateral friction', &
       'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
 

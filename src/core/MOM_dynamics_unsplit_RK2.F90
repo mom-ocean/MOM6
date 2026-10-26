@@ -266,7 +266,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 
   dyn_p_surf = associated(p_surf_begin) .and. associated(p_surf_end)
   if (dyn_p_surf) then
-    call safe_alloc_ptr(p_surf,G%isd,G%ied,G%jsd,G%jed) ; p_surf(:,:) = 0.0
+    call safe_alloc_ptr(p_surf, G%isd, G%ied, G%jsd, G%jed) ; p_surf(:,:) = 0.0
   else
     p_surf => forces%p_surf
   endif
@@ -279,7 +279,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   endif
 
 ! diffu = horizontal viscosity terms (u,h)
-  call enable_averages(dt,Time_local, CS%diag)
+  call enable_averages(dt, Time_local, CS%diag)
   call cpu_clock_begin(id_clock_horvisc)
   call horizontal_viscosity(u_in, v_in, h_in, uh, vh, CS%diffu, CS%diffv, MEKE, VarMix, &
                             G, GV, US, CS%hor_visc, tv, dt, STOCH=STOCH)

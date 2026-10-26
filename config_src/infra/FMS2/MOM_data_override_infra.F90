@@ -26,9 +26,9 @@ contains
 !> Initialize the data override capability and set the domains for the ocean and ice components.
 !> There should be a call to impose_data_init before impose_data is called.
 subroutine impose_data_init(MOM_domain_in, Ocean_domain_in, Ice_domain_in)
-  type (MOM_domain_type), intent(in), optional :: MOM_domain_in
-  type (domain2d),        intent(in), optional :: Ocean_domain_in
-  type (domain2d),        intent(in), optional :: Ice_domain_in
+  type(MOM_domain_type), intent(in), optional :: MOM_domain_in
+  type(domain2d),        intent(in), optional :: Ocean_domain_in
+  type(domain2d),        intent(in), optional :: Ice_domain_in
 
   if (present(MOM_domain_in)) then
     call data_override_init(Ocean_domain_in=MOM_domain_in%mpp_domain, Ice_domain_in=Ice_domain_in)

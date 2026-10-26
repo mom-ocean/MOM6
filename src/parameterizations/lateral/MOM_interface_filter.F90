@@ -284,11 +284,11 @@ subroutine filter_interface(h, e, Lsm2_u, Lsm2_v, uhD, vhD, tv, G, GV, US, halo_
   do j=js-1,je+1
     do i=is-1,ie+1
       h_avail_rsum(i,j,1) = 0.0
-      h_avail(i,j,1) = max(0.25*G%areaT(i,j)*(h(i,j,1)-GV%Angstrom_H),0.0)
+      h_avail(i,j,1) = max(0.25*G%areaT(i,j)*(h(i,j,1)-GV%Angstrom_H), 0.0)
       h_avail_rsum(i,j,2) = h_avail(i,j,1)
     enddo
     do k=2,nz ; do i=is-1,ie+1
-      h_avail(i,j,k) = max(0.25*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H),0.0)
+      h_avail(i,j,k) = max(0.25*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H), 0.0)
       h_avail_rsum(i,j,k+1) = h_avail_rsum(i,j,k) + h_avail(i,j,k)
     enddo ; enddo
   enddo

@@ -271,7 +271,7 @@ real function x(this, k, t)
   else
     ! Constant (or inconsistent) profile (ul=ur, a6=?): infer position from adjacent cell slopes.
     x = 0.5 ! fallback
-    slp = this%ul(min(k+1,this%n)) - this%ur(max(k-1,1))
+    slp = this%ul(min(k+1, this%n)) - this%ur(max(k-1, 1))
     if (abs(slp) > 0.) x = 0.5 + sign( 0.5, slp ) ! either 0 or 1
   endif
 end function x

@@ -33,7 +33,7 @@ public adjustment_initialize_temperature_salinity
 contains
 
 !> Initializes the layer thicknesses in the adjustment test case
-subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read)
+subroutine adjustment_initialize_thickness( h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type

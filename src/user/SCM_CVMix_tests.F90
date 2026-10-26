@@ -103,7 +103,7 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read)
   call get_param(param_file, mdl, "SCM_L2_DSDZ", LowerLayerdSdZ,  &
                  'Initial salinity stratification in layer 2', &
                  units='PPT/m', default=0.0, scale=US%ppt_to_S*US%Z_to_m, do_not_log=just_read)
-  call get_param(param_file, mdl, "SCM_L2_MINTEMP",LowerLayerMinTemp, &
+  call get_param(param_file, mdl, "SCM_L2_MINTEMP", LowerLayerMinTemp, &
                  'Layer 2 minimum temperature', units="degC", default=4.0, scale=US%degC_to_C, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
@@ -115,7 +115,7 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read)
       bottom = bottom - h(i,j,k)       ! Interface below layer [Z ~> m]
       zC = 0.5*( top + bottom )        ! Z of middle of layer [Z ~> m]
       DZ = min(0., zC + UpperLayerTempMLD)
-      T(i,j,k) = max(LowerLayerMinTemp,LowerLayerTemp + LowerLayerdTdZ * DZ)
+      T(i,j,k) = max(LowerLayerMinTemp, LowerLayerTemp + LowerLayerdTdZ * DZ)
       DZ = min(0., zC + UpperLayerSaltMLD)
       S(i,j,k) = LowerLayerSalt + LowerLayerdSdZ * DZ
       top = bottom

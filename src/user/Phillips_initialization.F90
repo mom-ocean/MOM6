@@ -430,7 +430,7 @@ subroutine Phillips_initialize_topography(D, G, param_file, max_depth, US)
   call get_param(param_file, mdl, "PHILLIPS_HTOP", Htop, &
                  "The maximum height of the topography.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.true.)
-! Htop=0.375*max_depth     ! max height of topog. above max_depth
+! Htop = 0.375*max_depth   ! max height of topog. above max_depth
   Wtop = 0.5*G%len_lat     ! meridional width of drake and mount
   Ltop = 0.25*G%len_lon    ! zonal width of topographic features
   offset = 0.1*G%len_lat   ! meridional offset from center
@@ -440,7 +440,7 @@ subroutine Phillips_initialize_topography(D, G, param_file, max_depth, US)
   x1 = G%west_lon+0.1*G%len_lon ; x2 = x1+Ltop ; x3 = x1+dist ; x4 = x3+3.0/2.0*Ltop
 
   do j=js,je ; do i=is,ie
-    D(i,j)=0.0
+    D(i,j) = 0.0
     if (G%geoLonT(i,j)>x1 .and. G%geoLonT(i,j)<x2) then
       D(i,j) = Htop*sin(PI*(G%geoLonT(i,j)-x1)/(x2-x1))**2
       if (G%geoLatT(i,j)>y1 .and. G%geoLatT(i,j)<y2) then

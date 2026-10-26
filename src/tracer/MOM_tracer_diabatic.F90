@@ -46,9 +46,9 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                                                                      !! convert_flux_in is .false.
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir
                                                                      !! [CU R Z ~> CU kg m-2]
-  real,                             optional,intent(in)    :: sink_rate !< rate at which the tracer sinks
+  real,                            optional, intent(in)    :: sink_rate !< rate at which the tracer sinks
                                                                      !! [Z T-1 ~> m s-1]
-  logical,                          optional,intent(in)    :: convert_flux_in !< True if the specified sfc_flux needs
+  logical,                         optional, intent(in)    :: convert_flux_in !< True if the specified sfc_flux needs
                                                                      !! to be integrated in time
 
   ! local variables
@@ -243,9 +243,9 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
                                                                      !! convert_flux_in is .false.
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir
                                                                      !! [CU R Z ~> CU kg m-2]
-  real,                             optional,intent(in)    :: sink_rate !< rate at which the tracer sinks
+  real,                            optional, intent(in)    :: sink_rate !< rate at which the tracer sinks
                                                                      !! [Z T-1 ~> m s-1]
-  logical,                          optional,intent(in)    :: convert_flux_in !< True if the specified sfc_flux needs
+  logical,                         optional, intent(in)    :: convert_flux_in !< True if the specified sfc_flux needs
                                                                      !! to be integrated in time
 
   ! local variables

@@ -39,7 +39,7 @@ use MOM_entrain_diffusive,   only : entrainment_diffusive, entrain_diffusive_ini
 use MOM_entrain_diffusive,   only : entrain_diffusive_CS
 use MOM_EOS,                 only : calculate_density, calculate_density_derivs, calculate_TFreeze
 use MOM_EOS,                 only : calculate_specific_vol_derivs, EOS_domain
-use MOM_error_handler,       only : MOM_error, FATAL, WARNING, callTree_showQuery,MOM_mesg
+use MOM_error_handler,       only : MOM_error, FATAL, WARNING, callTree_showQuery, MOM_mesg
 use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,         only : get_param, log_version, param_file_type, read_param
 use MOM_forcing_type,        only : forcing, MOM_forcing_chksum, find_ustar
@@ -526,7 +526,7 @@ subroutine diabatic(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Time_end, &
     ! Surface Mixed Layer diagnostic
     if (CS%MLD_param_EN1) then
       call diagnoseMLDbyEnergy((/CS%id_MLD_EN1, CS%id_MLD_EN2, CS%id_MLD_EN3/), h, tv, G, GV, US, CS%MLD_En_vals, &
-                               (/1,nz/), CS%diag, OM4_iteration=CS%use_OM4_MLD_En_iter,MLD_out=visc%MLD_param)
+                               (/1,nz/), CS%diag, OM4_iteration=CS%use_OM4_MLD_En_iter, MLD_out=visc%MLD_param)
       call convert_MLD_to_ML_thickness(visc%MLD_param, h, visc%h_ML_param, tv, G, GV)
     else
       call diagnoseMLDbyEnergy((/CS%id_MLD_EN1, CS%id_MLD_EN2, CS%id_MLD_EN3/), h, tv, G, GV, US, CS%MLD_En_vals, &
@@ -1177,7 +1177,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Tim
     if (CS%id_N2_temp_dd>0) call post_data(CS%id_N2_temp_dd, N2_temp, CS%diag)
 
     if (CS%Use_KdWork_diag) then
-       call KdWork_diagnostics(G,GV,US,CS%diag,CS%VBF,N2_salt,N2_temp,dz)
+      call KdWork_diagnostics(G, GV, US, CS%diag, CS%VBF, N2_salt, N2_temp, dz)
     endif
 
     call deallocate_VBF_CS(CS%VBF)
@@ -1850,7 +1850,7 @@ subroutine diabatic_ALE(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Time_end, 
     if (CS%id_N2_temp_dd>0) call post_data(CS%id_N2_temp_dd, N2_temp, CS%diag)
 
     if (CS%Use_KdWork_diag) then
-       call KdWork_diagnostics(G,GV,US,CS%diag,CS%VBF,N2_salt,N2_temp,dz)
+      call KdWork_diagnostics(G, GV, US, CS%diag, CS%VBF, N2_salt, N2_temp, dz)
     endif
 
     call deallocate_VBF_CS(CS%VBF)
@@ -3458,7 +3458,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   call get_param(param_file, mdl, "DO_BRINE_PLUME", do_brine_plume, &
                  "If true, enables a brine plume parameterizations (not logged here)", &
-                 do_not_log=.true.,default=.false.)
+                 do_not_log=.true., default=.false.)
   if (do_brine_plume) then
     call get_param(param_file, mdl, "BRINE_PLUME_MLD_DEF", brine_plume_mld_def, &
                    "A string that determines which mixed/mixing depth is used in setting "//&
@@ -3472,7 +3472,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     case ('H_ePBL')
       CS%MLD_param_ePBL = .true.
     case default
-      call MOM_error(FATAL,"Invalid choice for BRINE_PLUME_MLD_DEF.  Valid options are"//&
+      call MOM_error(FATAL, "Invalid choice for BRINE_PLUME_MLD_DEF.  Valid options are"//&
                      "MLD_003, MLD_EN1, or H_ePBL.")
     end select
 
@@ -3501,7 +3501,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   if (.not.CS%useALEalgorithm) then
     CS%id_wd = register_diag_field('ocean_model', 'wd', diag%axesTi, Time, &
       'Diapycnal velocity', 'm s-1', conversion=GV%H_to_m*US%s_to_T)
-    if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
+    if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel, isd, ied, jsd, jed, nz+1)
 
     CS%id_dudt_dia = register_diag_field('ocean_model', 'dudt_dia', diag%axesCuL, Time, &
         'Zonal Acceleration from Diapycnal Mixing', 'm s-2', conversion=US%L_T2_to_m_s2)
@@ -3511,44 +3511,44 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     CS%id_hf_dudt_dia_2d = register_diag_field('ocean_model', 'hf_dudt_dia_2d', diag%axesCu1, Time, &
         'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Diapycnal Mixing', &
         'm s-2', conversion=US%L_T2_to_m_s2)
-    if (CS%id_hf_dudt_dia_2d > 0) call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+    if (CS%id_hf_dudt_dia_2d > 0) call safe_alloc_ptr(ADp%diag_hfrac_u, IsdB, IedB, jsd, jed, nz)
 
     CS%id_hf_dvdt_dia_2d = register_diag_field('ocean_model', 'hf_dvdt_dia_2d', diag%axesCv1, Time, &
         'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Diapycnal Mixing', &
         'm s-2', conversion=US%L_T2_to_m_s2)
-    if (CS%id_hf_dvdt_dia_2d > 0)  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+    if (CS%id_hf_dvdt_dia_2d > 0)  call safe_alloc_ptr(ADp%diag_hfrac_v, isd, ied, JsdB, JedB, nz)
 
     if ((CS%id_dudt_dia > 0) .or. (CS%id_hf_dudt_dia_2d > 0)) &
-      call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
+      call safe_alloc_ptr(ADp%du_dt_dia, IsdB, IedB, jsd, jed, nz)
     if ((CS%id_dvdt_dia > 0) .or. (CS%id_hf_dvdt_dia_2d > 0)) &
-      call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
+      call safe_alloc_ptr(ADp%dv_dt_dia, isd, ied, JsdB, JedB, nz)
   endif
 
   if (use_temperature) then
-    CS%id_Tdif = register_diag_field('ocean_model',"Tflx_dia_diff", diag%axesTi, &
+    CS%id_Tdif = register_diag_field('ocean_model', "Tflx_dia_diff", diag%axesTi, &
         Time, "Diffusive diapycnal temperature flux across interfaces", &
         units="degC m s-1", conversion=US%C_to_degC*GV%H_to_m*US%s_to_T)
     if (.not.CS%useALEalgorithm) then
-      CS%id_Tadv = register_diag_field('ocean_model',"Tflx_dia_adv", diag%axesTi, &
+      CS%id_Tadv = register_diag_field('ocean_model', "Tflx_dia_adv", diag%axesTi, &
           Time, "Advective diapycnal temperature flux across interfaces", &
           units="degC m s-1", conversion=US%C_to_degC*GV%H_to_m*US%s_to_T)
     endif
-    CS%id_Sdif = register_diag_field('ocean_model',"Sflx_dia_diff", diag%axesTi, &
+    CS%id_Sdif = register_diag_field('ocean_model', "Sflx_dia_diff", diag%axesTi, &
         Time, "Diffusive diapycnal salnity flux across interfaces", &
         units="psu m s-1", conversion=US%S_to_ppt*GV%H_to_m*US%s_to_T)
     if (.not.CS%useALEalgorithm) then
-      CS%id_Sadv = register_diag_field('ocean_model',"Sflx_dia_adv", diag%axesTi, &
+      CS%id_Sadv = register_diag_field('ocean_model', "Sflx_dia_adv", diag%axesTi, &
           Time, "Advective diapycnal salnity flux across interfaces", &
           units="psu m s-1", conversion=US%S_to_ppt*GV%H_to_m*US%s_to_T)
     endif
 
-    CS%id_N2_dd = register_diag_field('ocean_model',"N2_diabatic", diag%axesTi, &
+    CS%id_N2_dd = register_diag_field('ocean_model', "N2_diabatic", diag%axesTi, &
         Time, "Squared buoyancy frequency diagnosed after diffusion applied in thermodynamic timestep.", &
         "s-2", conversion=US%s_to_T**2)
-    CS%id_N2_temp_dd = register_diag_field('ocean_model',"N2_temp_diabatic", diag%axesTi, &
+    CS%id_N2_temp_dd = register_diag_field('ocean_model', "N2_temp_diabatic", diag%axesTi, &
          Time, "Squared buoyancy frequency due to temperature stratification diagnosed after diffusion applied "//&
          "in thermodynamic timestep.", "s-2", conversion=US%s_to_T**2)
-    CS%id_N2_salt_dd = register_diag_field('ocean_model',"N2_salt_diabatic", diag%axesTi, &
+    CS%id_N2_salt_dd = register_diag_field('ocean_model', "N2_salt_diabatic", diag%axesTi, &
          Time, "Squared buoyancy frequency due to salinity stratification diagnosed after diffusion applied "//&
          "in thermodynamic timestep.", "s-2", conversion=US%s_to_T**2)
     if (CS%id_N2_dd>0 .or. CS%id_N2_temp_dd>0 .or. CS%id_N2_salt_dd>0) CS%Use_N2_diag = .true.
@@ -3597,7 +3597,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
          units='m', conversion=US%Z_to_m)
     if ((CS%id_MLD_EN1>0).or. (CS%id_MLD_EN2>0).or. (CS%id_MLD_EN3>0).or. &
          (CS%id_BMLD_EN1>0).or.(CS%id_BMLD_EN2>0).or.(CS%id_BMLD_EN3>0)) then
-       call get_param(param_file, mdl, "USE_OM4_MLD_EN_ITER", CS%use_OM4_MLD_En_iter, &
+      call get_param(param_file, mdl, "USE_OM4_MLD_EN_ITER", CS%use_OM4_MLD_En_iter, &
             "If true, uses an older set of iteration coefficients in computing the PE based "//&
             "surface MLD to reproduce OM4 era models.  False uses an updated (general) method.",&
             default=.true.)
@@ -3617,11 +3617,11 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     endif
   endif
 
-  call KdWork_init(Time, G,GV,US,diag,CS%VBF,CS%Use_KdWork_diag)
+  call KdWork_init(Time, G, GV, US, diag, CS%VBF, CS%Use_KdWork_diag)
   if (CS%Use_KdWork_diag.and.(.not.useALEalgorithm)) &
-    call MOM_error(WARNING,"The KdWork diagnostics are not fully implemented for use in layer mode.")
+    call MOM_error(WARNING, "The KdWork diagnostics are not fully implemented for use in layer mode.")
   if (CS%Use_KdWork_diag.and.(CS%use_legacy_diabatic)) &
-    call MOM_error(WARNING,"The KdWork diagnostics are only approximate with the legacy diabatic driver.")
+    call MOM_error(WARNING, "The KdWork diagnostics are only approximate with the legacy diabatic driver.")
 
   call get_param(param_file, mdl, "DIAG_MLD_DENSITY_DIFF", CS%MLDdensityDifference, &
                  "The density difference used to determine a diagnostic mixed "//&
@@ -3789,7 +3789,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
         'boundary_forcing_salt_tendency', diag%axesTL, Time,             &
         'Boundary forcing salt tendency', &
         'kg m-2 s-1', conversion=US%S_to_ppt*0.001*GV%H_to_RZ*US%RZ_T_to_kg_m2s, &
-        v_extensive = .true.)
+        v_extensive=.true.)
     if (CS%id_boundary_forcing_salt_tend > 0) then
       CS%boundary_forcing_tendency_diag = .true.
     endif
@@ -3944,7 +3944,7 @@ subroutine register_diabatic_restarts(G, GV, US, param_file, int_tide_CSp, resta
     allocate(CS)
   endif
 
-  use_int_tides=.false.
+  use_int_tides = .false.
 
   call read_param(param_file, "INTERNAL_TIDES", use_int_tides)
 

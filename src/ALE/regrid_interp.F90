@@ -43,17 +43,17 @@ public regridding_set_ppolys, build_and_interpolate_grid
 public set_interp_scheme, set_interp_extrap, set_interp_answer_date
 
 ! List of interpolation schemes
-integer, parameter :: INTERPOLATION_P1M_H2     = 0 !< O(h^2)
-integer, parameter :: INTERPOLATION_P1M_H4     = 1 !< O(h^2)
-integer, parameter :: INTERPOLATION_P1M_IH4    = 2 !< O(h^2)
-integer, parameter :: INTERPOLATION_PLM        = 3 !< O(h^2)
-integer, parameter :: INTERPOLATION_PPM_CW     =10 !< O(h^3)
-integer, parameter :: INTERPOLATION_PPM_H4     = 4 !< O(h^3)
-integer, parameter :: INTERPOLATION_PPM_IH4    = 5 !< O(h^3)
-integer, parameter :: INTERPOLATION_P3M_IH4IH3 = 6 !< O(h^4)
-integer, parameter :: INTERPOLATION_P3M_IH6IH5 = 7 !< O(h^4)
-integer, parameter :: INTERPOLATION_PQM_IH4IH3 = 8 !< O(h^4)
-integer, parameter :: INTERPOLATION_PQM_IH6IH5 = 9 !< O(h^5)
+integer, parameter :: INTERPOLATION_P1M_H2     =  0 !< O(h^2)
+integer, parameter :: INTERPOLATION_P1M_H4     =  1 !< O(h^2)
+integer, parameter :: INTERPOLATION_P1M_IH4    =  2 !< O(h^2)
+integer, parameter :: INTERPOLATION_PLM        =  3 !< O(h^2)
+integer, parameter :: INTERPOLATION_PPM_CW     = 10 !< O(h^3)
+integer, parameter :: INTERPOLATION_PPM_H4     =  4 !< O(h^3)
+integer, parameter :: INTERPOLATION_PPM_IH4    =  5 !< O(h^3)
+integer, parameter :: INTERPOLATION_P3M_IH4IH3 =  6 !< O(h^4)
+integer, parameter :: INTERPOLATION_P3M_IH6IH5 =  7 !< O(h^4)
+integer, parameter :: INTERPOLATION_PQM_IH4IH3 =  8 !< O(h^4)
+integer, parameter :: INTERPOLATION_PQM_IH6IH5 =  9 !< O(h^5)
 
 !>@{ Interpolant degrees
 integer, parameter :: DEGREE_1 = 1, DEGREE_2 = 2, DEGREE_3 = 3, DEGREE_4 = 4
@@ -321,8 +321,8 @@ subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefs, &
   ! Find coordinates for interior target values
   do k = 2,n1
     t = target_values(k)
-    x1(k) = get_polynomial_coordinate ( n0, h0, x0, ppoly0_E, ppoly0_coefs, t, degree, &
-                                        answer_date=answer_date )
+    x1(k) = get_polynomial_coordinate(n0, h0, x0, ppoly0_E, ppoly0_coefs, t, degree, &
+                                      answer_date=answer_date)
     h1(k-1) = x1(k) - x1(k-1)
   enddo
   h1(n1) = x1(n1+1) - x1(n1)
@@ -528,7 +528,7 @@ integer function interpolation_scheme(interp_scheme)
     case ("PQM_IH4IH3"); interpolation_scheme = INTERPOLATION_PQM_IH4IH3
     case ("PQM_IH6IH5"); interpolation_scheme = INTERPOLATION_PQM_IH6IH5
     case default ; call MOM_error(FATAL, "regrid_interp: "//&
-     "Unrecognized choice for INTERPOLATION_SCHEME ("//trim(interp_scheme)//").")
+        "Unrecognized choice for INTERPOLATION_SCHEME ("//trim(interp_scheme)//").")
   end select
 end function interpolation_scheme
 

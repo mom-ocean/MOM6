@@ -225,7 +225,7 @@ real function x(this, k, t)
     x = 0.5 + slp * sign(0.5, t - this%u_mean(k))
   else
     ! slp=0 so estimate "direction" from neighbors
-    slp = this%f(min(k+1,this%n), 0.) - this%f(max(k-1,1), 1.)
+    slp = this%f(min(k+1, this%n), 0.) - this%f(max(k-1, 1), 1.)
     if ( abs(slp) > 0. ) slp = sign(1., slp)
     ! if t>u_mean & slp=1 then x=1
     ! if t<u_mean & slp=1 then x=0
@@ -269,7 +269,7 @@ subroutine remap_to_sub_grid(this, h0, u0, n1, h_sub, &
   real :: dh0_eff ! Running sum of source cell thickness [H]
   integer :: i0_last_thick_cell, n0
 ! real :: u0_min(this%n), u0_max(this%n) ! Min/max of u0 for each source cell [A]
-! real :: ul,ur ! Left/right edge values [A]
+! real :: ul, ur ! Left/right edge values [A]
 
   n0 = this%n
 

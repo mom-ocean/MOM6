@@ -96,7 +96,7 @@ subroutine MOM_initialize_coord(GV, US, PF, tv, max_depth)
       call BFB_set_coord(GV%Rlay, GV%g_prime, GV, US, PF)
     case ("none", "ALE")
       call set_coord_to_none(GV%Rlay, GV%g_prime, GV, US, PF)
-    case default ; call MOM_error(FATAL,"MOM_initialize_coord: "// &
+    case default ; call MOM_error(FATAL, "MOM_initialize_coord: "// &
       "Unrecognized coordinate setup"//trim(config))
   end select
   ! There are nz+1 values of g_prime because it is an interface field, but the value at the bottom
@@ -446,7 +446,7 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
   integer :: k, nz
   character(len=40)  :: mdl = "set_coord_from_file" ! This subroutine's name.
   character(len=40)  :: coord_var
-  character(len=200) :: filename,coord_file,inputdir ! Strings for file/path
+  character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
   nz = GV%ke
 
   call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")
@@ -596,8 +596,8 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
 
   filepath = trim(directory) // trim("Vertical_coordinate.nc")
 
-  vars(1) = var_desc("R","kilogram meter-3","Target Potential Density",'1','L','1')
-  vars(2) = var_desc("g","meter second-2","Reduced gravity",'1','i','1')
+  vars(1) = var_desc("R", "kilogram meter-3", "Target Potential Density", '1', 'L', '1')
+  vars(2) = var_desc("g", "meter second-2", "Reduced gravity", '1', 'i', '1')
 
   call create_MOM_file(IO_handle, trim(filepath), vars, 2, fields, &
       SINGLE_FILE, GV=GV)

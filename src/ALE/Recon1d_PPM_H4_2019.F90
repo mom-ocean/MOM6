@@ -181,7 +181,7 @@ subroutine reconstruct(this, h, u)
     ! is assumed to be the same as the left boundary cell and the right neighbor of the right
     ! boundary cell is assumed to be the same as the right boundary cell. This effectively makes
     ! boundary cells look like extrema.
-    km1 = max(1,k-1) ; kp1 = min(k+1,N)
+    km1 = max(1, k-1) ; kp1 = min(k+1, N)
 
     slope_x_h = 0.0
     sigma_l = ( u(k) - u(km1) )
@@ -195,7 +195,7 @@ subroutine reconstruct(this, h, u)
     ! The limiter is used in the local coordinate system to each cell, so for convenience store
     ! the slope times a half grid spacing.  (See White and Adcroft JCP 2008 Eqs 19 and 20)
     if ( (sigma_l * sigma_r) > 0.0 ) &
-      slope_x_h = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
+      slope_x_h = sign( min(abs(sigma_l), abs(sigma_c), abs(sigma_r)), sigma_c )
 
     ! Limit the edge values
     if ( (u(km1)-edge_values(k,1)) * (edge_values(k,1)-u(k)) < 0.0 ) then
@@ -253,7 +253,7 @@ subroutine reconstruct(this, h, u)
     ! This checks that the difference in edge values is representable
     ! and avoids overshoot problems due to round off.
     !### The 1.e-60 needs to have units of [A], so this dimensionally inconsistent.
-    if ( abs( edge_r - edge_l )<max(1.e-60,epsilon(u_c)*abs(u_c)) ) then
+    if ( abs( edge_r - edge_l ) < max(1.e-60, epsilon(u_c)*abs(u_c)) ) then
       edge_l = u_c
       edge_r = u_c
     endif

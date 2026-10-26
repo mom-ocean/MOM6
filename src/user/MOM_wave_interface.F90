@@ -311,7 +311,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
 
   ! Check if using LA_LI2016
   call get_param(param_file, mdl, "USE_LA_LI2016", StatisticalWaves, &
-                 do_not_log=.true.,default=.false.)
+                 do_not_log=.true., default=.false.)
 
   if (.not.(use_waves .or. StatisticalWaves)) return
 
@@ -366,7 +366,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
                  do_not_log=.not.use_waves)
   if (CS%LagrangianMixing) then
     ! Force Code Intervention
-    call MOM_error(FATAL,"Should you be enabling Lagrangian Mixing? Code not ready.")
+    call MOM_error(FATAL, "Should you be enabling Lagrangian Mixing? Code not ready.")
   endif
   call get_param(param_file, mdl, "STOKES_MIXING", CS%StokesMixing, &
                  "Flag to use Stokes Mixing of momentum", default=.false., &
@@ -408,7 +408,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
        default=.false.)
 
   ! Get Wave Method and write to integer WaveMethod
-  call get_param(param_file,mdl,"WAVE_METHOD",TMPSTRING1,             &
+  call get_param(param_file, mdl, "WAVE_METHOD", TMPSTRING1,          &
        "Choice of wave method, valid options include: \n"//           &
        " TEST_PROFILE  - Prescribed from surface Stokes drift \n"//   &
        "                 and a decay wavelength.\n"//                 &
@@ -436,7 +436,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
     call get_param(param_file, mdl, "TP_STKY_SURF", CS%TP_STKY0, &
          'Surface Stokes (y) for test profile', &
          units='m/s', default=0.0, scale=US%m_s_to_L_T)
-    call get_param(param_file,mdl, "TP_WVL", CS%TP_WVL, &
+    call get_param(param_file, mdl, "TP_WVL", CS%TP_WVL, &
          'Wavelength for test profile', &
          units='m', default=50.0, scale=US%m_to_Z)
   case (SURFBANDS_STRING)! Surface Stokes Drift Bands
@@ -471,7 +471,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
     case (COUPLER_STRING)! Reserved for coupling
       CS%DataSource = COUPLER
       ! This is just to make something work, but it needs to be read from the wavemodel.
-      call get_param(param_file, mdl, "STK_BAND_COUPLER",CS%NumBands, &
+      call get_param(param_file, mdl, "STK_BAND_COUPLER", CS%NumBands, &
                  "STK_BAND_COUPLER is the number of Stokes drift bands in the coupler. "//&
                  "This has to be consistent with the number of Stokes drift bands in WW3, "//&
                  "or the model will fail.", default=1)
@@ -508,12 +508,12 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
            "Y-direction surface Stokes drift for bands.", &
            units='m/s', default=0.0, scale=US%m_s_to_L_T)
     case default! No method provided
-      call MOM_error(FATAL,'Check WAVE_METHOD.')
+      call MOM_error(FATAL, 'Check WAVE_METHOD.')
     end select
 
   case (DHH85_STRING) !Donelan et al., 1985 spectrum
     CS%WaveMethod = DHH85
-    call MOM_error(WARNING,"DHH85 only ever set-up for uniform cases w/ "//&
+    call MOM_error(WARNING, "DHH85 only ever set-up for uniform cases w/ "//&
                            "Stokes drift in x-direction.")
     call get_param(param_file, mdl, "DHH85_AGE_FP", CS%WaveAgePeakFreq, &
          "Choose true to use waveage in peak frequency.", default=.false.)
@@ -537,7 +537,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
   case (EFACTOR_STRING) !Li and Fox-Kemper 16
     CS%WaveMethod = EFACTOR
   case default
-    call MOM_error(FATAL,'Check WAVE_METHOD.')
+    call MOM_error(FATAL, 'Check WAVE_METHOD.')
   end select
 
   ! Langmuir number Options  (Note that CS%LA_FracHBL is set above.)
@@ -581,36 +581,36 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
   endif
 
   ! Initialize Wave related outputs
-  CS%id_surfacestokes_y = register_diag_field('ocean_model','surface_stokes_y', &
-       CS%diag%axesCv1,Time,'Surface Stokes drift (y)', 'm s-1', conversion=US%L_T_to_m_s)
-  CS%id_surfacestokes_x = register_diag_field('ocean_model','surface_stokes_x', &
-       CS%diag%axesCu1,Time,'Surface Stokes drift (x)', 'm s-1', conversion=US%L_T_to_m_s)
-  CS%id_3dstokes_y = register_diag_field('ocean_model','3d_stokes_y', &
-       CS%diag%axesCvL,Time,'3d Stokes drift (y)', 'm s-1', conversion=US%L_T_to_m_s)
-  CS%id_3dstokes_x = register_diag_field('ocean_model','3d_stokes_x', &
-       CS%diag%axesCuL,Time,'3d Stokes drift (x)', 'm s-1', conversion=US%L_T_to_m_s)
+  CS%id_surfacestokes_y = register_diag_field('ocean_model', 'surface_stokes_y', &
+       CS%diag%axesCv1, Time, 'Surface Stokes drift (y)', 'm s-1', conversion=US%L_T_to_m_s)
+  CS%id_surfacestokes_x = register_diag_field('ocean_model', 'surface_stokes_x', &
+       CS%diag%axesCu1, Time, 'Surface Stokes drift (x)', 'm s-1', conversion=US%L_T_to_m_s)
+  CS%id_3dstokes_y = register_diag_field('ocean_model', '3d_stokes_y', &
+       CS%diag%axesCvL, Time, '3d Stokes drift (y)', 'm s-1', conversion=US%L_T_to_m_s)
+  CS%id_3dstokes_x = register_diag_field('ocean_model', '3d_stokes_x', &
+       CS%diag%axesCuL, Time, '3d Stokes drift (x)', 'm s-1', conversion=US%L_T_to_m_s)
   if (CS%Stokes_DDT) then
-    CS%id_ddt_3dstokes_y = register_diag_field('ocean_model','dvdt_Stokes', &
-         CS%diag%axesCvL,Time,'d/dt Stokes drift (meridional)', 'm s-2', conversion=US%L_T2_to_m_s2)
-    CS%id_ddt_3dstokes_x = register_diag_field('ocean_model','dudt_Stokes', &
-         CS%diag%axesCuL,Time,'d/dt Stokes drift (zonal)', 'm s-2', conversion=US%L_T2_to_m_s2)
-    CS%id_3dstokes_y_from_ddt = register_diag_field('ocean_model','3d_stokes_y_from_ddt', &
-         CS%diag%axesCvL,Time,'3d Stokes drift from ddt (y)', 'm s-1', conversion=US%L_T_to_m_s)
-    CS%id_3dstokes_x_from_ddt = register_diag_field('ocean_model','3d_stokes_x_from_ddt', &
-         CS%diag%axesCuL,Time,'3d Stokes drift from ddt (x)', 'm s-1', conversion=US%L_T_to_m_s)
+    CS%id_ddt_3dstokes_y = register_diag_field('ocean_model', 'dvdt_Stokes', &
+         CS%diag%axesCvL, Time, 'd/dt Stokes drift (meridional)', 'm s-2', conversion=US%L_T2_to_m_s2)
+    CS%id_ddt_3dstokes_x = register_diag_field('ocean_model', 'dudt_Stokes', &
+         CS%diag%axesCuL, Time, 'd/dt Stokes drift (zonal)', 'm s-2', conversion=US%L_T2_to_m_s2)
+    CS%id_3dstokes_y_from_ddt = register_diag_field('ocean_model', '3d_stokes_y_from_ddt', &
+         CS%diag%axesCvL, Time, '3d Stokes drift from ddt (y)', 'm s-1', conversion=US%L_T_to_m_s)
+    CS%id_3dstokes_x_from_ddt = register_diag_field('ocean_model', '3d_stokes_x_from_ddt', &
+         CS%diag%axesCuL, Time, '3d Stokes drift from ddt (x)', 'm s-1', conversion=US%L_T_to_m_s)
   endif
-  CS%id_PFv_Stokes = register_diag_field('ocean_model','PFv_Stokes', &
-       CS%diag%axesCvL,Time,'PF from Stokes drift (meridional)','m s-2',conversion=US%L_T2_to_m_s2)
-  CS%id_PFu_Stokes = register_diag_field('ocean_model','PFu_Stokes', &
-       CS%diag%axesCuL,Time,'PF from Stokes drift (zonal)','m s-2',conversion=US%L_T2_to_m_s2)
-  CS%id_P_deltaStokes_i = register_diag_field('ocean_model','P_deltaStokes_i', &
-       CS%diag%axesTi,Time,'Interfacial pressure anomaly from Stokes drift used in PFu_Stokes',&
-       'm2 s-2',conversion=US%L_T_to_m_s**2)
-  CS%id_P_deltaStokes_L = register_diag_field('ocean_model','P_deltaStokes_L', &
-       CS%diag%axesTL,Time,'Layer averaged pressure anomaly from Stokes drift used in PFu_Stokes',&
-       'm2 s-2',conversion=US%L_T_to_m_s**2)
-  CS%id_La_turb = register_diag_field('ocean_model','La_turbulent', &
-       CS%diag%axesT1,Time,'Surface (turbulent) Langmuir number','nondim')
+  CS%id_PFv_Stokes = register_diag_field('ocean_model', 'PFv_Stokes', &
+       CS%diag%axesCvL, Time, 'PF from Stokes drift (meridional)', 'm s-2', conversion=US%L_T2_to_m_s2)
+  CS%id_PFu_Stokes = register_diag_field('ocean_model', 'PFu_Stokes', &
+       CS%diag%axesCuL, Time, 'PF from Stokes drift (zonal)', 'm s-2', conversion=US%L_T2_to_m_s2)
+  CS%id_P_deltaStokes_i = register_diag_field('ocean_model', 'P_deltaStokes_i', &
+       CS%diag%axesTi, Time, 'Interfacial pressure anomaly from Stokes drift used in PFu_Stokes', &
+       'm2 s-2', conversion=US%L_T_to_m_s**2)
+  CS%id_P_deltaStokes_L = register_diag_field('ocean_model', 'P_deltaStokes_L', &
+       CS%diag%axesTL, Time, 'Layer averaged pressure anomaly from Stokes drift used in PFu_Stokes', &
+       'm2 s-2', conversion=US%L_T_to_m_s**2)
+  CS%id_La_turb = register_diag_field('ocean_model', 'La_turbulent', &
+       CS%diag%axesT1, Time, 'Surface (turbulent) Langmuir number', 'nondim')
 
 end subroutine MOM_wave_interface_init
 
@@ -709,7 +709,7 @@ subroutine Update_Surface_Waves(G, GV, US, Time_present, dt, CS, forces)
       call Surface_Bands_by_data_override(Stokes_Time, G, GV, US, CS)
     elseif (CS%DataSource == COUPLER) then
       if (.not.present(FORCES)) then
-        call MOM_error(FATAL,"The option SURFBAND = COUPLER can not be used with "//&
+        call MOM_error(FATAL, "The option SURFBAND = COUPLER can not be used with "//&
              "this driver. If you are using a coupled driver with a wave model then "//&
              "check the arguments in the subroutine call to Update_Surface_Waves, "//&
              "otherwise select another option for SURFBAND_SOURCE.")
@@ -733,7 +733,7 @@ subroutine Update_Surface_Waves(G, GV, US, Time_present, dt, CS, forces)
             CS%STKY0(i,J,b) = 0.5*(forces%VStkb(i,j,b)+forces%VStkb(i,j+1,b))
           enddo
         enddo
-        call pass_vector(CS%STKx0(:,:,b),CS%STKy0(:,:,b), G%Domain)
+        call pass_vector(CS%STKx0(:,:,b), CS%STKy0(:,:,b), G%Domain)
       enddo
       do j=G%jsc,G%jec
         do i=G%isc,G%iec
@@ -791,7 +791,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
   if (CS%WaveMethod==EFACTOR) return
 
   if (allocated(CS%US_x) .and. allocated(CS%US_y)) then
-    call pass_vector(CS%US_x(:,:,:),CS%US_y(:,:,:), G%Domain)
+    call pass_vector(CS%US_x(:,:,:), CS%US_y(:,:,:), G%Domain)
   endif
 
   ! 1. If Test Profile Option is chosen
@@ -823,7 +823,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
         enddo
       enddo
     enddo
-    call pass_vector(CS%Us_x(:,:,:),CS%Us_y(:,:,:), G%Domain, To_All)
+    call pass_vector(CS%Us_x(:,:,:), CS%Us_y(:,:,:), G%Domain, To_All)
   ! 2. If Surface Bands is chosen
   !    In wavenumber mode compute integral for layer averaged Stokes drift.
   !    In frequency mode compuate value at midpoint.
@@ -945,8 +945,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
         enddo
       enddo
     enddo
-    call pass_vector(CS%Us_x(:,:,:),CS%Us_y(:,:,:), G%Domain, To_All)
-    call pass_vector(CS%Us0_x(:,:),CS%Us0_y(:,:), G%Domain)
+    call pass_vector(CS%Us_x(:,:,:), CS%Us_y(:,:,:), G%Domain, To_All)
+    call pass_vector(CS%Us0_x(:,:), CS%Us0_y(:,:), G%Domain)
   elseif (CS%WaveMethod == DHH85) then
     if (.not.(CS%StaticWaves .and. CS%DHH85_is_set)) then
       do j=G%jsc,G%jec
@@ -989,7 +989,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
       enddo
       CS%DHH85_is_set = .true.
     endif
-    call pass_vector(CS%Us_x(:,:,:),CS%Us_y(:,:,:), G%Domain)
+    call pass_vector(CS%Us_x(:,:,:), CS%Us_y(:,:,:), G%Domain)
   else! Keep this else, fallback to 0 Stokes drift
     CS%Us_x(:,:,:) = 0.
     CS%Us_y(:,:,:) = 0.
@@ -1594,7 +1594,7 @@ subroutine DHH85_mid(GV, US, CS, zpt, UStokes)
   UStokes = 0.0
   omega = CS%omega_min + 0.5*domega
   do oi = 1,nomega-1
-    Dnn = exp ( -0.5 * (omega-omega_peak)**2 / (Snn**2 * omega_peak**2) )
+    Dnn = exp( -0.5 * (omega-omega_peak)**2 / (Snn**2 * omega_peak**2) )
     ! wavespec units [L Z T ~> m2 s]
     wavespec = US%Z_to_L * (Ann * CS%g_Earth**2 / (omega_peak*omega**4 ) ) * &
                exp(-bnn*(omega_peak/omega)**4)*Cnn**Dnn
@@ -1836,8 +1836,8 @@ subroutine Stokes_PGF(G, GV, US, dz, u, v, PFu_Stokes, PFv_Stokes, CS )
         dP_Stokes_r_dz = 0.0
         dP_Stokes_l = 0.0
         dP_Stokes_r = 0.0
-        dP_lay_Stokes_l=0.0
-        dP_lay_Stokes_r=0.0
+        dP_lay_Stokes_l = 0.0
+        dP_lay_Stokes_r = 0.0
 
         do l = 1, CS%numbands
 
@@ -1962,8 +1962,8 @@ subroutine Stokes_PGF(G, GV, US, dz, u, v, PFu_Stokes, PFv_Stokes, CS )
         dP_Stokes_r_dz = 0.0
         dP_Stokes_l = 0.0
         dP_Stokes_r = 0.0
-        dP_lay_Stokes_l=0.0
-        dP_lay_Stokes_r=0.0
+        dP_lay_Stokes_l = 0.0
+        dP_lay_Stokes_r = 0.0
 
         do l = 1, CS%numbands
 
@@ -2093,9 +2093,9 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US, CS)
   if (CS%answer_date < 20230103) then
     u10 = US%Z_to_L*USTair / sqrt(0.001)  ! Guess for u10
     ten_m_scale = 10.0*US%m_to_Z
-    CT=0
+    CT = 0
     do while (abs(u10a/u10 - 1.) > 0.001)
-      CT=CT+1
+      CT = CT+1
       u10a = u10
       alpha = min(CS%Charnock_min, CS%Charnock_slope_U10 * u10 + CS%Charnock_intercept)
       z0rough = alpha * (US%Z_to_L*USTair)**2 / GV%g_Earth ! Compute z0rough from ustar guess
@@ -2183,8 +2183,8 @@ subroutine waves_register_restarts(CS, HI, GV, US, param_file, restart_CSp)
        "If true, enables surface wave modules.", do_not_log=.true., default=.false.)
 
   ! Check if using LA_LI2016
-  call get_param(param_file,mdl,"USE_LA_LI2016",StatisticalWaves,     &
-                 do_not_log=.true.,default=.false.)
+  call get_param(param_file, mdl, "USE_LA_LI2016", StatisticalWaves, &
+                 do_not_log=.true., default=.false.)
 
   if (.not.(use_waves .or. StatisticalWaves)) return
 

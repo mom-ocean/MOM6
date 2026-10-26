@@ -87,8 +87,8 @@ subroutine find_obsolete_params(param_file)
 
   ! Test for inconsistent parameter settings.
   split = .true. ; test_logic = .false.
-  call read_param(param_file,"SPLIT",split)
-  call read_param(param_file,"DYNAMIC_SURFACE_PRESSURE",test_logic)
+  call read_param(param_file, "SPLIT", split)
+  call read_param(param_file, "DYNAMIC_SURFACE_PRESSURE", test_logic)
   if (test_logic .and. .not.split) call MOM_ERROR(FATAL, &
     "find_obsolete_params: #define DYNAMIC_SURFACE_PRESSURE is not yet "//&
     "implemented without #define SPLIT.")

@@ -308,7 +308,7 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, GV, US, CS)
       OK = tracer_Z_init(tr, h, CS%IC_file, name, G, GV, US)
       if (.not.OK) then
         OK = tracer_Z_init(tr, h, CS%IC_file, trim(name), G, GV, US)
-        if (.not.OK) call MOM_error(FATAL,"initialize_CFC_cap: "//&
+        if (.not.OK) call MOM_error(FATAL, "initialize_CFC_cap: "//&
                 "Unable to read "//trim(name)//" from "//&
                 trim(CS%IC_file)//".")
       endif

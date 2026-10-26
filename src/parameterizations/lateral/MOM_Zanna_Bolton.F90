@@ -1049,7 +1049,7 @@ subroutine filter_stress(G, GV, CS)
     call filter_hq(G, GV, CS, Txy_halo, Txy_iter, q=CS%Txy)
 
     if (Txy_halo < 1) &
-       call start_group_pass(CS%pass_Tq, G%Domain, clock=CS%id_clock_mpi)
+      call start_group_pass(CS%pass_Tq, G%Domain, clock=CS%id_clock_mpi)
 
     ! ------- filtering Txx, Tyy ---------
     if (Txx_halo < 1) then
@@ -1082,7 +1082,7 @@ subroutine filter_hq(G, GV, CS, current_halo, remaining_iterations, q, h)
 
   logical :: direction ! The direction of the first 1D filter
 
-  direction = (MOD(G%first_direction,2) == 0)
+  direction = (MOD(G%first_direction, 2) == 0)
 
   call cpu_clock_begin(CS%id_clock_filter)
 

@@ -138,8 +138,8 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
   ! Determine which layers to write out accelerations for.
     do k=1,nz
-      if (((max(CS%u_av(I,j,k),um(I,j,k)) >= vel_rpt) .or. &
-           (min(CS%u_av(I,j,k),um(I,j,k)) <= -vel_rpt)) .and. &
+      if (((max(CS%u_av(I,j,k), um(I,j,k)) >= vel_rpt) .or. &
+           (min(CS%u_av(I,j,k), um(I,j,k)) <= -vel_rpt)) .and. &
           ((hin(i,j,k) + hin(i+1,j,k)) > 3.0*Angstrom)) exit
     enddo
     ks = k
@@ -158,8 +158,8 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
     call get_date(CS%Time, yr, mo, day, hr, minute, sec)
     call get_time((CS%Time - set_date(yr, 1, 1, 0, 0, 0)), sec, yearday)
-    write (file,'(/,"--------------------------")')
-    write (file,'(/,"Time ",I0," ",I0," ",F6.2," U-velocity violation at ",I0,": ",I0,", ",I0, &
+    write(file,'(/,"--------------------------")')
+    write(file,'(/,"Time ",I0," ",I0," ",F6.2," U-velocity violation at ",I0,": ",I0,", ",I0, &
         & " (",F7.2," E ",F7.2," N) Layers ",I0," to ",I0,". dt = ",1PG10.4)') &
         yr, yearday, (REAL(sec)/3600.0), pe_here(), I, j, &
         G%geoLonCu(I,j), G%geoLatCu(I,j), ks, ke, US%T_to_s*dt
@@ -332,11 +332,11 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') &
                           (uh_scale*CDp%vh(i+1,J,k)*G%IdxCv(i+1,J)) ; enddo
     write(file,'(/," vhC++:")', advance='no')
-         do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') &
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') &
                      (0.5*CS%v_av(i+1,J,k)*uh_scale*(hin(i+1,j,k) + hin(i+1,j+1,k))) ; enddo
     if (prev_avail) then
       write(file,'(/," vhCp++:")', advance='no')
-           do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') &
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') &
                        (0.5*CS%v_av(i+1,J,k)*uh_scale*(hin(i+1,j,k) + hin(i+1,j+1,k))) ; enddo
     endif
 
@@ -498,8 +498,8 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
     call get_date(CS%Time, yr, mo, day, hr, minute, sec)
     call get_time((CS%Time - set_date(yr, 1, 1, 0, 0, 0)), sec, yearday)
-    write (file,'(/,"--------------------------")')
-    write (file,'(/,"Time ",I0," ",I0," ",F6.2," V-velocity violation at ",I0,": ",I0,", ",I0, &
+    write(file,'(/,"--------------------------")')
+    write(file,'(/,"Time ",I0," ",I0," ",F6.2," V-velocity violation at ",I0,": ",I0,", ",I0, &
         & " (",F7.2," E ",F7.2," N) Layers ",I0," to ",I0,". dt = ",1PG10.4)') &
         yr, yearday, (REAL(sec)/3600.0), pe_here(), i, J, &
         G%geoLonCv(i,J), G%geoLatCv(i,J), ks, ke, US%T_to_s*dt

@@ -95,7 +95,7 @@ subroutine DOME2d_initialize_topography( D, G, param_file, max_depth )
 end subroutine DOME2d_initialize_topography
 
 !> Initialize thicknesses according to coordinate mode
-subroutine DOME2d_initialize_thickness ( h, depth_tot, G, GV, US, param_file, just_read )
+subroutine DOME2d_initialize_thickness(h, depth_tot, G, GV, US, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type), intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
@@ -126,9 +126,9 @@ subroutine DOME2d_initialize_thickness ( h, depth_tot, G, GV, US, param_file, ju
   if (.not.just_read) &
     call MOM_mesg("MOM_initialization.F90, DOME2d_initialize_thickness: setting thickness")
 
-  call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
+  call get_param(param_file, mdl, "MIN_THICKNESS", min_thickness, &
                  default=1.e-3, units="m", do_not_log=.true., scale=US%m_to_Z)
-  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=.true.)
   call get_param(param_file, mdl, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &
                  units="nondim", default=0.1, do_not_log=.true.)
@@ -217,7 +217,7 @@ subroutine DOME2d_initialize_thickness ( h, depth_tot, G, GV, US, param_file, ju
       enddo ; enddo
 
     case default
-      call MOM_error(FATAL,"dome2d_initialize: "// &
+      call MOM_error(FATAL, "dome2d_initialize: "// &
       "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
 
   end select
@@ -226,7 +226,7 @@ end subroutine DOME2d_initialize_thickness
 
 
 !> Initialize temperature and salinity in the 2d DOME configuration
-subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, US, param_file, just_read)
+subroutine DOME2d_initialize_temperature_salinity(T, S, h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [C ~> degC]
@@ -265,7 +265,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
                  units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "T_REF", T_ref, 'Reference temperature', &
                  units='degC', scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file, mdl, "S_RANGE", S_range,' Initial salinity range', &
+  call get_param(param_file, mdl, "S_RANGE", S_range, ' Initial salinity range', &
                  units="ppt", default=2.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
                  units='degC', default=0.0, scale=US%degC_to_C, do_not_log=just_read)
@@ -319,14 +319,14 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
       enddo
 
     case default
-      call MOM_error(FATAL,"dome2d_initialize: "// &
+      call MOM_error(FATAL, "dome2d_initialize: "// &
       "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
 
   end select
 
   ! Modify salinity and temperature when z coordinates are used
   if ( coordinateMode(verticalCoordinate) == REGRIDDING_ZSTAR ) then
-    index_bay_z = Nint ( dome2d_depth_bay * GV%ke )
+    index_bay_z = Nint(dome2d_depth_bay * GV%ke)
     do j = G%jsc,G%jec ; do i = G%isc,G%iec
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
       if ( x <= dome2d_width_bay ) then
@@ -425,9 +425,9 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_A
   if (dome2d_west_sponge_time_scale <= 0. .and. dome2d_east_sponge_time_scale <= 0.) return
 
   if (associated(CSp)) call MOM_error(FATAL, &
-     "DOME2d_initialize_sponges called with an associated control structure.")
+      "DOME2d_initialize_sponges called with an associated control structure.")
   if (associated(ACSp)) call MOM_error(FATAL, &
-     "DOME2d_initialize_sponges called with an associated ALE-sponge control structure.")
+      "DOME2d_initialize_sponges called with an associated ALE-sponge control structure.")
 
   call get_param(param_file, mdl, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &
                  units="nondim", default=0.1, do_not_log=.true.)

@@ -1039,10 +1039,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           if (.not. associated(fluxes%heat_content_evap)) then
             if (associated(fluxes%heat_content_massin)) &
               fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) + &
-                           T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
+                           T2d(i,k) * max(0., dThickness) * GV%H_to_RZ * tv%C_p * Idt
             if (associated(fluxes%heat_content_massout)) &
               fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                           T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
+                           T2d(i,k) * min(0., dThickness) * GV%H_to_RZ * tv%C_p * Idt
             if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                            T2d(i,k) * dThickness * GV%H_to_RZ
           endif
@@ -1125,10 +1125,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           if (.not. associated(fluxes%heat_content_evap)) then
             if (associated(fluxes%heat_content_massin)) &
               fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) + &
-                           T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
+                           T2d(i,k) * max(0., dThickness) * GV%H_to_RZ * tv%C_p * Idt
             if (associated(fluxes%heat_content_massout)) &
               fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                           T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
+                           T2d(i,k) * min(0., dThickness) * GV%H_to_RZ * tv%C_p * Idt
             if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                            T2d(i,k) * dThickness * GV%H_to_RZ
           endif
@@ -1152,7 +1152,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
             T2d(i,k)    = (hOld*T2d(i,k) + dTemp)*Ithickness
             tv%S(i,j,k) = (hOld*tv%S(i,j,k) + dSalt)*Ithickness
           elseif (h2d(i,k) < 0.0) then ! h2d==0 is a special limit that needs no extra handling
-            call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxesInOut (h<0)')
+            call forcing_SinglePointPrint(fluxes, G, i, j, 'applyBoundaryFluxesInOut (h<0)')
             !TODO: remove write statements
             write(0,*) 'applyBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
             write(0,*) 'applyBoundaryFluxesInOut(): netT,netS,netH=', &
@@ -1187,7 +1187,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
               do k=1,nz
                 salt_before = salt_before + h2d(i,k)*tv%S(i,j,k)
               enddo
-              !DEBUG if (CS%check_salt_verbose) call MOM_error(NOTE,'Salt before brine plume: ',salt_before)
+              !DEBUG if (CS%check_salt_verbose) call MOM_error(NOTE, 'Salt before brine plume: ',salt_before)
             endif
 
             ! Set the plume strength based on the salt rejected
@@ -1225,7 +1225,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
               !DEBUG if (CS%check_salt_verbose) then
               !DEBUG   write(mesg, '(A, I0, A, ES24.16, A, ES24.16)') &
               !DEBUG        'Salt to layer ', k, ' and remaining deficit: ', salt_added, ', ', salt_removed-salt_added
-              !DEBUG   call MOM_error(NOTE,trim(mesg))
+              !DEBUG   call MOM_error(NOTE, trim(mesg))
               !DEBUG endif
 
               if (CS%id_brine_input > 0.) then
@@ -1267,12 +1267,12 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
 
                 ! Ideally this would be written to a single fatal error call,
                 !  but the long message seems to hit an FMS character limit?
-                call MOM_error(WARNING,'Salt change in brine plume scheme exceeds CHECK_SALT_BRINE_PLUME_THRESHOLD ')
+                call MOM_error(WARNING, 'Salt change in brine plume scheme exceeds CHECK_SALT_BRINE_PLUME_THRESHOLD ')
                 do ne=1,10
-                  call MOM_error(WARNING,salt_error_mesg(ne),all_print=.true.)
+                  call MOM_error(WARNING, salt_error_mesg(ne), all_print=.true.)
                 enddo
-                call MOM_error(FATAL,'Salt conservation failed check in brine plume parameterization')
-                !call MOM_error(FATAL,'Salt conservation failed check in brine plume parameterization'//&
+                call MOM_error(FATAL, 'Salt conservation failed check in brine plume parameterization')
+                !call MOM_error(FATAL, 'Salt conservation failed check in brine plume parameterization'//&
                 !               NEW_LINE('a')//salt_error_mesg(1)//NEW_LINE('a')//salt_error_mesg(2)//&
                 !               NEW_LINE('a')//salt_error_mesg(3)//NEW_LINE('a')//salt_error_mesg(4)//&
                 !               NEW_LINE('a')//salt_error_mesg(5)//NEW_LINE('a')//salt_error_mesg(6)//&
@@ -1289,14 +1289,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       elseif ((abs(netHeat(i)) + abs(netSalt(i)) + abs(netMassIn(i)) + abs(netMassOut(i))) > 0.) then
 
         if (.not. CS%ignore_fluxes_over_land) then
-           call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxesInOut (land)')
-           !TODO: Remove write statements
-           write(0,*) 'applyBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
-           write(0,*) 'applyBoundaryFluxesInOut(): netHeat,netSalt,netMassIn,netMassOut=',&
-               US%C_to_degC*netHeat(i), US%S_to_ppt*netSalt(i), netMassIn(i), netMassOut(i)
+          call forcing_SinglePointPrint(fluxes, G, i, j, 'applyBoundaryFluxesInOut (land)')
+          !TODO: Remove write statements
+          write(0,*) 'applyBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
+          write(0,*) 'applyBoundaryFluxesInOut(): netHeat,netSalt,netMassIn,netMassOut=',&
+              US%C_to_degC*netHeat(i), US%S_to_ppt*netSalt(i), netMassIn(i), netMassOut(i)
 
-           call MOM_error(FATAL, "MOM_diabatic_aux.F90, applyBoundaryFluxesInOut(): "//&
-                                 "Mass loss over land?")
+          call MOM_error(FATAL, "MOM_diabatic_aux.F90, applyBoundaryFluxesInOut(): "//&
+                                "Mass loss over land?")
         endif
 
       endif
@@ -1327,7 +1327,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
         CS%penSW_diag(i,j,k)     = T2d(i,k)
         CS%penSWflux_diag(i,j,k) = 0.0
       enddo ; enddo
-      k=nz+1 ; do i=is,ie
+      k = nz+1 ; do i=is,ie
         CS%penSWflux_diag(i,j,k) = 0.0
       enddo
     endif
@@ -1442,7 +1442,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
 ! The following check will be ignored if ignore_fluxes_over_land = true
   if ((numberOfGroundings > 0) .and. .not.CS%ignore_fluxes_over_land) then
     do i = 1, min(numberOfGroundings, maxGroundings)
-      call forcing_SinglePointPrint(fluxes,G,iGround(i),jGround(i),'applyBoundaryFluxesInOut (grounding)')
+      call forcing_SinglePointPrint(fluxes, G, iGround(i), jGround(i), 'applyBoundaryFluxesInOut (grounding)')
       write(mesg(1:45),'(3es15.3)') G%geoLonT( iGround(i), jGround(i) ), &
                              G%geoLatT( iGround(i), jGround(i)), hGrounding(i)*GV%H_to_m
       call MOM_error(WARNING, "MOM_diabatic_aux.F90, applyBoundaryFluxesInOut(): "//&
@@ -1566,7 +1566,7 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
   call get_param(param_file, mdl, "BRINE_PLUME_MLD_FAC", CS%plume_mld_fac, &
                  "Proportionality factor between plume scale and  MLD used in brine plume parameteterization.", &
                  units="nondim", default=1.0, do_not_log=.not.CS%do_brine_plume)
-  if (CS%plume_mld_fac<0.0) call MOM_error(FATAL,"BRINE_PLUME_MLD_FAC shouldn't be negative!")
+  if (CS%plume_mld_fac<0.0) call MOM_error(FATAL, "BRINE_PLUME_MLD_FAC shouldn't be negative!")
   call get_param(param_file, mdl, "CHECK_SALT_BRINE_PLUME", CS%check_salt_bp, &
                  "If true, check for conservation in the brine plume scheme.", default=.false., debuggingParam=.true.)
   if (CS%check_salt_bp) then
@@ -1580,13 +1580,13 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
 
 
   if (useALEalgorithm) then
-    CS%id_createdH = register_diag_field('ocean_model',"created_H",diag%axesT1, &
+    CS%id_createdH = register_diag_field('ocean_model', "created_H", diag%axesT1, &
         Time, "The volume flux added to stop the ocean from drying out and becoming negative in depth", &
         "m s-1", conversion=GV%H_to_m*US%s_to_T)
     if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
 
     CS%id_brine_input = register_diag_field('ocean_model', 'Brine_Salt_Increment', &
-         diag%axesTL, Time, 'Salt rate of change due to brine plume','kg m-2 s-1', &
+         diag%axesTL, Time, 'Salt rate of change due to brine plume', 'kg m-2 s-1', &
          conversion=US%S_to_ppt*0.001*GV%H_to_RZ*US%RZ_T_to_kg_m2s, v_extensive=.true.)
     if (CS%id_brine_input>0) allocate(CS%brine_input(isd:ied,jsd:jed,nz), source=0.0)
 
