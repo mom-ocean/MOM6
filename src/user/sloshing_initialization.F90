@@ -74,7 +74,6 @@ subroutine sloshing_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
   real    :: weight_z           ! A depth-space weighting [nondim].
   real    :: x1, y1, x2, y2     ! Dimensonless parameters specifying the depth profile [nondim]
   real    :: x, t               ! Dimensionless depth coordinates scales [nondim]
-  logical :: use_IC_bug         ! If true, set the initial conditions retaining an old bug.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "sloshing_initialization" !< This module's name.
@@ -87,9 +86,6 @@ subroutine sloshing_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
                  "Initial amplitude of sloshing internal interface height "//&
                  "displacements it the sloshing test case.", &
                  units='m', default=75.0, scale=US%m_to_Z, do_not_log=just_read)
-  call get_param(param_file, mdl, "SLOSHING_IC_BUG", use_IC_bug, &
-                 "If true, use code with a bug to set the sloshing initial conditions.", &
-                 default=.false., do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -133,11 +129,7 @@ subroutine sloshing_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
       weight_z = - 4.0 * ( z_unif(k) + 0.5 )**2 + 1.0
 
       x = G%geoLonT(i,j) / G%len_lon
-      if (use_IC_bug) then
-        displ(k) = a0 * cos(acos(-1.0)*x) + weight_z * US%m_to_Z ! There is a flag to fix this bug.
-      else
-        displ(k) = a0 * cos(acos(-1.0)*x) * weight_z
-      endif
+      displ(k) = a0 * cos(acos(-1.0)*x) * weight_z
 
       if ( k == 1 ) then
         displ(k) = 0.0

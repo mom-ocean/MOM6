@@ -35,8 +35,6 @@ type, public :: shelfwave_OBC_CS ; private
   real :: ll            !< Longshore wavenumber [km-1] or [m-1]
   real :: alpha         !< Exponential decay rate in the y-direction [km-1] or [m-1]
   real :: omega         !< Frequency of the shelf wave [T-1 ~> s-1]
-  logical :: shelfwave_correct_amplitude !< If true, SHELFWAVE_AMPLITUDE gives the actual inflow
-                        !! velocity, rather than giving an overall scaling factor for the flow.
 end type shelfwave_OBC_CS
 
 contains
@@ -57,7 +55,6 @@ function register_shelfwave_OBC(param_file, CS, G, US, OBC_Reg)
   real :: f0      ! Coriolis parameter [T-1 ~> s-1]
   real :: Lx      ! Long-shore length scale of bathymetry [km] or [m]
   real :: Ly      ! Cross-shore length scale [km] or [m]
-  real :: default_amp  ! The default velocity amplitude [m s-1] or amplitude scaling factor [nondim]
 
   PI = 4.0*atan(1.0)
 
@@ -81,13 +78,9 @@ function register_shelfwave_OBC(param_file, CS, G, US, OBC_Reg)
   call get_param(param_file, mdl, "SHELFWAVE_Y_MODE", jj, &
                  "Cross-shore wave mode.",               &
                  units="nondim", default=1.)
-  call get_param(param_file, mdl, "SHELFWAVE_CORRECT_AMPLITUDE", CS%shelfwave_correct_amplitude, &
-                 "If true, SHELFWAVE_AMPLITUDE gives the actual inflow velocity, rather than giving "//&
-                 "an overall scaling factor for the flow.", default=.true.)
-  default_amp = 1.0 ; if (CS%shelfwave_correct_amplitude) default_amp = 0.1
   call get_param(param_file, mdl, "SHELFWAVE_AMPLITUDE", CS%my_amp, &
                  "Amplitude of the open boundary current inflows in the shelfwave configuration.", &
-                 units="m s-1", default=default_amp, scale=US%m_s_to_L_T)
+                 units="m s-1", default=0.1, scale=US%m_s_to_L_T)
 
   CS%alpha = 1. / Ly
   CS%ll = 2. * PI / Lx
@@ -170,14 +163,10 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   my_amp = CS%my_amp ; if ((turns==2) .or. (turns==3)) my_amp = -CS%my_amp
 
   time_sec = time_to_real(Time, scale=US%s_to_T)
-  if (CS%shelfwave_correct_amplitude) then
-    ! This makes the units and edge value of normal_vel_bt the same as my_amp.
-    I_yscale = 1.0 / CS%kk
-  else ! This preserves the previous answers.
-    if (G%grid_unit_to_L == 0.0) call MOM_error(FATAL, &
-          "shelfwave_set_OBC_data requires the use of Cartesian coordinates.")
-    I_yscale = (1.0e3 * US%m_to_L) / G%grid_unit_to_L
-  endif
+
+  ! This makes the units and edge value of normal_vel_bt the same as my_amp.
+  I_yscale = 1.0 / CS%kk
+
   do n = 1, OBC%number_of_segments
     segment => OBC%segment(n)
     if (.not. segment%on_pe) cycle

@@ -33,9 +33,6 @@ type, public :: dyed_channel_OBC_CS ; private
   real :: zonal_flow = 8.57         !< Mean inflow [L T-1 ~> m s-1]
   real :: tidal_amp = 0.0           !< Sloshing amplitude [L T-1 ~> m s-1]
   real :: frequency  = 0.0          !< Sloshing frequency [T-1 ~> s-1]
-  logical :: OBC_transport_bug      !< If true and specified open boundary conditions are being
-                                    !! used, use a 1 m (if Boussienesq) or 1 kg m-2 layer thickness
-                                    !! instead of the actual thickness.
 end type dyed_channel_OBC_CS
 
 integer :: ntr = 0 !< Number of dye tracers
@@ -51,8 +48,6 @@ logical function register_dyed_channel_OBC(param_file, CS, US, OBC_Reg)
   type(OBC_registry_type),   pointer    :: OBC_Reg    !< OBC registry.
 
   ! Local variables
-  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
-                          ! recreate the bugs, or if false bugs are only used if actively selected.
   character(len=32)  :: casename = "dyed channel"     ! This case's name.
   character(len=40)  :: mdl = "register_dyed_channel_OBC" ! This subroutine's name.
 
@@ -72,12 +67,6 @@ logical function register_dyed_channel_OBC(param_file, CS, US, OBC_Reg)
   call get_param(param_file, mdl, "CHANNEL_FLOW_FREQUENCY", CS%frequency, &
                  "Frequency of oscillating zonal flow.", &
                  units="s-1", default=0.0, scale=US%T_to_s)
-  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
-                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
-  call get_param(param_file, mdl, "CHANNEL_FLOW_OBC_TRANSPORT_BUG", CS%OBC_transport_bug, &
-                 "If true and specified open boundary conditions are being used, use a 1 m "//&
-                 "(if Boussienesq) or 1 kg m-2 layer thickness instead of the actual thickness.", &
-                 default=enable_bugs)
 
   ! Register the open boundaries.
   call register_OBC(casename, param_file, OBC_Reg)
@@ -208,35 +197,22 @@ subroutine dyed_channel_update_flow(OBC, CS, G, GV, US, h, Time)
     endif
 
     if (segment%specified .and. cross_channel) then
-      if (CS%OBC_transport_bug) then
-        fixed_thickness = 1.0 / GV%H_to_mks  ! This replicates the prevoius answers without rescaling.
-        if ((segment%direction == OBC_DIRECTION_W) .or. (segment%direction == OBC_DIRECTION_E)) then
-          do k=1,GV%ke ; do j=jsd,jed ; do I=IsdB,IedB
-            segment%normal_trans(I,j,k) = flow * G%dyCu(I,j) * fixed_thickness
-          enddo ; enddo ; enddo
-        elseif ((segment%direction == OBC_DIRECTION_S) .or. (segment%direction == OBC_DIRECTION_N)) then
-          do k=1,GV%ke ; do J=JsdB,JedB ; do i=isd,ied
-            segment%normal_trans(i,J,k) = flow * G%dxCv(i,J) * fixed_thickness
-          enddo ; enddo ; enddo
-        endif
-      else
-        if (segment%direction == OBC_DIRECTION_W) then
-          do k=1,GV%ke ; do j=jsd,jed ; do I=IsdB,IedB
-            segment%normal_trans(I,j,k) = flow * G%dyCu(I,j) * h(i+1,j,k)
-          enddo ; enddo ; enddo
-        elseif (segment%direction == OBC_DIRECTION_E) then
-          do k=1,GV%ke ; do j=jsd,jed ; do I=IsdB,IedB
-            segment%normal_trans(I,j,k) = flow * G%dyCu(I,j) * h(i,j,k)
-          enddo ; enddo ; enddo
-        elseif (segment%direction == OBC_DIRECTION_S) then
-          do k=1,GV%ke ; do J=JsdB,JedB ; do i=isd,ied
-            segment%normal_trans(i,J,k) = flow * G%dxCv(i,J) * h(i,j+1,k)
-          enddo ; enddo ; enddo
-        elseif (segment%direction == OBC_DIRECTION_N) then
-          do k=1,GV%ke ; do J=JsdB,JedB ; do i=isd,ied
-            segment%normal_trans(i,J,k) = flow * G%dxCv(i,J) * h(i,j,k)
-          enddo ; enddo ; enddo
-        endif
+      if (segment%direction == OBC_DIRECTION_W) then
+        do k=1,GV%ke ; do j=jsd,jed ; do I=IsdB,IedB
+          segment%normal_trans(I,j,k) = flow * G%dyCu(I,j) * h(i+1,j,k)
+        enddo ; enddo ; enddo
+      elseif (segment%direction == OBC_DIRECTION_E) then
+        do k=1,GV%ke ; do j=jsd,jed ; do I=IsdB,IedB
+          segment%normal_trans(I,j,k) = flow * G%dyCu(I,j) * h(i,j,k)
+        enddo ; enddo ; enddo
+      elseif (segment%direction == OBC_DIRECTION_S) then
+        do k=1,GV%ke ; do J=JsdB,JedB ; do i=isd,ied
+          segment%normal_trans(i,J,k) = flow * G%dxCv(i,J) * h(i,j+1,k)
+        enddo ; enddo ; enddo
+      elseif (segment%direction == OBC_DIRECTION_N) then
+        do k=1,GV%ke ; do J=JsdB,JedB ; do i=isd,ied
+          segment%normal_trans(i,J,k) = flow * G%dxCv(i,J) * h(i,j,k)
+        enddo ; enddo ; enddo
       endif
     endif
 

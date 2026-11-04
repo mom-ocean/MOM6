@@ -211,7 +211,7 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read)
                  "The vintage of the expressions in the Phillips_initialization code.  Values "//&
                  "below 20250101 recover the answers from the end of 2018, while higher "//&
                  "values use mathematically equivalent expressions that are fully rescalable.", &
-                 default=min(20241201,default_answer_date))  !### Change this to default=default_answer_date)
+                 default=default_answer_date)
   ! If re-entrant in the Y direction, we use a sine function instead of a
   ! tanh. The ratio len_lat/jet_width_grid should be an integer in this case.
   call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, &

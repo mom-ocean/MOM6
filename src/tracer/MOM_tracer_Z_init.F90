@@ -607,8 +607,6 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, 
                         ! T-S space when stretched with dT_dS_gauge [S2 R-2 ~> ppt2 m6 kg-2]
   real :: T_min, T_max  ! The minimum and maximum temperatures [C ~> degC]
   real :: S_min, S_max  ! Minimum and maximum salinities [S ~> ppt]
-  real :: tol_T     ! The tolerance for temperature matches [C ~> degC]
-  real :: tol_S     ! The tolerance for salinity matches [S ~> ppt]
   real :: tol_rho   ! The tolerance for density matches [R ~> kg m-3]
   real :: max_t_adj ! The largest permitted temperature changes with each iteration
                     ! when old_fit is true [C ~> degC]
@@ -618,7 +616,7 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, 
 # include "version_variable.h"
   character(len=40)  :: mdl = "determine_temperature" ! This subroutine's name.
   logical :: domore(SZK_(GV)) ! Records which layers need additional iterations
-  logical :: adjust_salt, fit_together, convergence_bug, do_any
+  logical :: adjust_salt, fit_together, do_any
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz, itt
 
@@ -633,12 +631,6 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, 
                  "based on the ratio of the thermal and haline coefficients.  Otherwise try to "//&
                  "match the density by only adjusting temperatures within a maximum range before "//&
                  "revising estimates of the salinity.", default=.false., do_not_log=just_read)
-  call get_param(PF, mdl, "DETERMINE_TEMP_CONVERGENCE_BUG", convergence_bug, &
-                 "If true, use layout-dependent tests on the changes in temperature and salinity "//&
-                 "to determine when the iterations have converged when DETERMINE_TEMP_ADJUST_T_AND_S "//&
-                 "is false.  For realistic equations of state and the default values of the "//&
-                 "various tolerances, this bug does not impact the solutions.", &
-                 default=.false., do_not_log=just_read)
 
   call get_param(PF, mdl, "DETERMINE_TEMP_T_MIN", T_min, &
                  "The minimum temperature that can be found by determine_temperature.", &
@@ -652,14 +644,6 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, 
   call get_param(PF, mdl, "DETERMINE_TEMP_S_MAX", S_max, &
                  "The maximum salinity that can be found by determine_temperature.", &
                  units="ppt", default=65.0, scale=US%ppt_to_S, do_not_log=just_read)
-  call get_param(PF, mdl, "DETERMINE_TEMP_T_TOLERANCE", tol_T, &
-                 "The convergence tolerance for temperature in determine_temperature.", &
-                 units="degC", default=1.0e-4, scale=US%degC_to_C, &
-                 do_not_log=just_read.or.(.not.convergence_bug))
-  call get_param(PF, mdl, "DETERMINE_TEMP_S_TOLERANCE", tol_S, &
-                 "The convergence tolerance for temperature in determine_temperature.", &
-                 units="ppt", default=1.0e-4, scale=US%ppt_to_S, &
-                 do_not_log=just_read.or.(.not.convergence_bug))
   call get_param(PF, mdl, "DETERMINE_TEMP_RHO_TOLERANCE", tol_rho, &
                  "The convergence tolerance for density in determine_temperature.", &
                  units="kg m-3", default=1.0e-4, scale=US%kg_m3_to_R, do_not_log=just_read)
@@ -718,13 +702,6 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, 
           endif
         enddo
       endif ; enddo
-      if (convergence_bug) then
-        ! If this test does anything, it is layout-dependent.
-        if (maxval(abs(dT)) < tol_T) then
-          adjust_salt = .false.
-          exit iter_loop
-        endif
-      endif
 
       do_any = .false.
       do k=k_start,nz ; if (domore(k)) do_any = .true. ; enddo
@@ -746,11 +723,6 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, 
           endif
         enddo
       endif ; enddo
-
-      if (convergence_bug) then
-        ! If this test does anything, it is layout-dependent.
-        if (maxval(abs(dS)) < tol_S) exit
-      endif
 
       do_any = .false.
       do k=k_start,nz ; if (domore(k)) do_any = .true. ; enddo

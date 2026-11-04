@@ -49,8 +49,6 @@ type, public :: Kelvin_OBC_CS ; private
   real :: OBC_nudging_time  !< The timescale with which the inflowing open boundary velocities are nudged toward
                             !! their intended values with the Kelvin wave test case [T ~> s], or a negative
                             !! value to retain the value that is set when the OBC segments are initialized.
-  logical :: indexing_bugs  !< If true, retain several horizontal indexing bugs that were in the
-                            !! original version of Kelvin_set_OBC_data.
 end type Kelvin_OBC_CS
 
 ! This include declares and sets the variable "version".
@@ -66,8 +64,6 @@ logical function register_Kelvin_OBC(param_file, CS, US, OBC_Reg)
   type(OBC_registry_type),  pointer    :: OBC_Reg    !< OBC registry.
 
   ! Local variables
-  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
-                          ! recreate the bugs, or if false bugs are only used if actively selected.
   character(len=40)  :: mdl = "register_Kelvin_OBC"  !< This subroutine's name.
   character(len=32)  :: casename = "Kelvin wave"     !< This case's name.
   character(len=200) :: config
@@ -126,11 +122,6 @@ logical function register_Kelvin_OBC(param_file, CS, US, OBC_Reg)
                  "their intended values with the Kelvin wave test case, or a negative value to keep "//&
                  "the value that is set when the OBC segments are initialized.", &
                  units="s", default=-1.0, scale=US%s_to_T)
-  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
-                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
-  call get_param(param_file, mdl, "KELVIN_SET_OBC_INDEXING_BUGS", CS%indexing_bugs, &
-                 "If true, retain several horizontal indexing bugs that were in the original "//&
-                 "version of Kelvin_set_OBC_data.", default=enable_bugs)
 
   ! Register the Kelvin open boundary.
   call register_OBC(casename, param_file, OBC_Reg)
@@ -252,9 +243,6 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   PI = 4.0*atan(1.0)
 
   turns = modulo(G%HI%turns, 4)
-
-  if (CS%indexing_bugs .and. (turns /= 0)) call MOM_error(FATAL, &
-    "Kelvin_set_OBC_data does not support grid rotation when KELVIN_SET_OBC_INDEXING_BUGS is true.")
 
   do j=jsd,jed ; do i=isd,ied
     depth_tot(i,j) = 0.0
@@ -485,16 +473,6 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
           cff = sqrt(GV%g_Earth * depth_tot_corner )
           val2 = (trans_sign*mag_SSH) * exp(- G%CoriolisBu(I,J) * y / cff)
-          if (CS%indexing_bugs) then
-            if (unrot_dir == OBC_DIRECTION_W) then
-              cff = sqrt(GV%g_Earth * depth_tot(i+1,j) )
-              val2 = (trans_sign*mag_SSH) * exp(- G%CoriolisBu(I,J) * y / cff)
-            endif
-            if (unrot_dir == OBC_DIRECTION_S) then
-              cff = sqrt(GV%g_Earth * depth_tot(i,j+1) )
-              val2 = (trans_sign*mag_SSH) * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * y / cff)
-            endif
-          endif
           if (CS%mode == 0) then ; do k=1,nz
             segment%tangential_vel(I,J,k) = (sin_wt * val2 * cff * sina) / depth_tot_corner
           enddo ; endif
