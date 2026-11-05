@@ -1,0 +1,430 @@
+# This file is part of MOM6, the Modular Ocean Model version 6.
+# See the LICENSE file for licensing information.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Linux ARM verification
+
+on: [push, pull_request, workflow_dispatch]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CC: gcc
+  FC: gfortran
+  MOM_TARGET_SLUG: ${{ github.repository }}
+  MOM_TARGET_LOCAL_BRANCH: ${{ github.base_ref }}
+
+jobs:
+  # Executables
+
+  build-symmetric:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Compile dependencies
+        run: |
+          make -C .testing -j2 build/deps/lib/libFMS.a
+          make -C .testing -j2 PKG= build/deps/lib/libgsw.a
+          make -C .testing -j2 PKG= build/deps/lib/libcvmix.a
+
+      - name: Compile MOM6 with symmetric indexing
+        run: make -C .testing -j2 build/symmetric/MOM6
+
+      - name: Prepare artifact
+        run: tar -cf mom6-symmetric.tar .testing/build/symmetric/MOM6
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mom6-symmetric-artifact
+          path: mom6-symmetric.tar
+          retention-days: 1
+
+  build-asymmetric:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Compile dependencies
+        run: |
+          make -C .testing -j2 build/deps/lib/libFMS.a
+          make -C .testing -j2 PKG= build/deps/lib/libgsw.a
+          make -C .testing -j2 PKG= build/deps/lib/libcvmix.a
+
+      - name: Compile MOM6 with asymmetric indexing
+        run: make -C .testing -j2 build/asymmetric/MOM6
+
+      - name: Prepare artifact
+        run: tar -cf mom6-asymmetric.tar .testing/build/asymmetric/MOM6
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mom6-asymmetric-artifact
+          path: mom6-asymmetric.tar
+          retention-days: 1
+
+  build-openmp:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Compile dependencies
+        run: |
+          make -C .testing -j2 build/deps/lib/libFMS.a
+          make -C .testing -j2 PKG= build/deps/lib/libgsw.a
+          make -C .testing -j2 PKG= build/deps/lib/libcvmix.a
+
+      - name: Compile MOM6 supporting OpenMP
+        run: make -C .testing -j2 build/openmp/MOM6
+
+      - name: Prepare artifact
+        run: tar -cf mom6-openmp.tar .testing/build/openmp/MOM6
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mom6-openmp-artifact
+          path: mom6-openmp.tar
+          retention-days: 1
+
+  build-repro:
+    # Temporarily disabled pending investigation of ARM optimization differences.
+    # Remove this condition and the one on test-repro to re-enable REPRO.
+    if: ${{ false }}
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Compile dependencies
+        run: |
+          make -C .testing -j2 build/deps/lib/libFMS.a
+          make -C .testing -j2 PKG= build/deps/lib/libgsw.a
+          make -C .testing -j2 PKG= build/deps/lib/libcvmix.a
+
+      - name: Compile MOM6 with bit-reproducible optimization
+        run: make -C .testing -j2 build/repro/MOM6
+
+      - name: Prepare artifact
+        run: tar -cf mom6-repro.tar .testing/build/repro/MOM6
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mom6-repro-artifact
+          path: mom6-repro.tar
+          retention-days: 1
+
+  build-target:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Compile target dependencies
+        run: |
+          make -C .testing DO_REGRESSION_TESTS=1 build/target_codebase
+          make -C .testing/build/target_codebase/.testing -j2 build/deps/lib/libFMS.a
+
+      - name: Compile target MOM6
+        run: make -C .testing -j2 DO_REGRESSION_TESTS=1 build/target/MOM6
+
+      - name: Prepare artifact
+        run: tar -cf mom6-target.tar .testing/build/target/MOM6
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mom6-target-artifact
+          path: mom6-target.tar
+          retention-days: 1
+
+  build-unit:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Compile dependencies
+        run: |
+          make -C .testing -j2 build/deps/lib/libFMS.a
+          make -C .testing -j2 PKG= build/deps/lib/libgsw.a
+          make -C .testing -j2 PKG= build/deps/lib/libcvmix.a
+
+      - name: Compile unit tests
+        run: |
+          make -C .testing -j2 build/unit/test_MOM_file_parser
+          make -C .testing -j2 build.unit
+
+      - name: Prepare artifact
+        run: tar -cf mom6-unit.tar --exclude='.testing/build/unit/test_*.o' .testing/build/unit/test_*
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mom6-unit-artifact
+          path: mom6-unit.tar
+          retention-days: 1
+
+  # Tests
+
+  test-grid:
+    runs-on: ubuntu-24.04-arm
+    needs: [build-symmetric, build-asymmetric]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Download symmetric MOM6
+        uses: actions/download-artifact@v8
+        with:
+          name: mom6-symmetric-artifact
+
+      - name: Download asymmetric MOM6
+        uses: actions/download-artifact@v8
+        with:
+          name: mom6-asymmetric-artifact
+
+      - name: Unpack artifacts
+        run: |
+          tar -xpvf mom6-symmetric.tar
+          tar -xpvf mom6-asymmetric.tar
+
+      - name: Run grid verification test
+        run: |
+          make -C .testing -j2 \
+          -o build/symmetric/MOM6 \
+          -o build/asymmetric/MOM6 \
+          test.grid
+
+  test-layout:
+    runs-on: ubuntu-24.04-arm
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Download symmetric MOM6
+        uses: actions/download-artifact@v8
+        with:
+          name: mom6-symmetric-artifact
+
+      - name: Unpack artifact
+        run: tar -xpvf mom6-symmetric.tar
+
+      - name: Run layout test
+        run: make -C .testing -j2 -o build/symmetric/MOM6 test.layout
+
+  test-rotate:
+    runs-on: ubuntu-24.04-arm
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Download symmetric MOM6
+        uses: actions/download-artifact@v8
+        with:
+          name: mom6-symmetric-artifact
+
+      - name: Unpack artifact
+        run: tar -xpvf mom6-symmetric.tar
+
+      - name: Run rotation test
+        run: make -C .testing -j2 -o build/symmetric/MOM6 test.rotate
+
+  test-restart:
+    runs-on: ubuntu-24.04-arm
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Download symmetric MOM6
+        uses: actions/download-artifact@v8
+        with:
+          name: mom6-symmetric-artifact
+
+      - name: Unpack artifact
+        run: tar -xpvf mom6-symmetric.tar
+
+      - name: Run restart test
+        run: make -C .testing -j2 -o build/symmetric/MOM6 test.restart
+
+  test-nan:
+    runs-on: ubuntu-24.04-arm
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Download symmetric MOM6
+        uses: actions/download-artifact@v8
+        with:
+          name: mom6-symmetric-artifact
+
+      - name: Unpack artifact
+        run: tar -xpvf mom6-symmetric.tar
+
+      - name: Run NaN initialization test
+        run: make -C .testing -j2 -o build/symmetric/MOM6 test.nan
+
+  test-dim:
+    runs-on: ubuntu-24.04-arm
+    needs: build-symmetric
+    strategy:
+      fail-fast: false
+      matrix:
+        dim: [t, l, h, z, q, r]
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Download symmetric MOM6
+        uses: actions/download-artifact@v8
+        with:
+          name: mom6-symmetric-artifact
+
+      - name: Unpack artifact
+        run: tar -xpvf mom6-symmetric.tar
+
+      - name: Run dimension test
+        run: make -C .testing -j2 -o build/symmetric/MOM6 test.dim.${{ matrix.dim }}
+
+  test-openmp:
+    runs-on: ubuntu-24.04-arm
+    needs: [build-symmetric, build-openmp]
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Download symmetric MOM6
+        uses: actions/download-artifact@v8
+        with:
+          name: mom6-symmetric-artifact
+
+      - name: Download OpenMP MOM6
+        uses: actions/download-artifact@v8
+        with:
+          name: mom6-openmp-artifact
+
+      - name: Unpack artifacts
+        run: |
+          tar -xpvf mom6-symmetric.tar
+          tar -xpvf mom6-openmp.tar
+
+      - name: Run OpenMP test
+        run: |
+          make -C .testing -j2 \
+          -o build/symmetric/MOM6 \
+          -o build/openmp/MOM6 \
+          test.openmp
+
+  test-repro:
+    # Re-enable together with build-repro above.
+    if: ${{ false }}
+    runs-on: ubuntu-24.04-arm
+    needs: [build-symmetric, build-repro]
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Download symmetric MOM6
+        uses: actions/download-artifact@v8
+        with:
+          name: mom6-symmetric-artifact
+
+      - name: Download REPRO MOM6
+        uses: actions/download-artifact@v8
+        with:
+          name: mom6-repro-artifact
+
+      - name: Unpack artifacts
+        run: |
+          tar -xpvf mom6-symmetric.tar
+          tar -xpvf mom6-repro.tar
+
+      - name: Verify REPRO equivalence
+        run: |
+          make -C .testing -j2 \
+          -o build/symmetric/MOM6 \
+          -o build/repro/MOM6 \
+          test.repro
+
+  test-regression:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    needs: [build-symmetric, build-target]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Download symmetric MOM6
+        uses: actions/download-artifact@v8
+        with:
+          name: mom6-symmetric-artifact
+
+      - name: Download target MOM6
+        uses: actions/download-artifact@v8
+        with:
+          name: mom6-target-artifact
+
+      - name: Unpack artifacts
+        run: |
+          tar -xpvf mom6-symmetric.tar
+          tar -xpvf mom6-target.tar
+
+      - name: Check for regressions
+        run: |
+          make -C .testing -j2 \
+          -o build/symmetric/MOM6 \
+          -o build/target/MOM6 \
+          DO_REGRESSION_TESTS=1 test.regression
+
+  test-unit:
+    runs-on: ubuntu-24.04-arm
+    needs: build-unit
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Download unit tests
+        uses: actions/download-artifact@v8
+        with:
+          name: mom6-unit-artifact
+
+      - name: Unpack artifact
+        run: tar -xpvf mom6-unit.tar
+
+      - name: Run unit tests
+        run: |
+          cd .testing && make -j2 \
+          $(for f in build/unit/test_*; do echo "-o $f"; done) \
+          run.unit
