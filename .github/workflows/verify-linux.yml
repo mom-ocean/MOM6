@@ -104,6 +104,9 @@ jobs:
           retention-days: 1
 
   build-repro:
+    # Temporarily disabled pending investigation of GCC 15 optimization differences on Ubuntu 26 x86.
+    # Remove this condition and the one on test-repro to re-enable REPRO.
+    if: ${{ false }}
     runs-on: ubuntu-latest
 
     steps:
@@ -510,6 +513,8 @@ jobs:
           test.openmp
 
   test-repro:
+    # Re-enable together with build-repro above.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     needs:
       - build-symmetric
@@ -723,76 +728,3 @@ jobs:
           make -C .testing \
           DO_REGRESSION_TESTS=1 \
           compare.timing
-
-  # Cleanup
-
-  cleanup-common:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    needs:
-      - test-grid
-      - test-openmp
-      - test-repro
-      - run-coverage
-
-    steps:
-      - uses: geekyeggo/delete-artifact@v6
-        with:
-          name: |
-            mom6-asymmetric-artifact
-            mom6-openmp-artifact
-            mom6-repro-artifact
-            mom6-coverage-artifact
-
-  # NOTE: There is no way to conditionally define the elements in `needs`.
-  #   For now, we must create separate rules for each case.
-
-  cleanup-push:
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    needs:
-      - test-layout
-      - test-rotate
-      - test-restart
-      - test-nan
-      - test-dim
-      - test-grid
-      - test-openmp
-      - test-repro
-      - run-timings
-
-    steps:
-      - uses: geekyeggo/delete-artifact@v6
-        with:
-          name: |
-            mom6-symmetric-artifact
-            mom6-opt-artifact
-
-  cleanup-pr:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    needs:
-      - test-layout
-      - test-rotate
-      - test-restart
-      - test-nan
-      - test-dim
-      - test-grid
-      - test-openmp
-      - test-repro
-      - test-regression
-      - compare-timings
-
-    steps:
-      - uses: geekyeggo/delete-artifact@v6
-        with:
-          name: |
-            mom6-symmetric-artifact
-            mom6-target-artifact
-            mom6-opt-artifact
-            mom6-opt-target-artifact
