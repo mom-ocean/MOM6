@@ -425,6 +425,6 @@ jobs:
 
       - name: Run unit tests
         run: |
-          cd .testing && make -j2 \
+          cd .testing && make -j1 \
           $(for f in build/unit/test_*; do echo "-o $f"; done) \
           run.unit

@@ -610,13 +610,13 @@ jobs:
 
       - name: Generate unit test coverage
         run: |
-          cd .testing && make -j \
+          cd .testing && make -j1 \
           $(for f in build/unit/test_*; do echo "-o $f"; done) \
           run.cov.unit
 
       - name: Report coverage to CI
         run: |
-          cd .testing && make \
+          cd .testing && make -j1 \
           -o build/cov/MOM6 \
           $(for f in build/unit/test_*; do echo "-o $f"; done) \
           report.cov report.cov.unit
