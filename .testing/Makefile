@@ -277,7 +277,7 @@ $(BUILD)/timing/Makefile: MOM_ACFLAGS += --with-driver=timing_tests
 
 # Build executables
 .NOTPARALLEL:$(foreach e,$(UNIT_EXECS),$(BUILD)/unit/$(e))
-$(BUILD)/unit/test_%: $(BUILD)/unit/Makefile FORCE
+$(foreach e,$(UNIT_EXECS),$(BUILD)/unit/$(e)): $(BUILD)/unit/Makefile FORCE
 	cd $(@D) && $(TIME) $(MAKE) $(@F)
 
 $(BUILD)/unit/Makefile: \
