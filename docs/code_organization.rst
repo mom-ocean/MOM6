@@ -12,7 +12,7 @@ The highest level of directories are:
 
 `config_src/`
   Under `config_src` are various drivers and memory configuration sources that
-  can only be compiled in limited configurations. See :ref:`config_src`
+  can only be compiled in limited configurations. See `configuration directories <config_src_>`_.
 
 `pkg/`
   Packages (source code) from other sources/parties only some of which might
@@ -21,8 +21,8 @@ The highest level of directories are:
 
 `docs/`
   The directory that contains this documentation, namely that beyond the
-  in-code API documentation. Some of the files are configuration files
-  needed for running doxygen and sphinx. Most documentation in this folder
+  in-code API documentation. It also contains the Flint/Docutils site builder
+  and its configuration. Most documentation in this folder
   is in the form of reStructuredText (.rst) files.
 
 `.testing/`
