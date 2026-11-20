@@ -32,5 +32,5 @@ Which units do I need?
 .. toctree::
     :maxdepth: 2
 
-    api/generated/pages/Solar_Radiation
-    api/generated/pages/Tracer_Fluxes
+    Solar_Radiation
+    Tracer_Fluxes

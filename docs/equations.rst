@@ -13,8 +13,8 @@ vertical Lagrangian algorithm, taken from
 .. toctree::
     :maxdepth: 2
 
-    api/generated/pages/Notation
-    api/generated/pages/Governing_Equations
-    api/generated/pages/General_Coordinate
-    api/generated/pages/Specifics
-    api/generated/pages/ALE
+    Notation
+    Governing_Equations
+    General_Coordinate
+    Specifics
+    ALE

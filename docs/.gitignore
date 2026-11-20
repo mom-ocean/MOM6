@@ -1,23 +1,6 @@
-# Ignore doxygen output
-doxygen
-doxygen.log
-APIs
-MOM6.tags
-details/tutorial
-
-
-# Ignore sphinx-build output
+# Documentation build output
 _build
-api
-src
-xml
 
-
-# Citation output
-bib*.aux
-citelist.doc*
-
-
-# Python bytecode cache from the vendored _ext/autodoc_doxygen extension
+# Python bytecode cache
 __pycache__
 *.pyc

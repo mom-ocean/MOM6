@@ -1,0 +1,8 @@
+.. _Vertical_Diffusion:
+
+Vertical Diffusion
+==================
+
+Vertical diffusion of tracers
+
+The MOM6 tracer registry takes care of the tracer advection as well as horizontal diffusion, but it is up to each individual tracer package to define its own vertical diffusion.

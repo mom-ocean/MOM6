@@ -12,10 +12,10 @@ algorithm.
 .. toctree::
     :maxdepth: 2
 
-    api/generated/pages/Discrete_Grids
-    api/generated/pages/PPM
-    api/generated/pages/Discrete_Coriolis
-    api/generated/pages/Discrete_PG
-    api/generated/pages/Energetic_Consistency
-    api/generated/pages/Vertical_Reconstruction
-    api/generated/pages/Discrete_OBC
+    Discrete_Grids
+    PPM
+    Discrete_Coriolis
+    Discrete_PG
+    Energetic_Consistency
+    Vertical_Reconstruction
+    Discrete_OBC

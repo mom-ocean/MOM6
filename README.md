@@ -38,7 +38,7 @@ The top level directory structure groups source code and input files as follow:
 | ```src/```        | Contains the source code for MOM6 that is always compiled. |
 | ```config_src/``` | Contains optional source code depending on mode and configuration such as dynamic-memory versus static, ocean-only versus coupled. |
 | ```pkg/```        | Contains third party (non-MOM6 or FMS) code that is compiled into MOM6. |
-| ```docs/```       | Workspace for generated documentation.  See [docs/README.md](docs/README.md) |
+| ```docs/```       | Documentation sources and builder. See [docs/README.rst](docs/README.rst) |
 | ```.testing/```   | Contains the verification test suite.  See [.testing/README.md](.testing/README.md) |
 | ```ac/```         | Contains the autoconf build configuration files. See [ac/README.md](ac/README.md) |
 

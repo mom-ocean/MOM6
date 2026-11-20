@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>$title — MOM6</title>
+    <link rel="stylesheet" href="assets/api.css" />
+    <script src="assets/api.js" defer></script>
+    $math_script
+  </head>
+  <body class="$page_class">
+    <a class="skip-link" href="#content">Skip to content</a>
+    <aside class="sidebar" aria-label="Reference navigation">
+      <a class="brand" href="index.html"
+        ><span class="brand-mark">M6</span
+        ><span>MOM6<small>Modular Ocean Model</small></span></a
+      >
+      <div class="site-label">DOCUMENTATION <span>Experimental</span></div>
+      <nav class="site-nav" aria-label="Documentation">
+        <a href="index.html">Home</a>
+        <details class="guide-browser" open>
+          <summary>User and science guide</summary>
+          $guides
+        </details>
+        <a href="api-index.html">API reference</a>
+      </nav>
+      <details class="module-browser" open>
+        <summary>Modules <span class="count">$module_count</span></summary>
+        <div class="filter-controls" hidden>
+          <label class="visually-hidden" for="module-filter"
+            >Filter modules by name</label
+          >
+          <input
+            id="module-filter"
+            type="search"
+            placeholder="Find a module…"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <p id="filter-status" class="visually-hidden" role="status"></p>
+        </div>
+        <nav aria-label="Modules">
+          <ul class="module-list">
+            $modules
+          </ul>
+        </nav>
+      </details>
+      <div class="sidebar-footer">
+        <a href="https://github.com/marshallward/MOM6">Source repository ↗</a>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header class="page-header">
+        <nav aria-label="Breadcrumb">
+          <a href="index.html">MOM6</a><span aria-hidden="true">/</span
+          ><span>$breadcrumb</span>
+        </nav>
+        <span class="header-note">Documentation</span>
+      </header>
+      <div class="page-layout">
+        <div id="content" tabindex="-1">
+          $body
+          <footer class="page-footer">
+            API generated with Flint · Rendered from reStructuredText
+          </footer>
+        </div>
+        <nav class="contents" aria-label="On this page" $contents_hidden>
+          <h2>On this page</h2>
+          <ul>
+            $contents
+          </ul>
+        </nav>
+      </div>
+    </div>
+  </body>
+</html>

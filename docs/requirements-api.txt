@@ -1,0 +1,3 @@
+flint @ git+https://github.com/marshallward/flint.git@78c5eb204745ecf05d8ea8818480660bdb8a0253
+docutils==0.22.2
+pybtex==0.26.1

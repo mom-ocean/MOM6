@@ -1,0 +1,162 @@
+# This file is part of MOM6, the Modular Ocean Model version 6.
+# See the LICENSE file for licensing information.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Documentation and style
+
+on:
+  push:
+
+  pull_request:
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-style-and-docstrings:
+    name: Check source style and documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Check white space
+        id: style_check
+        run: |
+          set -o pipefail
+          ./.testing/trailer.py -e TEOS10 -l 120 src config_src 2>&1 | tee style_errors
+        continue-on-error: true
+
+      - name: Install documentation tools
+        run: python -m pip install -r docs/requirements-api.txt
+
+      - name: Check API documentation completeness
+        id: documentation_check
+        # Match the former Doxygen input roots. Internal/private API entities are
+        # included; procedure-local variables and optional argument checks are not.
+        # Module/program/procedure/abstract-type descriptions are deferred; --strict enables them.
+        # Private module parameters are likewise deferred, but other variables are checked.
+        run: |
+          set -o pipefail
+          mkdir -p docs/_build/docstrings
+          flint check-docs src config_src/drivers/solo_driver \
+            config_src/memory/dynamic_symmetric config_src/external \
+            config_src/drivers/FMS_cap \
+            -I config_src/memory/dynamic_symmetric \
+            --defer-include src/framework/version_variable.h \
+            --exclude src/equation_of_state/TEOS10 \
+            --exclude pkg/GSW-Fortran --exclude pkg/CVMix-src \
+            2>&1 | tee docs/_build/docstrings/check.log
+
+      - name: Retain documentation and style diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: docstring-check-reports
+          path: |
+            docs/_build/docstrings/
+            style_errors
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Report documentation and style checks
+        if: always()
+        run: |
+          {
+            echo "Source check outcomes:"
+            echo "  White space: ${{ steps.style_check.outcome }}"
+            echo "  API documentation completeness: ${{ steps.documentation_check.outcome }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat style_errors
+          test "${{ steps.style_check.outcome }}" = success
+          test ! -s style_errors
+
+  build:
+    name: Build and check API reference
+    needs: check-style-and-docstrings
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install documentation tools
+        run: python -m pip install -r docs/requirements-api.txt
+
+      - name: Install graph renderer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+
+      - name: Test documentation builder
+        run: python -m unittest discover -s docs -p 'test_docs.py'
+
+      - name: Generate, render, and check links
+        run: python docs/build_docs.py
+
+      - name: Summarize reference build
+        run: |
+          {
+            echo '## Flint API reference'
+            echo '```json'
+            cat docs/_build/flint-api/reports/summary.json
+            echo '```'
+            echo 'External calls are grouped by dependency. Unresolved names remain in the diagnostics artifact, not the published call lists.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain reST, HTML, and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: flint-api-reference
+          path: docs/_build/flint-api/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Prepare Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs/_build/flint-api/html
+
+  deploy:
+    name: Deploy API reference
+    needs: build
+
+    # Publish from the default branch or the current development branch.
+    if: >-
+      github.repository == 'marshallward/MOM6' &&
+      github.event_name != 'pull_request' &&
+      (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) ||
+       github.ref == 'refs/heads/flint-docs')
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    concurrency:
+      group: flint-api-pages
+      cancel-in-progress: false
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
