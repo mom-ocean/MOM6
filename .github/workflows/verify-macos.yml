@@ -4,7 +4,12 @@
 
 name: MacOS verification
 
-on: [push, pull_request]
+# Run manually while hosted macOS runner capacity is limited.
+on: [workflow_dispatch]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CC: gcc
