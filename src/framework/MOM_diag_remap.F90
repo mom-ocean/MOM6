@@ -78,7 +78,7 @@ type :: diag_remap_ctrl
   logical :: initialized = .false.  !< Whether remappping initialized
   logical :: used = .false.  !< Whether this coordinate actually gets used.
   integer :: vertical_coord = 0 !< The vertical coordinate that we remap to
-  character(len=10) :: vertical_coord_name ='' !< The coordinate name as understood by ALE
+  character(len=10) :: vertical_coord_name = '' !< The coordinate name as understood by ALE
   logical :: Z_based_coord = .false.  !< If true, this coordinate is based on remapping of
                                       !! geometric distances across layers (in [Z ~> m]) rather
                                       !! than layer thicknesses (in [H ~> m or kg m-2]).  This
@@ -367,7 +367,7 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
       do k=1,nz ; h_target(i,j,k) = zInterfaces(K) - zInterfaces(K+1) ; enddo
     endif ; enddo ; enddo
   elseif (remap_cs%vertical_coord == coordinateMode('HYCOM1')) then
-    call MOM_error(FATAL,"diag_remap_update: HYCOM1 coordinate not coded for diagnostics yet!")
+    call MOM_error(FATAL, "diag_remap_update: HYCOM1 coordinate not coded for diagnostics yet!")
 !    do j=js-1,je+1 ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.0) then
 !      call build_hycom1_column(remap_cs%regrid_cs, nz, &
 !                           bottom_depth(i,j), h_tot(i,j), zInterfaces)

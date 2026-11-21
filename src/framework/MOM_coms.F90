@@ -101,9 +101,9 @@ type, public :: EFP_type ; private
 end type EFP_type
 
 !> Add two extended-fixed-point numbers
-interface operator (+) ; module procedure EFP_plus  ; end interface
+interface operator(+) ; module procedure EFP_plus  ; end interface
 !> Subtract one extended-fixed-point number from another
-interface operator (-) ; module procedure EFP_minus ; end interface
+interface operator(-) ; module procedure EFP_minus ; end interface
 !> Copy the value of one extended-fixed-point number into another
 interface assignment(=); module procedure EFP_assign ; end interface
 
@@ -212,7 +212,7 @@ function reproducing_EFP_sum_2d(array, isr, ier, jsr, jer, overflow_check, err, 
     endif
     if (abs(max_mag_term) >= prec_error*pr(1)) then
       write(mesg, '(ES13.5)') max_mag_term
-      call MOM_error(FATAL,"Overflow in reproducing_EFP_sum(_2d) conversion of "//trim(mesg))
+      call MOM_error(FATAL, "Overflow in reproducing_EFP_sum(_2d) conversion of "//trim(mesg))
     endif
     if (overflow_error) then
       call MOM_error(FATAL, "Overflow in reproducing_EFP_sum(_2d).")
@@ -315,7 +315,7 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
     do j=js,je ; do i=is,ie
       rsum(1) = rsum(1) + descale*array(i,j)
     enddo ; enddo
-    if (do_sum_across_PEs) call sum_across_PEs(rsum,1)
+    if (do_sum_across_PEs) call sum_across_PEs(rsum, 1)
     sum = rsum(1) * I_unscale
 
     if (present(err)) then ; err = 0 ; endif
@@ -328,7 +328,7 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
           err = err + 2
         else
           write(mesg, '(ES13.5)') sum
-          call MOM_error(FATAL,"Repro_sum_2d: Overflow in real_to_ints conversion of "//trim(mesg))
+          call MOM_error(FATAL, "Repro_sum_2d: Overflow in real_to_ints conversion of "//trim(mesg))
         endif
       endif
     endif
@@ -441,7 +441,7 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, EFP_lay_su
       if (NaN_error) call MOM_error(FATAL, "NaN in input field of reproducing_sum(_3d).")
       if (abs(max_mag_term) >= prec_error*pr(1)) then
         write(mesg, '(ES13.5)') max_mag_term
-        call MOM_error(FATAL,"Overflow in reproducing_sum(_3d) conversion of "//trim(mesg))
+        call MOM_error(FATAL, "Overflow in reproducing_sum(_3d) conversion of "//trim(mesg))
       endif
       if (overflow_error) call MOM_error(FATAL, "Overflow in reproducing_sum(_3d).")
     endif
@@ -489,7 +489,7 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, EFP_lay_su
       if (NaN_error) call MOM_error(FATAL, "NaN in input field of reproducing_sum(_3d).")
       if (abs(max_mag_term) >= prec_error*pr(1)) then
         write(mesg, '(ES13.5)') max_mag_term
-        call MOM_error(FATAL,"Overflow in reproducing_sum(_3d) conversion of "//trim(mesg))
+        call MOM_error(FATAL, "Overflow in reproducing_sum(_3d) conversion of "//trim(mesg))
       endif
       if (overflow_error) call MOM_error(FATAL, "Overflow in reproducing_sum(_3d).")
     endif
@@ -550,7 +550,7 @@ function real_to_ints(r, prec_error, overflow) result(ints)
     if ((r >= 1e30) .eqv. (r < 1e30)) overflow = .true.
   elseif (.not.(rs < prec_err*pr(1))) then
     write(mesg, '(ES13.5)') r
-    call MOM_error(FATAL,"Overflow in real_to_ints conversion of "//trim(mesg))
+    call MOM_error(FATAL, "Overflow in real_to_ints conversion of "//trim(mesg))
   endif
 
   do i=1,efp_digits
@@ -965,7 +965,7 @@ function real_to_EFP(val, overflow)
     real_to_EFP%v(:) = real_to_ints(val, overflow=over)
     if (over) then
       write(mesg, '(ES13.5)') val
-      call MOM_error(FATAL,"Overflow in real_to_EFP conversion of "//trim(mesg))
+      call MOM_error(FATAL, "Overflow in real_to_EFP conversion of "//trim(mesg))
     endif
   endif
 
@@ -1010,7 +1010,7 @@ subroutine EFP_list_sum_across_PEs(EFPs, nval, errors)
     do n=1,efp_digits ; EFPs(i)%v(n) = ints(n,i) ; enddo
     if (present(errors)) errors(i) = overflow_error
     if (overflow_error) then
-      write (mesg,'("EFP_list_sum_across_PEs error at ",i0," val was ",ES12.6, ", prec_error = ",ES12.6)') &
+      write(mesg,'("EFP_list_sum_across_PEs error at ",i0," val was ",ES12.6, ", prec_error = ",ES12.6)') &
              i, EFP_to_real(EFPs(i)), real(prec_error)
       call MOM_error(WARNING, mesg)
     endif
@@ -1058,7 +1058,7 @@ subroutine EFP_val_sum_across_PEs(EFP, error)
   do n=1,efp_digits ; EFP%v(n) = ints(n) ; enddo
   if (present(error)) error = overflow_error
   if (overflow_error) then
-    write (mesg,'("EFP_val_sum_across_PEs error val was ",ES12.6, ", prec_error = ",ES12.6)') &
+    write(mesg,'("EFP_val_sum_across_PEs error val was ",ES12.6, ", prec_error = ",ES12.6)') &
            EFP_to_real(EFP), real(prec_error)
     call MOM_error(WARNING, mesg)
   endif

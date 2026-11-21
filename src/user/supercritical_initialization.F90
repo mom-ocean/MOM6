@@ -56,8 +56,8 @@ subroutine supercritical_set_OBC_data(OBC, G, GV, US, param_file)
     if (segment%gradient) cycle
     if (segment%oblique .and. .not. segment%nudged .and. .not. segment%Flather) cycle
 
-   unrot_dir = segment%direction
-   if (turns /= 0) unrot_dir = rotate_OBC_segment_direction(segment%direction, -turns)
+    unrot_dir = segment%direction
+    if (turns /= 0) unrot_dir = rotate_OBC_segment_direction(segment%direction, -turns)
 
     if ((unrot_dir == OBC_DIRECTION_E) .or. (unrot_dir == OBC_DIRECTION_W)) then
       jsd = segment%HI%jsd ; jed = segment%HI%jed

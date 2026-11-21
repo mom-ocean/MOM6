@@ -304,9 +304,9 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
   call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
 
-  main_parameters=.false.
-  if (len_trim(param_prefix)==0) main_parameters=.true.
-  if (main_parameters .and. len_trim(param_suffix)>0) call MOM_error(FATAL,trim(mdl)//&
+  main_parameters = .false.
+  if (len_trim(param_prefix) == 0) main_parameters = .true.
+  if (main_parameters .and. len_trim(param_suffix)>0) call MOM_error(FATAL, trim(mdl)//&
               ' initialize_regridding: Suffix provided without prefix for parameter names!')
 
   CS%nk = 0
@@ -319,7 +319,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
     call get_param(param_file, mdl, "REGRIDDING_COORDINATE_UNITS", coord_units, &
                  "Units of the regridding coordinate.", default=coordinateUnits(coord_mode))
   else
-    coord_units=coordinateUnits(coord_mode)
+    coord_units = coordinateUnits(coord_mode)
   endif
 
   if (coord_is_state_dependent) then
@@ -381,7 +381,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
     param_name = create_coord_param(param_prefix, "DEF", param_suffix)
     coord_res_param = create_coord_param(param_prefix, "RES", param_suffix)
     string2 = 'UNIFORM'
-    if ((maximum_depth>3000.) .and. (maximum_depth<9250.)) string2='WOA09' ! For convenience
+    if ((maximum_depth > 3000.) .and. (maximum_depth < 9250.)) string2 = 'WOA09' ! For convenience
   endif
   call get_param(param_file, mdl, param_name, string, &
                  "Determines how to specify the coordinate "//&
@@ -421,22 +421,22 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
             "in z-coordinate mode, the parameter is a list of level\n"//&
             "thicknesses (in m). In sigma-coordinate mode, the list\n"//&
             "is of non-dimensional fractions of the water column."
-  if (index(trim(string),'UNIFORM')==1) then
+  if (index(trim(string), 'UNIFORM') == 1) then
     if (len_trim(string)==7) then
       ke = GV%ke ! Use model nk by default
       tmpReal = maximum_depth
-    elseif (index(trim(string),'UNIFORM:')==1 .and. len_trim(string)>8) then
+    elseif (index(trim(string), 'UNIFORM:')==1 .and. len_trim(string)>8) then
       ! Format is "UNIFORM:N" or "UNIFORM:N,dz"
-      ke = extract_integer(string(9:len_trim(string)),'',1)
-      tmpReal = extract_real(string(9:len_trim(string)),',',2,missing_value=maximum_depth)
+      ke = extract_integer(string(9:len_trim(string)), '', 1)
+      tmpReal = extract_real(string(9:len_trim(string)), ',', 2, missing_value=maximum_depth)
     else
-      call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
+      call MOM_error(FATAL, trim(mdl)//', initialize_regridding: '// &
           'Unable to interpret "'//trim(string)//'".')
     endif
     allocate(dz(ke))
     dz(:) = uniformResolution(ke, coord_mode, tmpReal, &
-                US%R_to_kg_m3*(GV%Rlay(1) + 0.5*(GV%Rlay(1)-GV%Rlay(min(2,ke)))), &
-                US%R_to_kg_m3*(GV%Rlay(ke) + 0.5*(GV%Rlay(ke)-GV%Rlay(max(ke-1,1)))) )
+                US%R_to_kg_m3*(GV%Rlay(1) + 0.5*(GV%Rlay(1) - GV%Rlay(min(2, ke)))), &
+                US%R_to_kg_m3*(GV%Rlay(ke) + 0.5*(GV%Rlay(ke) - GV%Rlay(max(ke-1, 1)))) )
     if (main_parameters) call log_param(param_file, mdl, "!"//coord_res_param, dz, &
                    trim(message), units=trim(coord_units))
   elseif (trim(string)=='PARAM') then
@@ -444,7 +444,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
     allocate(dz(1001))
     dz(:) = -1. ! Setting to <0 allows detection of unset elements
     call get_param(param_file, mdl, coord_res_param, dz, "Scan", units="", do_not_log=.true.)
-    if (dz(1001)>=0.) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
+    if (dz(1001)>=0.) call MOM_error(FATAL, trim(mdl)//", initialize_regridding: "// &
         "PARAM specification is limited to 1000 values. Hack the code to use more!")
     do ke=1,1000 ! Find number of defined levels
       if (dz(ke+1)<0.) exit
@@ -453,7 +453,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
     allocate(dz(ke)) ! Allocate with the correct number of levels, and re-read thicknesses
     call get_param(param_file, mdl, coord_res_param, dz, &
                    trim(message), units=trim(coord_units), fail_if_missing=.true.)
-  elseif (index(trim(string),'FILE:')==1) then
+  elseif (index(trim(string), 'FILE:') == 1) then
     ! FILE:filename,var_name is assumed to be reading level thickness variables
     ! FILE:filename,interfaces=var_name reads positions
     if (string(6:6)=='.' .or. string(6:6)=='/') then
@@ -463,20 +463,20 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
       ! Otherwise assume we should look for the file in INPUTDIR
       fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
     endif
-    if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
+    if (.not. file_exists(fileName)) call MOM_error(FATAL, trim(mdl)//", initialize_regridding: "// &
             "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
 
     varName = trim( extractWord(trim(string(6:)), 2) )
     if (len_trim(varName)==0) then
-      if (field_exists(fileName,'dz')) then ; varName = 'dz'
-      elseif (field_exists(fileName,'dsigma')) then ; varName = 'dsigma'
-      elseif (field_exists(fileName,'ztest')) then ; varName = 'ztest'
-      else ;  call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
+      if (field_exists(fileName, 'dz')) then ; varName = 'dz'
+      elseif (field_exists(fileName, 'dsigma')) then ; varName = 'dsigma'
+      elseif (field_exists(fileName, 'ztest')) then ; varName = 'ztest'
+      else ;  call MOM_error(FATAL, trim(mdl)//", initialize_regridding: "// &
                     "Coordinate variable not specified and none could be guessed.")
       endif
     endif
     ! This check fails when the variable is a dimension variable! -AJA
-   !if (.not. field_exists(fileName,trim(varName))) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
+   !if (.not. field_exists(fileName, trim(varName))) call MOM_error(FATAL, trim(mdl)//", initialize_regridding: "// &
    !             "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
     if (CS%regridding_scheme == REGRIDDING_SIGMA) then
       expected_units = 'nondim' ; alt_units = expected_units
@@ -485,8 +485,8 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
     else
       expected_units = 'meters' ; alt_units = 'm'
     endif
-    if (index(trim(varName),'interfaces=')==1) then
-      varName=trim(varName(12:))
+    if (index(trim(varName), 'interfaces=') == 1) then
+      varName = trim(varName(12:))
       call verify_variable_units(filename, varName, expected_units, message, ierr, alt_units)
       if (ierr) call MOM_error(FATAL, trim(mdl)//", initialize_regridding: "//&
                   "Unsupported format in grid definition '"//trim(filename)//&
@@ -514,20 +514,20 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
       call MOM_read_data(trim(fileName), trim(varName), dz)
     endif
     if (main_parameters .and. (ke/=GV%ke)) then
-      call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
+      call MOM_error(FATAL, trim(mdl)//', initialize_regridding: '// &
                  'Mismatch in number of model levels and "'//trim(string)//'".')
     endif
     if (main_parameters) call log_param(param_file, mdl, "!"//coord_res_param, dz, &
                trim(message), units=coordinateUnits(coord_mode))
-  elseif (index(trim(string),'FNC1:')==1) then
+  elseif (index(trim(string), 'FNC1:') == 1) then
     ke = GV%ke ; allocate(dz(ke))
     call dz_function1( trim(string(6:)), dz )
     if (main_parameters) call log_param(param_file, mdl, "!"//coord_res_param, dz, &
                trim(message), units=coordinateUnits(coord_mode))
-  elseif (index(trim(string),'RFNC1:')==1) then
+  elseif (index(trim(string), 'RFNC1:') == 1) then
     ! Function used for set target interface densities
     ke = rho_function1( trim(string(7:)), rho_target )
-  elseif (index(trim(string),'HYBRID:')==1) then
+  elseif (index(trim(string), 'HYBRID:') == 1) then
     ke = GV%ke
     allocate(dz(ke))
     allocate(rho_target(ke+1))
@@ -542,15 +542,15 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
         trim(mdl)//", initialize_regridding: HYBRID "// &
         "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
     varName = trim( extractWord(trim(string(8:)), 2) )
-    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL, &
+    if (.not. field_exists(fileName, varName)) call MOM_error(FATAL, &
         trim(mdl)//", initialize_regridding: HYBRID "// &
         "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
     call MOM_read_data(trim(fileName), trim(varName), rho_target)
     varName = trim( extractWord(trim(string(8:)), 3) )
     if (varName(1:5) == 'FNC1:') then ! Use FNC1 to calculate dz
-      call dz_function1( trim(string((index(trim(string),'FNC1:')+5):)), dz )
+      call dz_function1( trim(string((index(trim(string), 'FNC1:') + 5):)), dz )
     else ! Read dz from file
-      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL, &
+      if (.not. field_exists(fileName, varName)) call MOM_error(FATAL, &
           trim(mdl)//", initialize_regridding: HYBRID "// &
           "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
       call MOM_read_data(trim(fileName), trim(varName), dz)
@@ -561,7 +561,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
       call log_param(param_file, mdl, "!TARGET_DENSITIES", rho_target, &
                'HYBRID target densities for interfaces', units="kg m-3")
     endif
-  elseif (index(trim(string),'HYBRID_3D:')==1) then
+  elseif (index(trim(string), 'HYBRID_3D:') == 1) then
     ke = GV%ke
     allocate(dz_3d(SZI_(G),SZJ_(G),ke), source=0.0)
     allocate(rho_target_3d(SZI_(G),SZJ_(G),ke+1), source=0.0)
@@ -576,7 +576,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
         trim(mdl)//", initialize_regridding: HYBRID_3D "// &
         "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
     varName = trim( extractWord(trim(string(11:)), 2) )
-    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL, &
+    if (.not. field_exists(fileName, varName)) call MOM_error(FATAL, &
         trim(mdl)//", initialize_regridding: HYBRID_3D "// &
         "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
     call MOM_read_data(trim(fileName), trim(varName), rho_target_3d, G%Domain)
@@ -584,7 +584,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
     varName = trim( extractWord(trim(string(11:)), 3) )
     if (varName(1:5) == 'FNC1:') then ! Use FNC1 to calculate dz_3d
       allocate(dz(ke))
-      call dz_function1( trim(string((index(trim(string),'FNC1:')+5):)), dz )
+      call dz_function1( trim(string((index(trim(string), 'FNC1:') + 5):)), dz )
       ! Adjust target grid to be consistent with maximum_depth
       tmpReal = sum( dz(:) )
       if (tmpReal < maximum_depth) then
@@ -602,7 +602,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
                 trim(message), units=coordinateUnits(coord_mode))
       endif
     else ! Read dz from file
-      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL, &
+      if (.not. field_exists(fileName, varName)) call MOM_error(FATAL, &
           trim(mdl)//", initialize_regridding: HYBRID_3D "// &
           "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
       call MOM_read_data(trim(fileName), trim(varName), dz_3d, G%Domain)
@@ -610,10 +610,10 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
       ! set nominal 1-d dz to UNIFORM
       allocate(dz(ke))
       dz(:) = uniformResolution(ke, coord_mode, maximum_depth, &
-                  US%R_to_kg_m3*(GV%Rlay(1) + 0.5*(GV%Rlay(1)-GV%Rlay(min(2,ke)))), &
-                  US%R_to_kg_m3*(GV%Rlay(ke) + 0.5*(GV%Rlay(ke)-GV%Rlay(max(ke-1,1)))) )
+                  US%R_to_kg_m3*(GV%Rlay(1) + 0.5*(GV%Rlay(1) - GV%Rlay(min(2, ke)))), &
+                  US%R_to_kg_m3*(GV%Rlay(ke) + 0.5*(GV%Rlay(ke) - GV%Rlay(max(ke-1, 1)))) )
     endif !dz
-  elseif (index(trim(string),'HYBRID_MAP:')==1) then
+  elseif (index(trim(string), 'HYBRID_MAP:') == 1) then
     ke = GV%ke
     allocate(dz_3d(SZI_(G),SZJ_(G),ke), source=0.0)
     allocate(rho_target_3d(SZI_(G),SZJ_(G),ke+1), source=0.0)
@@ -629,7 +629,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
         trim(mdl)//", initialize_regridding: HYBRID_MAP "// &
         "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
     varName = trim( extractWord(trim(string(12:)), 2) )
-    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL, &
+    if (.not. field_exists(fileName, varName)) call MOM_error(FATAL, &
         trim(mdl)//", initialize_regridding: HYBRID_MAP "// &
         "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
     call MOM_read_data(trim(fileName), trim(varName), index_map, G%Domain)
@@ -637,7 +637,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
     !find maximum index
     np = 1
     do j=G%jsc, G%jec ; do i=G%isc, G%iec
-      np = max(np,ceiling(index_map(i,j)))
+      np = max(np, ceiling(index_map(i,j)))
     enddo ; enddo
     call max_across_PEs(np)
     write(string2,"(i3)") np
@@ -648,7 +648,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
     allocate(dz_2d(ke,np))
     allocate(rho_target_2d(ke+1,np))
     varName = trim( extractWord(trim(string(12:)), 3) )
-    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL, &
+    if (.not. field_exists(fileName, varName)) call MOM_error(FATAL, &
         trim(mdl)//", initialize_regridding: HYBRID_MAP "// &
         "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
     ! MOM_read_data can't handle this array
@@ -682,7 +682,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
     varName = trim( extractWord(trim(string(12:)), 4) )
     if (varName(1:5) == 'FNC1:') then ! Use FNC1 to calculate dz_3d
       allocate(dz(ke))
-      call dz_function1( trim(string((index(trim(string),'FNC1:')+5):)), dz )
+      call dz_function1( trim(string((index(trim(string), 'FNC1:') + 5):)), dz )
       ! Adjust target grid to be consistent with maximum_depth
       tmpReal = sum( dz(:) )
       if (tmpReal < maximum_depth) then
@@ -700,7 +700,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
                 trim(message), units=coordinateUnits(coord_mode))
       endif
     else ! Read dz from file
-      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL, &
+      if (.not. field_exists(fileName, varName)) call MOM_error(FATAL, &
           trim(mdl)//", initialize_regridding: HYBRID_MAP "// &
           "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
       ! MOM_read_data can't handle this array
@@ -742,7 +742,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
     deallocate(index_map)
     deallocate(rho_target_2d)
     deallocate(dz_2d)
-  elseif (index(trim(string),'WOA09INT')==1) then
+  elseif (index(trim(string), 'WOA09INT') == 1) then
     if (len_trim(string)==8) then ! string=='WOA09INT'
       tmpReal = 0. ; ke = 0 ; dz_extra = 0.
       do while (tmpReal<maximum_depth)
@@ -753,11 +753,11 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
         endif
         tmpReal = tmpReal + woa09_dzi(ke)
       enddo
-    elseif (index(trim(string),'WOA09INT:')==1) then ! string starts with 'WOA09INT:'
-      if (len_trim(string)==9) call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
+    elseif (index(trim(string), 'WOA09INT:') == 1) then ! string starts with 'WOA09INT:'
+      if (len_trim(string)==9) call MOM_error(FATAL, trim(mdl)//', initialize_regridding: '// &
                  'Expected string of form "WOA09INT:N" but got "'//trim(string)//'".')
-      ke = extract_integer(string(10:len_trim(string)),'',1)
-      if (ke>39 .or. ke<1) call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
+      ke = extract_integer(string(10:len_trim(string)), '', 1)
+      if (ke>39 .or. ke<1) call MOM_error(FATAL, trim(mdl)//', initialize_regridding: '// &
                    'For "WOA05INT:N" N must 0<N<40 but got "'//trim(string)//'".')
     endif
     allocate(dz(ke))
@@ -765,7 +765,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
       dz(k) = woa09_dzi(k)
     enddo
     if (ke > size(woa09_dzi)) dz(ke) = dz_extra
-  elseif (index(trim(string),'WOA23INT')==1) then
+  elseif (index(trim(string), 'WOA23INT') == 1) then
     if (len_trim(string)==8) then ! string=='WOA23INT'
       tmpReal = 0. ; ke = 0 ; dz_extra = 0.
       do while (tmpReal<maximum_depth)
@@ -776,11 +776,11 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
         endif
         tmpReal = tmpReal + woa23_dzi(ke)
       enddo
-    elseif (index(trim(string),'WOA23INT:')==1) then ! string starts with 'WOA23INT:'
-      if (len_trim(string)==9) call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
+    elseif (index(trim(string), 'WOA23INT:') == 1) then ! string starts with 'WOA23INT:'
+      if (len_trim(string)==9) call MOM_error(FATAL, trim(mdl)//', initialize_regridding: '// &
                  'Expected string of form "WOA23INT:N" but got "'//trim(string)//'".')
-      ke = extract_integer(string(10:len_trim(string)),'',1)
-      if (ke>39 .or. ke<1) call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
+      ke = extract_integer(string(10:len_trim(string)), '', 1)
+      if (ke>39 .or. ke<1) call MOM_error(FATAL, trim(mdl)//', initialize_regridding: '// &
                    'For "WOA05INT:N" N must 0<N<40 but got "'//trim(string)//'".')
     endif
     allocate(dz(ke))
@@ -788,7 +788,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
       dz(k) = woa23_dzi(k)
     enddo
     if (ke > size(woa23_dzi)) dz(ke) = dz_extra
-  elseif (index(trim(string),'WOA09')==1) then
+  elseif (index(trim(string), 'WOA09') == 1) then
     if (len_trim(string)==5) then ! string=='WOA09'
       tmpReal = 0. ; ke = 0 ; dz_extra = 0.
       do while (tmpReal<maximum_depth)
@@ -799,11 +799,11 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
         endif
         tmpReal = tmpReal + woa09_dz_approx(ke)
       enddo
-    elseif (index(trim(string),'WOA09:')==1) then ! string starts with 'WOA09:'
-      if (len_trim(string)==6) call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
+    elseif (index(trim(string), 'WOA09:') == 1) then ! string starts with 'WOA09:'
+      if (len_trim(string)==6) call MOM_error(FATAL, trim(mdl)//', initialize_regridding: '// &
                  'Expected string of form "WOA09:N" but got "'//trim(string)//'".')
-      ke = extract_integer(string(7:len_trim(string)),'',1)
-      if (ke>40 .or. ke<1) call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
+      ke = extract_integer(string(7:len_trim(string)), '', 1)
+      if (ke>40 .or. ke<1) call MOM_error(FATAL, trim(mdl)//', initialize_regridding: '// &
                    'For "WOA05:N" N must 0<N<41 but got "'//trim(string)//'".')
     endif
     allocate(dz(ke))
@@ -812,7 +812,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
     enddo
     if (ke > size(woa09_dz_approx)) dz(ke) = dz_extra
   else
-    call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
+    call MOM_error(FATAL, trim(mdl)//", initialize_regridding: "// &
         "Unrecognized coordinate configuration"//trim(string))
   endif
 
@@ -831,7 +831,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
           if ( dz(ke) + ( maximum_depth - tmpReal ) > 0. ) then
             dz(ke) = dz(ke) + ( maximum_depth - tmpReal )
           else
-            call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
+            call MOM_error(FATAL, trim(mdl)//", initialize_regridding: "// &
                 "MAXIMUM_DEPTH was too shallow to adjust bottom layer of DZ!"//trim(string))
           endif
         endif
@@ -910,7 +910,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
     deallocate(dz_shallow)
   endif !REGRIDDING_HYCOM1
 
-  CS%nk=ke
+  CS%nk = ke
 
   ! Target resolution (for fixed coordinates)
   if (allocated(dz_3d)) then
@@ -1066,7 +1066,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
       call get_param(param_file, mdl, "MAXIMUM_INTERFACE_DEPTHS", z_max, &
                    trim(message), units="m", scale=GV%m_to_H, fail_if_missing=.true.)
       call set_regrid_max_depths(CS, z_max)
-    elseif (index(trim(longString),'FILE:')==1) then
+    elseif (index(trim(longString), 'FILE:') == 1) then
       if (longString(6:6)=='.' .or. longString(6:6)=='/') then
         ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
         fileName = trim( extractWord(trim(longString(6:)), 1) )
@@ -1074,20 +1074,20 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
         ! Otherwise assume we should look for the file in INPUTDIR
         fileName = trim(inputdir) // trim( extractWord(trim(longString(6:)), 1) )
       endif
-      if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)// &
+      if (.not. file_exists(fileName)) call MOM_error(FATAL, trim(mdl)// &
           ", initialize_regridding: "// &
           "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(longString)//")")
 
       do_sum = .false.
       varName = trim( extractWord(trim(longString(6:)), 2) )
-      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mdl)// &
+      if (.not. field_exists(fileName, varName)) call MOM_error(FATAL, trim(mdl)// &
           ", initialize_regridding: "// &
           "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(longString)//")")
       if (len_trim(varName)==0) then
-        if (field_exists(fileName,'z_max')) then ; varName = 'z_max'
-        elseif (field_exists(fileName,'dz')) then ; varName = 'dz' ; do_sum = .true.
-        elseif (field_exists(fileName,'dz_max')) then ; varName = 'dz_max' ; do_sum = .true.
-        else ; call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
+        if (field_exists(fileName, 'z_max')) then ; varName = 'z_max'
+        elseif (field_exists(fileName, 'dz')) then ; varName = 'dz' ; do_sum = .true.
+        elseif (field_exists(fileName, 'dz_max')) then ; varName = 'dz_max' ; do_sum = .true.
+        else ; call MOM_error(FATAL, trim(mdl)//", initialize_regridding: "// &
             "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
         endif
       endif
@@ -1100,14 +1100,14 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
       call log_param(param_file, mdl, "!MAXIMUM_INT_DEPTHS", z_max, &
                  trim(message), units=coordinateUnits(coord_mode))
       call set_regrid_max_depths(CS, z_max, GV%m_to_H)
-    elseif (index(trim(longString),'FNC1:')==1) then
+    elseif (index(trim(longString), 'FNC1:') == 1) then
       call dz_function1( trim(longString(6:)), dz_max )
       z_max(1) = 0.0 ; do K=1,ke ; z_max(K+1) = z_max(K) + dz_max(K) ; enddo
       call log_param(param_file, mdl, "!MAXIMUM_INT_DEPTHS", z_max, &
                  trim(message), units=coordinateUnits(coord_mode))
       call set_regrid_max_depths(CS, z_max, GV%m_to_H)
     else
-      call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
+      call MOM_error(FATAL, trim(mdl)//", initialize_regridding: "// &
           "Unrecognized MAXIMUM_INT_DEPTH_CONFIG "//trim(longString))
     endif
     deallocate(z_max)
@@ -1133,7 +1133,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
       call get_param(param_file, mdl, "MAX_LAYER_THICKNESS", h_max, &
                    trim(message), units="m", fail_if_missing=.true., scale=GV%m_to_H)
       call set_regrid_max_thickness(CS, h_max)
-    elseif (index(trim(longString),'FILE:')==1) then
+    elseif (index(trim(longString), 'FILE:') == 1) then
       if (longString(6:6)=='.' .or. longString(6:6)=='/') then
         ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
         fileName = trim( extractWord(trim(longString(6:200)), 1) )
@@ -1141,18 +1141,18 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
         ! Otherwise assume we should look for the file in INPUTDIR
         fileName = trim(inputdir) // trim( extractWord(trim(longString(6:200)), 1) )
       endif
-      if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)// &
+      if (.not. file_exists(fileName)) call MOM_error(FATAL, trim(mdl)// &
           ", initialize_regridding: "// &
           "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(longString)//")")
 
       varName = trim( extractWord(trim(longString(6:)), 2) )
-      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mdl)// &
+      if (.not. field_exists(fileName, varName)) call MOM_error(FATAL, trim(mdl)// &
           ", initialize_regridding: "// &
           "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(longString)//")")
       if (len_trim(varName)==0) then
-        if (field_exists(fileName,'h_max')) then ; varName = 'h_max'
-        elseif (field_exists(fileName,'dz_max')) then ; varName = 'dz_max'
-        else ; call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
+        if (field_exists(fileName, 'h_max')) then ; varName = 'h_max'
+        elseif (field_exists(fileName, 'dz_max')) then ; varName = 'dz_max'
+        else ; call MOM_error(FATAL, trim(mdl)//", initialize_regridding: "// &
             "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
         endif
       endif
@@ -1160,13 +1160,13 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
       call log_param(param_file, mdl, "!MAX_LAYER_THICKNESS", h_max, &
                  trim(message), units=coordinateUnits(coord_mode))
       call set_regrid_max_thickness(CS, h_max, GV%m_to_H)
-    elseif (index(trim(longString),'FNC1:')==1) then
+    elseif (index(trim(longString), 'FNC1:') == 1) then
       call dz_function1( trim(longString(6:)), h_max )
       call log_param(param_file, mdl, "!MAX_LAYER_THICKNESS", h_max, &
                  trim(message), units=coordinateUnits(coord_mode))
       call set_regrid_max_thickness(CS, h_max, GV%m_to_H)
     else
-      call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
+      call MOM_error(FATAL, trim(mdl)//", initialize_regridding: "// &
           "Unrecognized MAX_LAYER_THICKNESS_CONFIG "//trim(longString))
     endif
     deallocate(h_max)
@@ -1303,10 +1303,10 @@ subroutine regridding_main( remapCS, CS, G, GV, US, h, tv, h_new, dzInterface, &
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_ARBITRARY )
-      call MOM_error(FATAL,'MOM_regridding, regridding_main: '//&
+      call MOM_error(FATAL, 'MOM_regridding, regridding_main: '//&
                      'Regridding mode "ARB" is not implemented.')
     case default
-      call MOM_error(FATAL,'MOM_regridding, regridding_main: '//&
+      call MOM_error(FATAL, 'MOM_regridding, regridding_main: '//&
                      'Unknown regridding scheme selected!')
 
   end select ! type of grid
@@ -1351,7 +1351,7 @@ subroutine regridding_preadjust_reqs(CS, do_conv_adj, do_hybgen_unmix, hybgen_CS
     case ( REGRIDDING_HYBGEN )
       do_conv_adj = .false. ; do_hybgen_unmix = CS%use_hybgen_unmix
     case default
-      call MOM_error(FATAL,'MOM_regridding, regridding_preadjust_reqs: '//&
+      call MOM_error(FATAL, 'MOM_regridding, regridding_preadjust_reqs: '//&
                      'Unknown regridding scheme selected!')
   end select ! type of grid
 
@@ -1412,7 +1412,7 @@ subroutine check_grid_column( nk, h, dzInterface, msg )
   real :: total_h_new  ! The total thickness in the updated column, in [Z ~> m] or arbitrary units
   real :: h_new        ! A thickness in the updated column, in [Z ~> m] or arbitrary units
 
-  eps =1. ; eps = epsilon(eps)
+  eps = 1. ; eps = epsilon(eps)
 
   ! Total thickness of grid h
   total_h_old = 0.
@@ -1914,12 +1914,12 @@ subroutine build_rho_grid( G, GV, US, h, nom_depth_H, tv, dzInterface, remapCS, 
       enddo
 
       if (ice_shelf) then
-         call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i,j,:), &
+        call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i,j,:), &
               tv%T(i,j,:), tv%S(i,j,:), tv%eqn_of_state, zNew, &
-              z_rigid_top=totalThickness - nominalDepth, eta_orig = zOld(1), &
+              z_rigid_top=totalThickness - nominalDepth, eta_orig=zOld(1), &
               h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
       else
-         call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i,j,:), &
+        call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i,j,:), &
                             tv%T(i,j,:), tv%S(i,j,:), tv%eqn_of_state, zNew, &
                             h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
       endif
@@ -2051,7 +2051,7 @@ subroutine build_grid_HyCOM1( G, GV, US, h, nom_depth_H, tv, h_new, dzInterface,
         do k=1,GV%ke
           totalThickness = totalThickness + h(i,j,k)
         enddo
-        z_top_col = max(nominalDepth-totalThickness,0.0)
+        z_top_col = max(nominalDepth-totalThickness, 0.0)
       else
         z_top_col = 0.0
       endif
@@ -2175,7 +2175,7 @@ subroutine adjust_interface_motion( CS, nk, h_old, dz_int )
   eps = 1. ; eps = epsilon(eps)
 
   h_total = 0. ; h_err = 0.
-  do k = 1, min(CS%nk,nk)
+  do k = 1, min(CS%nk, nk)
     h_total = h_total + h_old(k)
     h_err = h_err + max( h_old(k), abs(dz_int(k)), abs(dz_int(k+1)) )*eps
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
@@ -2200,7 +2200,7 @@ subroutine adjust_interface_motion( CS, nk, h_old, dz_int )
       endif
     enddo
   endif
-  do k = min(CS%nk,nk),2,-1
+  do k = min(CS%nk, nk), 2, -1
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
     if (h_new<CS%min_thickness) &
         dz_int(k) = ( dz_int(k+1) - h_old(k) ) + CS%min_thickness ! Implies next h_new = min_thickness
@@ -2447,7 +2447,7 @@ subroutine setCoordinateResolution_3d( dz_3d, CS, scale )
   real,      optional, intent(in)    :: scale !< A scaling factor converting dz to coordRes [Z m-1 ~> 1]
 
   if (.not.allocated(CS%coordinateResolution_3d)) &
-      call MOM_error(FATAL,'setCoordinateResolution_3d: '//&
+      call MOM_error(FATAL, 'setCoordinateResolution_3d: '//&
                            'CS%coordinateResolution_3d not allocated.')
 
   if (present(scale)) then
@@ -2489,7 +2489,7 @@ subroutine set_target_densities_3d( CS, G, scale, rho_int_3d )
   real, dimension(SZI_(G),SZJ_(G),CS%nk+1), intent(in) :: rho_int_3d !< Interface densities [kg m-3]
 
   if (.not.allocated(CS%target_density_3d)) &
-      call MOM_error(FATAL,'set_target_densities_3d: '//&
+      call MOM_error(FATAL, 'set_target_densities_3d: '//&
                            'CS%target_density_3d not allocated.')
 
   CS%target_density_3d(:,:,:) = scale * rho_int_3d(:,:,:)
@@ -2744,7 +2744,7 @@ function getCoordinateUnits( CS )
     case ( REGRIDDING_ARBITRARY )
       getCoordinateUnits = 'unknown'
     case default
-      call MOM_error(FATAL,'MOM_regridding, getCoordinateUnits: '//&
+      call MOM_error(FATAL, 'MOM_regridding, getCoordinateUnits: '//&
                      'Unknown regridding scheme selected!')
   end select ! type of grid
 
@@ -2776,7 +2776,7 @@ function getCoordinateShortName( CS )
     case ( REGRIDDING_ADAPTIVE )
       getCoordinateShortName = 'adaptive'
     case default
-      call MOM_error(FATAL,'MOM_regridding, getCoordinateShortName: '//&
+      call MOM_error(FATAL, 'MOM_regridding, getCoordinateShortName: '//&
                      'Unknown regridding scheme selected!')
   end select ! type of grid
 
@@ -2826,7 +2826,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
 
   if (present(old_grid_weight)) then
     if (old_grid_weight<0. .or. old_grid_weight>1.) &
-      call MOM_error(FATAL,'MOM_regridding, set_regrid_params: Weight is out side the range 0..1!')
+      call MOM_error(FATAL, 'MOM_regridding, set_regrid_params: Weight is out side the range 0..1!')
     CS%old_grid_weight = old_grid_weight
   endif
   if (present(use_depth_based_time_filter)) CS%use_depth_based_time_filter = &
@@ -2954,7 +2954,7 @@ function getStaticThickness( CS, SSH, depth )
     case ( REGRIDDING_ARBITRARY )
       getStaticThickness(:) = 0.  ! Not applicable
     case default
-      call MOM_error(FATAL,'MOM_regridding, getStaticThickness: '//&
+      call MOM_error(FATAL, 'MOM_regridding, getStaticThickness: '//&
                      'Unknown regridding scheme selected!')
   end select ! type of grid
 
@@ -2975,7 +2975,7 @@ subroutine dz_function1( string, dz )
   nk = size(dz) ! Number of cells
   prec = -1024.
   read( string, *) dz_min, H_total, power, prec
-  if (prec == -1024.) call MOM_error(FATAL,"dz_function1: "// &
+  if (prec == -1024.) call MOM_error(FATAL, "dz_function1: "// &
           "Problem reading FNC1: string  ="//trim(string))
   ! Create profile of ( dz - dz_min )
   do k = 1, nk
@@ -3007,7 +3007,7 @@ function create_coord_param(param_prefix, param_name, param_suffix) result(coord
     ! Note the +2 is because of two underscores
     out_length = len_trim(param_name)+len_trim(param_prefix)+len_trim(param_suffix)+2
     if (out_length > MAX_PARAM_LENGTH) then
-      call MOM_error(FATAL,"Coordinate parameter is too long; increase MAX_PARAM_LENGTH")
+      call MOM_error(FATAL, "Coordinate parameter is too long; increase MAX_PARAM_LENGTH")
     endif
     coord_param = TRIM(param_prefix)//"_"//TRIM(param_name)//"_"//TRIM(param_suffix)
   endif

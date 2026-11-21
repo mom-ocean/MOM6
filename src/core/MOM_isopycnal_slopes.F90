@@ -692,7 +692,7 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, US, halo_here,
                                    ! added to ensure positive definiteness [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, nz, halo
 
-  halo=0 ; if (present(halo_here)) halo = max(halo_here,0)
+  halo = 0 ; if (present(halo_here)) halo = max(halo_here, 0)
 
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo ; nz = GV%ke
 

@@ -262,7 +262,7 @@ subroutine MOM_sum_output_init(G, GV, US, param_file, directory, ntrnc, &
     if (CS%read_depth_list) then
       call get_param(param_file, mdl, "DEPTH_LIST_FILE", CS%depth_list_file, &
                    "The name of the depth list file.", default="Depth_list.nc")
-      if (scan(CS%depth_list_file,'/') == 0) &
+      if (scan(CS%depth_list_file, '/') == 0) &
         CS%depth_list_file = trim(slasher(directory))//trim(CS%depth_list_file)
 
       call get_param(param_file, mdl, "REQUIRE_DEPTH_LIST_CHECKSUMS", &
@@ -283,21 +283,21 @@ subroutine MOM_sum_output_init(G, GV, US, param_file, directory, ntrnc, &
     CS%DL%listsize = 1
   endif
 
-  call get_param(param_file, mdl, "ENERGYSAVEDAYS",CS%energysavedays, &
+  call get_param(param_file, mdl, "ENERGYSAVEDAYS", CS%energysavedays, &
                  "The interval in units of TIMEUNIT between saves of the "//&
                  "energies of the run and other globally summed diagnostics.",&
-                 default=set_time(0,days=1), timeunit=CS%Timeunit)
-  call get_param(param_file, mdl, "ENERGYSAVEDAYS_GEOMETRIC",CS%energysavedays_geometric, &
+                 default=set_time(0, days=1), timeunit=CS%Timeunit)
+  call get_param(param_file, mdl, "ENERGYSAVEDAYS_GEOMETRIC", CS%energysavedays_geometric, &
                  "The starting interval in units of TIMEUNIT for the first call "//&
                  "to save the energies of the run and other globally summed diagnostics. "//&
                  "The interval increases by a factor of 2. after each call to write_energy.",&
                  default=set_time(seconds=0), timeunit=CS%Timeunit)
 
   if ((time_type_to_real(CS%energysavedays_geometric) > 0.) .and. &
-     (CS%energysavedays_geometric < CS%energysavedays)) then
-         CS%energysave_geometric = .true.
+      (CS%energysavedays_geometric < CS%energysavedays)) then
+    CS%energysave_geometric = .true.
   else
-         CS%energysave_geometric = .false.
+    CS%energysave_geometric = .false.
   endif
 
   CS%Start_time = Input_start_time
@@ -535,24 +535,24 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
 
   num_nc_fields = 17
   if (.not.CS%use_temperature) num_nc_fields = 11
-  vars(1) = var_desc("Ntrunc","Nondim","Number of Velocity Truncations",'1','1')
-  vars(2) = var_desc("En","Joules","Total Energy",'1','1', conversion=RZL4_T2_to_J)
-  vars(3) = var_desc("APE","Joules","Total Interface APE",'1','i', conversion=RZL4_T2_to_J)
-  vars(4) = var_desc("KE","Joules","Total Layer KE",'1','L', conversion=RZL4_T2_to_J)
-  vars(5) = var_desc("H0","meter","Zero APE Depth of Interface",'1','i', conversion=US%Z_to_m)
-  vars(6) = var_desc("Mass_lay","kg","Total Layer Mass",'1','L', conversion=US%RZL2_to_kg)
-  vars(7) = var_desc("Mass","kg","Total Mass",'1','1', conversion=US%RZL2_to_kg)
-  vars(8) = var_desc("Mass_chg","kg","Total Mass Change between Entries",'1','1', conversion=US%RZL2_to_kg)
-  vars(9) = var_desc("Mass_anom","kg","Anomalous Total Mass Change",'1','1', conversion=US%RZL2_to_kg)
-  vars(10) = var_desc("max_CFL_trans","Nondim","Maximum finite-volume CFL",'1','1')
-  vars(11) = var_desc("max_CFL_lin","Nondim","Maximum finite-difference CFL",'1','1')
+  vars(1) = var_desc("Ntrunc", "Nondim", "Number of Velocity Truncations", '1', '1')
+  vars(2) = var_desc("En", "Joules", "Total Energy", '1', '1', conversion=RZL4_T2_to_J)
+  vars(3) = var_desc("APE", "Joules", "Total Interface APE", '1', 'i', conversion=RZL4_T2_to_J)
+  vars(4) = var_desc("KE", "Joules", "Total Layer KE", '1', 'L', conversion=RZL4_T2_to_J)
+  vars(5) = var_desc("H0", "meter", "Zero APE Depth of Interface", '1', 'i', conversion=US%Z_to_m)
+  vars(6) = var_desc("Mass_lay", "kg", "Total Layer Mass", '1', 'L', conversion=US%RZL2_to_kg)
+  vars(7) = var_desc("Mass", "kg", "Total Mass", '1', '1', conversion=US%RZL2_to_kg)
+  vars(8) = var_desc("Mass_chg", "kg", "Total Mass Change between Entries", '1', '1', conversion=US%RZL2_to_kg)
+  vars(9) = var_desc("Mass_anom", "kg", "Anomalous Total Mass Change", '1', '1', conversion=US%RZL2_to_kg)
+  vars(10) = var_desc("max_CFL_trans", "Nondim", "Maximum finite-volume CFL", '1', '1')
+  vars(11) = var_desc("max_CFL_lin", "Nondim", "Maximum finite-difference CFL", '1', '1')
   if (CS%use_temperature) then
-    vars(12) = var_desc("Salt","kg","Total Salt",'1','1', conversion=salt_to_kg)
-    vars(13) = var_desc("Salt_chg","kg","Total Salt Change between Entries",'1','1', conversion=salt_to_kg)
-    vars(14) = var_desc("Salt_anom","kg","Anomalous Total Salt Change",'1','1', conversion=salt_to_kg)
-    vars(15) = var_desc("Heat","Joules","Total Heat",'1','1', conversion=QRZL2_to_J)
-    vars(16) = var_desc("Heat_chg","Joules","Total Heat Change between Entries",'1','1', conversion=QRZL2_to_J)
-    vars(17) = var_desc("Heat_anom","Joules","Anomalous Total Heat Change",'1','1', conversion=QRZL2_to_J)
+    vars(12) = var_desc("Salt", "kg", "Total Salt", '1', '1', conversion=salt_to_kg)
+    vars(13) = var_desc("Salt_chg", "kg", "Total Salt Change between Entries", '1', '1', conversion=salt_to_kg)
+    vars(14) = var_desc("Salt_anom", "kg", "Anomalous Total Salt Change", '1', '1', conversion=salt_to_kg)
+    vars(15) = var_desc("Heat", "Joules", "Total Heat", '1', '1', conversion=QRZL2_to_J)
+    vars(16) = var_desc("Heat_chg", "Joules", "Total Heat Change between Entries", '1', '1', conversion=QRZL2_to_J)
+    vars(17) = var_desc("Heat_anom", "Joules", "Anomalous Total Heat Change", '1', '1', conversion=QRZL2_to_J)
   endif
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -697,7 +697,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
           (volbelow < CS%DL%vol_below(CS%lH(k)+1))) then
         li = CS%lH(k)
       else
-        labove=CS%DL%listsize
+        labove = CS%DL%listsize
         li = (labove + lbelow) / 2
         do while (li > lbelow)
           if (volbelow < CS%DL%vol_below(li)) then ; labove = li
@@ -1274,7 +1274,7 @@ subroutine create_depth_list(G, DL, min_depth_inc)
       ir = ir - 1
       if (ir == 1) then ; indx2(1) = indxt ; exit ; endif
     endif
-    i=k ; j=k*2
+    i = k ; j = k*2
     do ; if (j > ir) exit
       if (j < ir .AND. Dlist(indx2(j)) < Dlist(indx2(j+1))) j = j + 1
       if (Dnow < Dlist(indx2(j))) then ; indx2(i) = indx2(j) ; i = j ; j = j + i

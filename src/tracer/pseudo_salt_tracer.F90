@@ -216,8 +216,8 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
   if (.not.associated(CS%ps)) return
 
   if (debug) then
-    call hchksum(tv%S,"salt pre pseudo-salt vertdiff", G%HI, unscale=US%S_to_ppt)
-    call hchksum(CS%ps,"pseudo_salt pre pseudo-salt vertdiff", G%HI)
+    call hchksum(tv%S, "salt pre pseudo-salt vertdiff", G%HI, unscale=US%S_to_ppt)
+    call hchksum(CS%ps, "pseudo_salt pre pseudo-salt vertdiff", G%HI)
   endif
 
   FluxRescaleDepth = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )

@@ -410,7 +410,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
       keep_going = .true.
       do k=1,nz
         do i=is-1,ie+1
-          h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H),0.0)
+          h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H), 0.0)
         enddo
         if (keep_going) then
           if (CS%use_Stanley_ML) then
@@ -434,7 +434,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
               line_is_empty = .false.
             endif
           enddo
-          if (line_is_empty) keep_going=.false.
+          if (line_is_empty) keep_going = .false.
         endif
       enddo
 
@@ -453,7 +453,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
       keep_going = .true.
       do k=1,nz
         do i=is-1,ie+1
-          h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H),0.0)
+          h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H), 0.0)
         enddo
         if (keep_going) then
           ! if (CS%use_Stanley_ML) then  ! This is not implemented yet in the EoS code.
@@ -477,7 +477,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
               line_is_empty = .false.
             endif
           enddo
-          if (line_is_empty) keep_going=.false.
+          if (line_is_empty) keep_going = .false.
         endif
       enddo
 
@@ -713,14 +713,14 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
     if (CS%id_uml > 0) then
       do j=js,je ; do I=is-1,ie
         h_vel = 0.5*((htot_fast(i,j) + htot_fast(i+1,j)) + h_neglect)
-        uDml_diag(I,j) = uDml_diag(I,j) / (0.01*h_vel) * G%IdyCu(I,j) * (mu(0.,0.)-mu(-.01,0.))
+        uDml_diag(I,j) = uDml_diag(I,j) / (0.01*h_vel) * G%IdyCu(I,j) * (mu(0., 0.) - mu(-.01, 0.))
       enddo ; enddo
       call post_data(CS%id_uml, uDml_diag, CS%diag)
     endif
     if (CS%id_vml > 0) then
       do J=js-1,je ; do i=is,ie
         h_vel = 0.5*((htot_fast(i,j) + htot_fast(i,j+1)) + h_neglect)
-        vDml_diag(i,J) = vDml_diag(i,J) / (0.01*h_vel) * G%IdxCv(i,J) * (mu(0.,0.)-mu(-.01,0.))
+        vDml_diag(i,J) = vDml_diag(i,J) / (0.01*h_vel) * G%IdxCv(i,J) * (mu(0., 0.) - mu(-.01, 0.))
       enddo ; enddo
       call post_data(CS%id_vml, vDml_diag, CS%diag)
     endif
@@ -913,7 +913,7 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   endif
 
   if (CS%debug) then
-    call hchksum(h,'mixed_Bodner: h', G%HI, haloshift=1, unscale=GV%H_to_mks)
+    call hchksum(h, 'mixed_Bodner: h', G%HI, haloshift=1, unscale=GV%H_to_mks)
     call hchksum(BLD, 'mle_Bodner: BLD', G%HI, haloshift=1, unscale=US%Z_to_m)
     call hchksum(h_MLD, 'mle_Bodner: h_MLD', G%HI, haloshift=1, unscale=GV%H_to_mks)
     if (associated(bflux)) &
@@ -921,7 +921,7 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
     call hchksum(U_star_2d, 'mle_Bodner: u*', G%HI, haloshift=1, unscale=US%Z_to_m*US%s_to_T)
     call hchksum(CS%MLD_filtered, 'mle_Bodner: MLD_filtered 1', &
                  G%HI, haloshift=1, unscale=GV%H_to_mks)
-    call hchksum(CS%MLD_filtered_slow,'mle_Bodner: MLD_filtered_slow 1', &
+    call hchksum(CS%MLD_filtered_slow, 'mle_Bodner: MLD_filtered_slow 1', &
                  G%HI, haloshift=1, unscale=GV%H_to_mks)
   endif
 
@@ -1026,13 +1026,13 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   endif
 
   if (CS%debug) then
-    call hchksum(little_h,'mle_Bodner: little_h', G%HI, haloshift=1, unscale=GV%H_to_mks)
-    call hchksum(big_H,'mle_Bodner: big_H', G%HI, haloshift=1, unscale=GV%H_to_mks)
-    call hchksum(CS%MLD_filtered,'mle_Bodner: MLD_filtered 2', &
+    call hchksum(little_h, 'mle_Bodner: little_h', G%HI, haloshift=1, unscale=GV%H_to_mks)
+    call hchksum(big_H, 'mle_Bodner: big_H', G%HI, haloshift=1, unscale=GV%H_to_mks)
+    call hchksum(CS%MLD_filtered, 'mle_Bodner: MLD_filtered 2', &
                  G%HI, haloshift=1, unscale=GV%H_to_mks)
-    call hchksum(CS%MLD_filtered_slow,'mle_Bodner: MLD_filtered_slow 2', &
+    call hchksum(CS%MLD_filtered_slow, 'mle_Bodner: MLD_filtered_slow 2', &
                  G%HI, haloshift=1, unscale=GV%H_to_mks)
-    call hchksum(wpup,'mle_Bodner: wpup', G%HI, haloshift=1, unscale=US%L_to_m*GV%H_to_mks*US%s_to_T**2)
+    call hchksum(wpup, 'mle_Bodner: wpup', G%HI, haloshift=1, unscale=US%L_to_m*GV%H_to_mks*US%s_to_T**2)
   endif
 
   ! Calculate the average density in the "mixed layer".
@@ -1055,7 +1055,7 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
     keep_going = .true.
     do k=1,nz
       do i=is-1,ie+1
-        vol_dt_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H),0.0)
+        vol_dt_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H), 0.0)
       enddo
       if (keep_going) then
         if (GV%Boussinesq .or. GV%semi_Boussinesq) then
@@ -1078,7 +1078,7 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
             line_is_empty = .false.
           endif
         enddo
-        if (line_is_empty) keep_going=.false.
+        if (line_is_empty) keep_going = .false.
       endif
     enddo
 
@@ -1096,10 +1096,10 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   enddo
 
   if (CS%debug) then
-    call hchksum(htot,'mle_Bodner: htot', G%HI, haloshift=1, unscale=GV%H_to_mks)
-    call hchksum(vol_dt_avail,'mle_Bodner: vol_dt_avail', G%HI, haloshift=1, &
+    call hchksum(htot, 'mle_Bodner: htot', G%HI, haloshift=1, unscale=GV%H_to_mks)
+    call hchksum(vol_dt_avail, 'mle_Bodner: vol_dt_avail', G%HI, haloshift=1, &
                  unscale=US%L_to_m**2*GV%H_to_mks*US%s_to_T)
-    call hchksum(buoy_av,'mle_Bodner: buoy_av', G%HI, haloshift=1, unscale=GV%m_to_H*US%L_T_to_m_s**2)
+    call hchksum(buoy_av, 'mle_Bodner: buoy_av', G%HI, haloshift=1, unscale=GV%m_to_H*US%L_T_to_m_s**2)
   endif
 
   ! U - Component
@@ -1215,14 +1215,14 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
     if (CS%id_uml > 0) then
       do j=js,je ; do I=is-1,ie
         h_vel = 0.5*((htot(i,j) + htot(i+1,j)) + h_neglect)
-        uDml_diag(I,j) = uDml_diag(I,j) / (0.01*h_vel) * G%IdyCu(I,j) * (mu(0.,0.)-mu(-.01,0.))
+        uDml_diag(I,j) = uDml_diag(I,j) / (0.01*h_vel) * G%IdyCu(I,j) * (mu(0., 0.) - mu(-.01, 0.))
       enddo ; enddo
       call post_data(CS%id_uml, uDml_diag, CS%diag)
     endif
     if (CS%id_vml > 0) then
       do J=js-1,je ; do i=is,ie
         h_vel = 0.5*((htot(i,j) + htot(i,j+1)) + h_neglect)
-        vDml_diag(i,J) = vDml_diag(i,J) / (0.01*h_vel) * G%IdxCv(i,J) * (mu(0.,0.)-mu(-.01,0.))
+        vDml_diag(i,J) = vDml_diag(i,J) / (0.01*h_vel) * G%IdxCv(i,J) * (mu(0., 0.) - mu(-.01, 0.))
       enddo ; enddo
       call post_data(CS%id_vml, vDml_diag, CS%diag)
     endif
@@ -1375,7 +1375,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
         do i=is-1,ie+1
           rho_int(i) = rho_int(i) + h(i,j,k)*Rho_ml(i)
           htot(i,j) = htot(i,j) + h(i,j,k)
-          h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H),0.0)
+          h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H), 0.0)
         enddo
       enddo
 
@@ -1394,7 +1394,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
         do i=is-1,ie+1
           SpV_int(i) = SpV_int(i) + h(i,j,k)*SpV_ml(i)  ! [H R-1 ~> m4 kg-1 or m]
           htot(i,j) = htot(i,j) + h(i,j,k)
-          h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H),0.0)
+          h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H), 0.0)
         enddo
       enddo
 
@@ -1726,7 +1726,7 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   if (CS%use_Stanley_ML .and. .not.stoch_eos) then
     call MOM_error(FATAL, "mixedlayer_restrat_init: USE_STANLEY_ML requires STOCH_EOS")
   endif
-  call openParameterBlock(param_file,'MLE') ! Prepend MLE% to all parameters
+  call openParameterBlock(param_file, 'MLE') ! Prepend MLE% to all parameters
   if (GV%nkml==0) then
     call get_param(param_file, mdl, "USE_BODNER23", CS%use_Bodner, &
              "If true, use the Bodner et al., 2023, formulation of the re-stratifying "//&
@@ -2072,37 +2072,37 @@ logical function mixedlayer_restrat_unit_tests(verbose)
 
   ! Tests of the shape function mu(z)
   this_test = &
-    test_answer(verbose, mu(3.,0.), 0., 'mu(3)=0')
+    test_answer(verbose, mu(3., 0.), 0., 'mu(3)=0')
   this_test = this_test .or. &
-    test_answer(verbose, mu(0.,0.), 0., 'mu(0)=0')
+    test_answer(verbose, mu(0., 0.), 0., 'mu(0)=0')
   this_test = this_test .or. &
-    test_answer(verbose, mu(-0.25,0.), 0.7946428571428572, 'mu(-0.25)=0.7946...', tol=epsilon(1.))
+    test_answer(verbose, mu(-0.25, 0.), 0.7946428571428572, 'mu(-0.25)=0.7946...', tol=epsilon(1.))
   this_test = this_test .or. &
-    test_answer(verbose, mu(-0.5,0.), 1., 'mu(-0.5)=1')
+    test_answer(verbose, mu(-0.5, 0.), 1., 'mu(-0.5)=1')
   this_test = this_test .or. &
-    test_answer(verbose, mu(-0.75,0.), 0.7946428571428572, 'mu(-0.75)=0.7946...', tol=epsilon(1.))
+    test_answer(verbose, mu(-0.75, 0.), 0.7946428571428572, 'mu(-0.75)=0.7946...', tol=epsilon(1.))
   this_test = this_test .or. &
-    test_answer(verbose, mu(-1.,0.), 0., 'mu(-1)=0')
+    test_answer(verbose, mu(-1., 0.), 0., 'mu(-1)=0')
   this_test = this_test .or. &
-    test_answer(verbose, mu(-3.,0.), 0., 'mu(-3)=0')
+    test_answer(verbose, mu(-3., 0.), 0., 'mu(-3)=0')
   this_test = this_test .or. &
-    test_answer(verbose, mu(-0.5,0.5), 1., 'mu(-0.5,0.5)=1')
+    test_answer(verbose, mu(-0.5, 0.5), 1., 'mu(-0.5,0.5)=1')
   this_test = this_test .or. &
-    test_answer(verbose, mu(-1.,0.5), 0.25, 'mu(-1,0.5)=0.25')
+    test_answer(verbose, mu(-1., 0.5), 0.25, 'mu(-1,0.5)=0.25')
   this_test = this_test .or. &
-    test_answer(verbose, mu(-1.5,0.5), 0., 'mu(-1.5,0.5)=0')
+    test_answer(verbose, mu(-1.5, 0.5), 0., 'mu(-1.5,0.5)=0')
   if (.not. this_test) print '(a)','  Passed tests of mu(z)'
   mixedlayer_restrat_unit_tests = this_test
 
   ! Tests of the two time-scale running mean function
   this_test = &
-    test_answer(verbose, rmean2ts(3.,2.,0.,0.,3.), 3., 'rmean2ts(3,2,0,0,3)=3')
+    test_answer(verbose, rmean2ts(3., 2., 0., 0., 3.), 3., 'rmean2ts(3,2,0,0,3)=3')
   this_test = this_test .or. &
-    test_answer(verbose, rmean2ts(1.,2.,0.,0.,3.), 1., 'rmean2ts(1,2,0,0,3)=1')
+    test_answer(verbose, rmean2ts(1., 2., 0., 0., 3.), 1., 'rmean2ts(1,2,0,0,3)=1')
   this_test = this_test .or. &
-    test_answer(verbose, rmean2ts(4.,0.,3.,0.,1.), 1., 'rmean2ts(4,0,3,0,1)=1')
+    test_answer(verbose, rmean2ts(4., 0., 3., 0., 1.), 1., 'rmean2ts(4,0,3,0,1)=1')
   this_test = this_test .or. &
-    test_answer(verbose, rmean2ts(0.,4.,0.,3.,1.), 3., 'rmean2ts(0,4,0,3,1)=3')
+    test_answer(verbose, rmean2ts(0., 4., 0., 3., 1.), 3., 'rmean2ts(0,4,0,3,1)=3')
   if (.not. this_test) print '(a)','  Passed tests of rmean2ts(s,f,g,d,dt)'
   mixedlayer_restrat_unit_tests = mixedlayer_restrat_unit_tests .or. this_test
 

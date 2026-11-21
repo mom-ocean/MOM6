@@ -239,7 +239,7 @@ subroutine porous_widths_interface(h, tv, G, GV, US, pbv, CS, eta_bt)
     do K=1,nk+1 ; do j=js,je ; do I=Isq,Ieq ; if (G%porous_DavgU(I,j) < dmask) then
       call calc_por_interface(G%porous_DminU(I,j), G%porous_DmaxU(I,j), G%porous_DavgU(I,j), &
                               eta_u(I,j,K), pbv%por_layer_widthU(I,j,K), do_I(I,j))
-   endif ; enddo ; enddo ; enddo
+    endif ; enddo ; enddo ; enddo
   else
     do K=1,nk+1 ; do j=js,je ; do I=Isq,Ieq
       if (do_I(I,j)) then
@@ -491,13 +491,13 @@ subroutine porous_barriers_init(Time, GV, US, param_file, diag, CS)
   end select
 
   CS%id_por_layer_widthU = register_diag_field('ocean_model', 'por_layer_widthU', diag%axesCui, Time, &
-     'Porous barrier open width fraction (at the layer interfaces) of the u-faces', 'nondim')
+      'Porous barrier open width fraction (at the layer interfaces) of the u-faces', 'nondim')
   CS%id_por_layer_widthV = register_diag_field('ocean_model', 'por_layer_widthV', diag%axesCvi, Time, &
-     'Porous barrier open width fraction (at the layer interfaces) of the v-faces', 'nondim')
+      'Porous barrier open width fraction (at the layer interfaces) of the v-faces', 'nondim')
   CS%id_por_face_areaU = register_diag_field('ocean_model', 'por_face_areaU', diag%axesCuL, Time, &
-     'Porous barrier open area fraction (layer averaged) of U-faces', 'nondim')
+      'Porous barrier open area fraction (layer averaged) of U-faces', 'nondim')
   CS%id_por_face_areaV = register_diag_field('ocean_model', 'por_face_areaV', diag%axesCvL, Time, &
-     'Porous barrier open area fraction (layer averaged) of V-faces', 'nondim')
+      'Porous barrier open area fraction (layer averaged) of V-faces', 'nondim')
 
   id_clock_porous_barrier = cpu_clock_id('(Ocean porous barrier)', grain=CLOCK_MODULE)
 end subroutine

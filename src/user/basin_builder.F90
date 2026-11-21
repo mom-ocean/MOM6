@@ -179,7 +179,7 @@ real function scurve(x, x0, L)
   real, intent(in) :: L       !< half-width of base of cone in arbitrary units [A]
   real :: s ! A rescaled position [nondim]
 
-  s = max( 0., min( 1.,( x - x0 ) / L ) )
+  s = max( 0., min( 1., ( x - x0 ) / L ) )
   scurve = ( 3. - 2.*s ) * ( s * s )
 end function scurve
 
@@ -194,8 +194,8 @@ real function cstprof(x, x0, L, lf, bf, sf, sh)
   real, intent(in) :: sh      !< depth of shelf as fraction of full depth [nondim]
   real :: s ! A rescaled position [nondim]
 
-  s = max( 0., min( 1.,( x - x0 ) / L ) )
-  cstprof = sh * scurve(s-lf,0.,bf) + (1.-sh) * scurve(s - (1.-sf),0.,sf)
+  s = max( 0., min( 1., ( x - x0 ) / L ) )
+  cstprof = sh * scurve(s-lf, 0., bf) + (1.-sh) * scurve(s - (1.-sf), 0., sf)
 end function cstprof
 
 !> Distance between points x,y and a line segment (x0,y0) and (x0,y1) in arbitrary units [A].
@@ -208,7 +208,7 @@ real function dist_line_fixed_x(x, y, x0, y0, y1)
   real :: dx, yr, dy ! Relative positions in arbitrary units [A]
 
   dx = x - x0
-  yr = min( max(y0,y1), max( min(y0,y1), y ) ) ! bound y by y0,y1
+  yr = min( max(y0, y1), max( min(y0, y1), y ) ) ! bound y by y0,y1
   dy = y - yr ! =0 within y0<y<y1, =y0-y for y<y0, =y-y1 for y>y1
   dist_line_fixed_x = sqrt( (dx*dx) + (dy*dy) )
 end function dist_line_fixed_x

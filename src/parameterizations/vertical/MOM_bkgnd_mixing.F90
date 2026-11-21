@@ -367,12 +367,12 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
       enddo
 
       call CVMix_init_bkgnd(max_nlev=nz, &
-                            zw = depth_int(:), &  !< interface depths relative to the surface in m, must be positive.
-                            bl1 = US%Z2_T_to_m2_s*CS%Bryan_Lewis_c1, &
-                            bl2 = US%Z2_T_to_m2_s*CS%Bryan_Lewis_c2, &
-                            bl3 = US%m_to_Z*CS%Bryan_Lewis_c3, &
-                            bl4 = US%Z_to_m*CS%Bryan_Lewis_c4, &
-                            prandtl = CS%prandtl_bkgnd)
+                            zw=depth_int(:), &  !< interface depths relative to the surface in m, must be positive.
+                            bl1=US%Z2_T_to_m2_s*CS%Bryan_Lewis_c1, &
+                            bl2=US%Z2_T_to_m2_s*CS%Bryan_Lewis_c2, &
+                            bl3=US%m_to_Z*CS%Bryan_Lewis_c3, &
+                            bl4=US%Z_to_m*CS%Bryan_Lewis_c4, &
+                            prandtl=CS%prandtl_bkgnd)
 
       Kd_col(:) = 0.0 ; Kv_col(:) = 0.0  ! Is this line necessary?
       call CVMix_coeffs_bkgnd(Mdiff_out=Kv_col, Tdiff_out=Kd_col, nlev=nz, max_nlev=nz)
@@ -404,22 +404,22 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
 
       ! North Banda Sea
       if ( (G%geoLatT(i,j) < -1.0)  .and. (G%geoLatT(i,j) > -4.0) .and. &
-           ( mod(G%geoLonT(i,j)+360.0,360.0) > 103.0) .and. &
-           ( mod(G%geoLonT(i,j)+360.0,360.0) < 134.0) ) then
+           ( mod(G%geoLonT(i,j)+360.0, 360.0) > 103.0) .and. &
+           ( mod(G%geoLonT(i,j)+360.0, 360.0) < 134.0) ) then
         Kd_int(i,1) = CS%bckgrnd_vdc_Banda
       endif
 
       ! Middle Banda Sea
       if ( (G%geoLatT(i,j) <= -4.0) .and. (G%geoLatT(i,j) > -7.0) .and. &
-           ( mod(G%geoLonT(i,j)+360.0,360.0) > 106.0) .and. &
-           ( mod(G%geoLonT(i,j)+360.0,360.0) < 140.0) ) then
+           ( mod(G%geoLonT(i,j)+360.0, 360.0) > 106.0) .and. &
+           ( mod(G%geoLonT(i,j)+360.0, 360.0) < 140.0) ) then
         Kd_int(i,1) = CS%bckgrnd_vdc_Banda
       endif
 
       ! South Banda Sea
       if ( (G%geoLatT(i,j) <= -7.0) .and. (G%geoLatT(i,j) > -8.3) .and. &
-           ( mod(G%geoLonT(i,j)+360.0,360.0) > 111.0) .and. &
-           ( mod(G%geoLonT(i,j)+360.0,360.0) < 142.0) ) then
+           ( mod(G%geoLonT(i,j)+360.0, 360.0) > 111.0) .and. &
+           ( mod(G%geoLonT(i,j)+360.0, 360.0) < 142.0) ) then
         Kd_int(i,1) = CS%bckgrnd_vdc_Banda
       endif
 

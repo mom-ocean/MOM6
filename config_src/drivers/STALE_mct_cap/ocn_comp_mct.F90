@@ -77,7 +77,7 @@ private :: get_runtype
 private :: ocean_model_init_sfc
 
 ! Flag for debugging
-logical, parameter :: debug=.true.
+logical, parameter :: debug = .true.
 
 !> Control structure for this module
 type MCT_MOM_Data
@@ -145,8 +145,8 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   ! time management
   integer                   :: ocn_cpl_dt   !< one ocn coupling interval in seconds. (to be received from cesm)
-  real (kind=8)             :: mom_cpl_dt   !< one ocn coupling interval in seconds. (internal)
-  real (kind=8), parameter  ::        &
+  real(kind=8)              :: mom_cpl_dt   !< one ocn coupling interval in seconds. (internal)
+  real(kind=8), parameter   ::        &
       seconds_in_minute =    60.0d0, &
       seconds_in_hour   =  3600.0d0, &
       seconds_in_day    = 86400.0d0, &
@@ -161,8 +161,8 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   character(len=16)   :: inst_suffix
 
   ! TODO: Change the following vars with the corresponding MOM6 vars
-  integer :: km=1                   !< Number of vertical levels
-  !logical :: lsend_precip_fact      !< If T,send precip_fact to cpl for use in fw balance
+  integer :: km = 1                 !< Number of vertical levels
+  !logical :: lsend_precip_fact     !< If T, send precip_fact to cpl for use in fw balance
                                     !! (partially-coupled option)
   character(len=128) :: err_msg     !< Error message
   integer :: iostat
@@ -190,14 +190,14 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   if (is_root_pe()) then
 
     ! get original log file properties
-    call shr_file_getLogUnit (shrlogunit)
+    call shr_file_getLogUnit(shrlogunit)
     call shr_file_getLogLevel(shrloglev)
 
     stdout = shr_file_getUnit() ! get an unused unit number
 
     ! open the ocn_modelio.nml file and then open a log file associated with stdout
     ocn_modelio_name = 'ocn_modelio.nml' // trim(inst_suffix)
-    call shr_file_setIO(ocn_modelio_name,stdout)
+    call shr_file_setIO(ocn_modelio_name, stdout)
 
     !  set the shr log io unit number
     call shr_file_setLogUnit(stdout)
@@ -290,7 +290,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   runtype = get_runtype()
   if (runtype == "initial") then
     ! startup (new run) - 'n' is needed below since we don't specify input_filename in input.nml
-    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time_start, input_restart_file = 'n')
+    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time_start, input_restart_file='n')
   else  ! hybrid or branch or continuos runs
     ! get output path root
     call seq_infodata_GetData( glb%infodata, outPathRoot=restartpath )
@@ -410,7 +410,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   ! Reset shr logging to original values
   if (is_root_pe()) then
-    call shr_file_setLogUnit (shrlogunit)
+    call shr_file_setLogUnit(shrlogunit)
     call shr_file_setLogLevel(shrloglev)
   endif
 
@@ -429,7 +429,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   type(ESMF_timeInterval) :: ocn_cpl_interval !< The length of one ocean coupling interval
   integer :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
   logical :: write_restart_at_eod      !< Controls if restart files must be written
-  logical :: debug=.false.
+  logical :: debug = .false.
   type(time_type) :: time_start        !< Start of coupled time interval to pass to MOM6
   type(time_type) :: coupling_timestep !< Coupled time interval to pass to MOM6
   character(len=128) :: err_msg        !< Error message
@@ -672,7 +672,7 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
   ! Local Variables
   integer, parameter              :: SHR_REAL_R8 = selected_real_kind(12)
   integer, pointer                :: idata(:)
-  integer                         :: i,j,k
+  integer                         :: i, j, k
   real(kind=SHR_REAL_R8), pointer :: data(:)
   real(kind=SHR_REAL_R8)          :: L2_to_rad2
   type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
@@ -688,17 +688,17 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
   ! Determine global gridpoint number attribute, GlobGridNum, which is set automatically by MCT
   k = pe_here()
   call mct_gsMap_orderedPoints(gsMap_ocn, k, idata)
-  call mct_gGrid_importIAttr(dom_ocn,'GlobGridNum',idata,lsize)
+  call mct_gGrid_importIAttr(dom_ocn, 'GlobGridNum', idata, lsize)
 
   !initialization
   data(:) = -9999.0
-  call mct_gGrid_importRAttr(dom_ocn,"lat"  ,data,lsize)
-  call mct_gGrid_importRAttr(dom_ocn,"lon"  ,data,lsize)
-  call mct_gGrid_importRAttr(dom_ocn,"area" ,data,lsize)
-  call mct_gGrid_importRAttr(dom_ocn,"aream",data,lsize)
+  call mct_gGrid_importRAttr(dom_ocn, "lat",   data, lsize)
+  call mct_gGrid_importRAttr(dom_ocn, "lon",   data, lsize)
+  call mct_gGrid_importRAttr(dom_ocn, "area",  data, lsize)
+  call mct_gGrid_importRAttr(dom_ocn, "aream", data, lsize)
   data(:) = 0.0
-  call mct_gGrid_importRAttr(dom_ocn,"mask",data,lsize)
-  call mct_gGrid_importRAttr(dom_ocn,"frac",data,lsize)
+  call mct_gGrid_importRAttr(dom_ocn, "mask", data, lsize)
+  call mct_gGrid_importRAttr(dom_ocn, "frac", data, lsize)
 
   k = 0
   do j = grid%jsc, grid%jec
@@ -707,7 +707,7 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
       data(k) = grid%geoLonT(i,j)
     enddo
   enddo
-  call mct_gGrid_importRattr(dom_ocn,"lon",data,lsize)
+  call mct_gGrid_importRattr(dom_ocn, "lon", data, lsize)
 
   k = 0
   do j = grid%jsc, grid%jec
@@ -716,7 +716,7 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
       data(k) = grid%geoLatT(i,j)
     enddo
   enddo
-  call mct_gGrid_importRattr(dom_ocn,"lat",data,lsize)
+  call mct_gGrid_importRattr(dom_ocn, "lat", data, lsize)
 
   k = 0
   L2_to_rad2 = 1.0 / grid%Rad_Earth_L**2
@@ -726,7 +726,7 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
       data(k) = grid%AreaT(i,j) * L2_to_rad2
     enddo
   enddo
-  call mct_gGrid_importRattr(dom_ocn,"area",data,lsize)
+  call mct_gGrid_importRattr(dom_ocn, "area", data, lsize)
 
   k = 0
   do j = grid%jsc, grid%jec
@@ -735,8 +735,8 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
       data(k) = grid%mask2dT(i,j)
     enddo
   enddo
-  call mct_gGrid_importRattr(dom_ocn,"mask",data,lsize)
-  call mct_gGrid_importRattr(dom_ocn,"frac",data,lsize)
+  call mct_gGrid_importRattr(dom_ocn, "mask", data, lsize)
+  call mct_gGrid_importRattr(dom_ocn, "frac", data, lsize)
 
   deallocate(data)
   deallocate(idata)
@@ -857,30 +857,30 @@ subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
   type(ice_ocean_boundary_type), intent(inout)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
   integer, intent(in) :: isc, iec, jsc, jec                 !< The ocean's local grid size
 
-  allocate ( IOB% rofl_flux (isc:iec,jsc:jec),       &
-             IOB% rofi_flux (isc:iec,jsc:jec),       &
-             IOB% u_flux (isc:iec,jsc:jec),          &
-             IOB% v_flux (isc:iec,jsc:jec),          &
-             IOB% t_flux (isc:iec,jsc:jec),          &
-             IOB% seaice_melt_heat (isc:iec,jsc:jec),&
-             IOB% seaice_melt (isc:iec,jsc:jec),     &
-             IOB% q_flux (isc:iec,jsc:jec),          &
-             IOB% salt_flux (isc:iec,jsc:jec),       &
-             IOB% lw_flux (isc:iec,jsc:jec),         &
-             IOB% sw_flux_vis_dir (isc:iec,jsc:jec), &
-             IOB% sw_flux_vis_dif (isc:iec,jsc:jec), &
-             IOB% sw_flux_nir_dir (isc:iec,jsc:jec), &
-             IOB% sw_flux_nir_dif (isc:iec,jsc:jec), &
-             IOB% lprec (isc:iec,jsc:jec),           &
-             IOB% fprec (isc:iec,jsc:jec),           &
-             IOB% ustar_berg (isc:iec,jsc:jec),      &
-             IOB% area_berg (isc:iec,jsc:jec),       &
-             IOB% mass_berg (isc:iec,jsc:jec),       &
-             IOB% calving (isc:iec,jsc:jec),         &
-             IOB% runoff_hflx (isc:iec,jsc:jec),     &
-             IOB% calving_hflx (isc:iec,jsc:jec),    &
-             IOB% mi (isc:iec,jsc:jec),              &
-             IOB% p (isc:iec,jsc:jec))
+  allocate(IOB%rofl_flux(isc:iec,jsc:jec),       &
+           IOB%rofi_flux(isc:iec,jsc:jec),       &
+           IOB%u_flux(isc:iec,jsc:jec),          &
+           IOB%v_flux(isc:iec,jsc:jec),          &
+           IOB%t_flux(isc:iec,jsc:jec),          &
+           IOB%seaice_melt_heat(isc:iec,jsc:jec),&
+           IOB%seaice_melt(isc:iec,jsc:jec),     &
+           IOB%q_flux(isc:iec,jsc:jec),          &
+           IOB%salt_flux(isc:iec,jsc:jec),       &
+           IOB%lw_flux(isc:iec,jsc:jec),         &
+           IOB%sw_flux_vis_dir(isc:iec,jsc:jec), &
+           IOB%sw_flux_vis_dif(isc:iec,jsc:jec), &
+           IOB%sw_flux_nir_dir(isc:iec,jsc:jec), &
+           IOB%sw_flux_nir_dif(isc:iec,jsc:jec), &
+           IOB%lprec(isc:iec,jsc:jec),           &
+           IOB%fprec(isc:iec,jsc:jec),           &
+           IOB%ustar_berg(isc:iec,jsc:jec),      &
+           IOB%area_berg(isc:iec,jsc:jec),       &
+           IOB%mass_berg(isc:iec,jsc:jec),       &
+           IOB%calving(isc:iec,jsc:jec),         &
+           IOB%runoff_hflx(isc:iec,jsc:jec),     &
+           IOB%calving_hflx(isc:iec,jsc:jec),    &
+           IOB%mi(isc:iec,jsc:jec),              &
+           IOB%p(isc:iec,jsc:jec))
 
   IOB%rofl_flux        = 0.0
   IOB%rofi_flux        = 0.0

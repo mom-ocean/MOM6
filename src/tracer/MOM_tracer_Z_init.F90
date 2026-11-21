@@ -460,7 +460,7 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   ! Check that z_edges is now monotonically decreasing.
   monotonic = .true.
   do k=2,nz_edge ; if (z_edges(k) >= z_edges(k-1)) monotonic = .false. ; enddo
-  if (.not.monotonic) call MOM_error(WARNING,mdl//" "//trim(dim_msg)//" is not monotonic.")
+  if (.not.monotonic) call MOM_error(WARNING, mdl//" "//trim(dim_msg)//" is not monotonic.")
 
   if (scale /= 1.0) then ; do k=1,nz_edge ; z_edges(k) = scale*z_edges(k) ; enddo ; endif
 
@@ -509,7 +509,7 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
     z2(k) = (e_c - Z_bot) * Ih
   else
     ! Note that in theis branch, wt temporarily has units of [Z ~> m]
-    wt(k) = MIN(e(K),Z_top) - e(K+1) ; tot_wt = wt(k) ! These are always > 0.
+    wt(k) = MIN(e(K), Z_top) - e(K+1) ; tot_wt = wt(k) ! These are always > 0.
     if (e(K) /= e(K+1)) then
       z1(k) = (0.5*(e(K)+e(K+1)) - MIN(e(K), Z_top)) / (e(K)-e(K+1))
     else ; z1(k) = -0.5 ; endif

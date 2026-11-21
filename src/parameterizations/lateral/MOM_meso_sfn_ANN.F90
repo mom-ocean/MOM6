@@ -268,11 +268,11 @@ subroutine meso_sfn_ANN_compute(h, e, sfn_u, sfn_v, G, GV, US, tv, CS, dt, u, v)
     enddo ; enddo
 
     ! Call the ANN
-    call ANN_apply_array_sio(nij, x,y, CS%ann_rho_flux)
+    call ANN_apply_array_sio(nij, x, y, CS%ann_rho_flux)
 
-    m=0
+    m = 0
     do j = js-1, je+1 ; do i = is-1, ie+1
-      m=m+1
+      m = m + 1
       ! Dimensionalize the output. The factors applied here must match the
       ! nondimensionalization used when the network was trained; this is
       ! an implicit contract with the training procedure.

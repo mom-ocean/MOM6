@@ -343,14 +343,14 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   Rho0x400_G = 400.0*(GV%H_to_RZ / GV%g_Earth_Z_T2)
   tideampfac2_x_0p5 = CS%tideampfac2*0.5
 
-  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_set_viscosity(BBL): "//&
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_set_viscosity(BBL): "//&
          "Module must be initialized before it is used.")
 
   if (.not.CS%bottomdraglaw) return
 
   if (CS%debug) then
     call uvchksum("Start set_viscous_BBL [uv]", u, v, G%HI, haloshift=1, unscale=US%L_T_to_m_s)
-    call hchksum(h,"Start set_viscous_BBL h", G%HI, haloshift=1, unscale=GV%H_to_m)
+    call hchksum(h, "Start set_viscous_BBL h", G%HI, haloshift=1, unscale=GV%H_to_m)
     if (associated(tv%T)) call hchksum(tv%T, "Start set_viscous_BBL T", G%HI, haloshift=1, unscale=US%C_to_degC)
     if (associated(tv%S)) call hchksum(tv%S, "Start set_viscous_BBL S", G%HI, haloshift=1, unscale=US%S_to_ppt)
     if (allocated(tv%SpV_avg)) &
@@ -446,7 +446,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
     ! Use a one-sided projection of bottom depths at OBC points.
     I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
     if (OBC%segment(n)%is_N_or_S .and. (J >= js-1) .and. (J <= je)) then
-      do I = max(is-1,OBC%segment(n)%HI%IsdB), min(ie,OBC%segment(n)%HI%IedB)
+      do I = max(is-1, OBC%segment(n)%HI%IsdB), min(ie, OBC%segment(n)%HI%IedB)
         if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
           D_u(I,j+1) = D_u(I,j) ;  mask_u(I,j+1) = 0.0
         elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
@@ -454,7 +454,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
         endif
       enddo
     elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= ie)) then
-      do J = max(js-1,OBC%segment(n)%HI%JsdB), min(je,OBC%segment(n)%HI%JedB)
+      do J = max(js-1, OBC%segment(n)%HI%JsdB), min(je, OBC%segment(n)%HI%JedB)
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
           D_v(i+1,J) = D_v(i,J) ; mask_v(i+1,J) = 0.0
         elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
@@ -1768,7 +1768,7 @@ subroutine find_L_open_convex(vol_below, D_vel, Dp, Dm, L, GV, US, CS)
                            ! accuracy of a single L(:) Newton iteration [Z5 ~> m5]
   real, parameter :: C1_3 = 1.0/3.0, C1_6 = 1.0/6.0 ! Rational constants [nondim]
   logical :: use_L0, do_one_L_iter  ! Control flags for L(:) Newton iteration
-  integer :: K, nz, itt, maxitt=20
+  integer :: K, nz, itt, maxitt = 20
 
   nz = GV%ke
 
@@ -2120,7 +2120,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
   Isq = G%isc-1 ; Ieq = G%IecB ; Jsq = G%jsc-1 ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
 
-  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_set_viscosity(visc_ML): "//&
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_set_viscosity(visc_ML): "//&
          "Module must be initialized before it is used.")
 
   if (.not.(CS%dynamic_viscous_ML .or. associated(forces%frac_shelf_u) .or. &
@@ -2185,12 +2185,12 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
     ! Use a one-sided projection of bottom depths at OBC points.
     I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
     if (OBC%segment(n)%is_N_or_S .and. (J >= js-1) .and. (J <= je)) then
-      do I = max(is-1,OBC%segment(n)%HI%IsdB), min(ie,OBC%segment(n)%HI%IedB)
+      do I = max(is-1, OBC%segment(n)%HI%IsdB), min(ie, OBC%segment(n)%HI%IedB)
         if (OBC%segment(n)%direction == OBC_DIRECTION_N) mask_u(I,j+1) = 0.0
         if (OBC%segment(n)%direction == OBC_DIRECTION_S) mask_u(I,j) = 0.0
       enddo
     elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= ie)) then
-      do J = max(js-1,OBC%segment(n)%HI%JsdB), min(je,OBC%segment(n)%HI%JedB)
+      do J = max(js-1, OBC%segment(n)%HI%JsdB), min(je, OBC%segment(n)%HI%JedB)
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) mask_v(i+1,J) = 0.0
         if (OBC%segment(n)%direction == OBC_DIRECTION_W) mask_v(i,J) = 0.0
       enddo
@@ -2234,7 +2234,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
             do I=Isq,Ieq
               press(I) = (GV%H_to_RZ*GV%g_Earth) * htot(I)
               if (associated(tv%p_surf)) press(I) = press(I) + 0.5*(tv%p_surf(i,j)+tv%p_surf(i+1,j))
-              k2 = max(1,nkml)
+              k2 = max(1, nkml)
               I_2hlay = 1.0 / (h(i,j,k2) + h(i+1,j,k2) + h_neglect)
               T_EOS(I) = ((h(i,j,k2)*tv%T(i,j,k2)) + (h(i+1,j,k2)*tv%T(i+1,j,k2))) * I_2hlay
               S_EOS(I) = ((h(i,j,k2)*tv%S(i,j,k2)) + (h(i+1,j,k2)*tv%S(i+1,j,k2))) * I_2hlay
@@ -2513,7 +2513,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
             do i=is,ie
               press(i) = (GV%H_to_RZ * GV%g_Earth) * htot(i)
               if (associated(tv%p_surf)) press(i) = press(i) + 0.5*(tv%p_surf(i,j)+tv%p_surf(i,j+1))
-              k2 = max(1,nkml)
+              k2 = max(1, nkml)
               I_2hlay = 1.0 / (h(i,j,k2) + h(i,j+1,k2) + h_neglect)
               T_EOS(i) = ((h(i,j,k2)*tv%T(i,j,k2)) + (h(i,j+1,k2)*tv%T(i,j+1,k2))) * I_2hlay
               S_EOS(i) = ((h(i,j,k2)*tv%S(i,j,k2)) + (h(i,j+1,k2)*tv%S(i,j+1,k2))) * I_2hlay
@@ -2923,9 +2923,9 @@ subroutine set_visc_register_restarts(HI, G, GV, US, param_file, visc, restart_C
     if (.not.allocated(visc%tauy_shelf)) &
       allocate(visc%tauy_shelf(G%isd:G%ied, G%JsdB:G%JedB), source=0.0)
     u_desc = var_desc("u_taux_shelf", "Pa", "the zonal stress on the ocean under ice shelves", &
-                      hor_grid='Cu',z_grid='1')
+                      hor_grid='Cu', z_grid='1')
     v_desc = var_desc("v_tauy_shelf", "Pa", "the meridional stress on the ocean under ice shelves", &
-                      hor_grid='Cv',z_grid='1')
+                      hor_grid='Cv', z_grid='1')
     call register_restart_pair(visc%taux_shelf, visc%tauy_shelf, u_desc, v_desc, &
                                .false., restart_CS, conversion=US%RZ_T_to_kg_m2s*US%L_T_to_m_s)
   endif
@@ -3036,7 +3036,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                  "the non-reproducible power operator in place of " // &
                  "cuberoot() when finding the open distances with " // &
                  "CHANNEL_DRAG.", &
-                 default=min(20260703,default_answer_date), &
+                 default=min(20260703, default_answer_date), &
                  do_not_log=.not.GV%Boussinesq)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
@@ -3071,7 +3071,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   call get_param(param_file, mdl, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
   if (adiabatic) then
-    call log_param(param_file, mdl, "ADIABATIC",adiabatic, &
+    call log_param(param_file, mdl, "ADIABATIC", adiabatic, &
                  "There are no diapycnal mass fluxes if ADIABATIC is true.  "//&
                  "This assumes that KD = 0.0 and that there is no buoyancy forcing, "//&
                  "but makes the model faster by eliminating subroutine calls.", default=.false.)
@@ -3195,7 +3195,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                  "The default of this parameter is the value of USE_EOS.", &
                  default=use_EOS, do_not_log=.not.use_temperature)
     if (use_regridding .and. (.not. CS%BBL_use_EOS)) &
-      call MOM_error(FATAL,"When using MOM6 in ALE mode it is required to set BBL_USE_EOS to True.")
+      call MOM_error(FATAL, "When using MOM6 in ALE mode it is required to set BBL_USE_EOS to True.")
   endif
   call get_param(param_file, mdl, "BBL_THICK_MIN", CS%BBL_thick_min, &
                  "The minimum bottom boundary layer thickness that can be "//&
@@ -3305,7 +3305,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     endif
     if (CS%bottomdragmap) then
       if (len_trim(cdrag_file)==0 .or. len_trim(cdrag_var)==0) then
-        call MOM_error(FATAL,"CDRAG_FILE and CDRAG_VAR are required when using CDRAG_MAP.")
+        call MOM_error(FATAL, "CDRAG_FILE and CDRAG_VAR are required when using CDRAG_MAP.")
       endif
       allocate(cdrag_h(isd:ied,jsd:jed), source=0.0)
       allocate(CS%cdrag_u(IsdB:IedB,jsd:jed), source=0.0)
@@ -3329,7 +3329,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
       filename = trim(CS%inputdir) // trim(tideamp_file)
       call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
       call MOM_read_data(filename, tideamp_var, CS%tideamp, G%domain, scale=US%m_s_to_L_T)
-      call pass_var(CS%tideamp,G%domain)
+      call pass_var(CS%tideamp, G%domain)
     endif
   endif
   if (CS%Channel_drag .or. CS%body_force_drag) then
@@ -3351,8 +3351,8 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
        diag%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'nondim')
   endif
 
-  call register_restart_field_as_obsolete('Kd_turb','Kd_shear', restart_CS)
-  call register_restart_field_as_obsolete('Kv_turb','Kv_shear', restart_CS)
+  call register_restart_field_as_obsolete('Kd_turb', 'Kd_shear', restart_CS)
+  call register_restart_field_as_obsolete('Kv_turb', 'Kv_shear', restart_CS)
 
 end subroutine set_visc_init
 

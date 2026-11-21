@@ -193,7 +193,7 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir, ens
   endif
 
   if (Netcdf_file) &
-    call MOM_error(FATAL,"open_param_file: NetCDF files are not yet supported.")
+    call MOM_error(FATAL, "open_param_file: NetCDF files are not yet supported.")
 
   if (is_root_pe()) then
     open(newunit=iounit, file=trim(filename), access='SEQUENTIAL', &
@@ -219,17 +219,17 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir, ens
   ! Increment the maximum line length, but always report values in blocks of 4 characters.
   CS%max_line_len = max(CS%max_line_len, 4 + 4*(max_input_line_length(CS, i) - 1) / 4)
 
-  call read_param(CS,"SEND_LOG_TO_STDOUT",CS%log_to_stdout)
-  call read_param(CS,"REPORT_UNUSED_PARAMS",CS%report_unused)
-  call read_param(CS,"FATAL_UNUSED_PARAMS",CS%unused_params_fatal)
+  call read_param(CS, "SEND_LOG_TO_STDOUT", CS%log_to_stdout)
+  call read_param(CS, "REPORT_UNUSED_PARAMS", CS%report_unused)
+  call read_param(CS, "FATAL_UNUSED_PARAMS", CS%unused_params_fatal)
   CS%doc_file = "MOM_parameter_doc"
   if (present(ensemble_num)) then
     ! append instance suffix to doc_file
-    write(ensemble_suffix,'(A,I0.4)') '_', ensemble_num
+    write(ensemble_suffix, '(A,I0.4)') '_', ensemble_num
     CS%doc_file = trim(CS%doc_file)//ensemble_suffix
   endif
   if (present(component)) CS%doc_file = trim(component)//"_parameter_doc"
-  call read_param(CS,"DOCUMENT_FILE", CS%doc_file)
+  call read_param(CS, "DOCUMENT_FILE", CS%doc_file)
   if (.not.may_check) then
     CS%report_unused = .false.
     CS%unused_params_fatal = .false.
@@ -283,8 +283,8 @@ subroutine close_param_file(CS, quiet_close, component)
       CS%filename(i) = ''
       CS%NetCDF_file(i) = .false.
       do n=1,CS%param_data(i)%num_lines ; deallocate(CS%param_data(i)%fln(n)%line) ; enddo
-      deallocate (CS%param_data(i)%fln)
-      deallocate (CS%param_data(i)%line_used)
+      deallocate(CS%param_data(i)%fln)
+      deallocate(CS%param_data(i)%line_used)
     enddo
     CS%log_open = .false.
     call doc_end(CS%doc)
@@ -352,8 +352,8 @@ subroutine close_param_file(CS, quiet_close, component)
     CS%filename(i) = ''
     CS%NetCDF_file(i) = .false.
     do n=1,CS%param_data(i)%num_lines ; deallocate(CS%param_data(i)%fln(n)%line) ; enddo
-    deallocate (CS%param_data(i)%fln)
-    deallocate (CS%param_data(i)%line_used)
+    deallocate(CS%param_data(i)%fln)
+    deallocate(CS%param_data(i)%line_used)
   enddo
   deallocate(CS%blockName)
 
@@ -393,7 +393,7 @@ subroutine populate_param_data(iounit, filename, param_data)
       read(iounit, '(a)', end=8) line
       line = replaceTabs(line)
       if (inMultiLineComment) then
-        if (closeMultiLineComment(line)) inMultiLineComment=.false.
+        if (closeMultiLineComment(line)) inMultiLineComment = .false.
       else
         if (lastNonCommentNonBlank(line)>0) then
           line = removeComments(line)
@@ -401,7 +401,7 @@ subroutine populate_param_data(iounit, filename, param_data)
           num_lines = num_lines + 1
           total_chars = total_chars + len_trim(line)
         endif
-        if (openMultiLineComment(line)) inMultiLineComment=.true.
+        if (openMultiLineComment(line)) inMultiLineComment = .true.
       endif
     enddo ! while (.true.)
  8  continue ! get here when read() reaches EOF
@@ -422,8 +422,8 @@ subroutine populate_param_data(iounit, filename, param_data)
 
   ! Set up the space for storing the actual lines.
   param_data%num_lines = num_lines
-  allocate (line_len(num_lines), source=0)
-  allocate (char_buf(total_chars), source=" ")
+  allocate(line_len(num_lines), source=0)
+  allocate(char_buf(total_chars), source=" ")
 
   ! Read the actual lines.
   if (is_root_pe()) then
@@ -437,7 +437,7 @@ subroutine populate_param_data(iounit, filename, param_data)
       read(iounit, '(a)', end=18) line
       line = replaceTabs(line)
       if (inMultiLineComment) then
-        if (closeMultiLineComment(line)) inMultiLineComment=.false.
+        if (closeMultiLineComment(line)) inMultiLineComment = .false.
       else
         if (lastNonCommentNonBlank(line)>0) then
           line = removeComments(line)
@@ -452,7 +452,7 @@ subroutine populate_param_data(iounit, filename, param_data)
           do ch=1,llen ; char_buf(rsc+ch)(1:1) = line(ch:ch) ; enddo
           rsc = rsc + llen
         endif
-        if (openMultiLineComment(line)) inMultiLineComment=.true.
+        if (openMultiLineComment(line)) inMultiLineComment = .true.
       endif
     enddo ! while (.true.)
 18  continue ! get here when read() reaches EOF
@@ -493,13 +493,13 @@ function openMultiLineComment(string)
   integer :: icom, last
 
   openMultiLineComment = .false.
-  last = lastNonCommentIndex(string)+1
+  last = lastNonCommentIndex(string) + 1
   icom = index(string(last:), "/*")
   if (icom > 0) then
-    openMultiLineComment=.true.
-    last = last+icom+1
+    openMultiLineComment = .true.
+    last = last + icom + 1
   endif
-  icom = index(string(last:), "*/") ; if (icom > 0) openMultiLineComment=.false.
+  icom = index(string(last:), "*/") ; if (icom > 0) openMultiLineComment = .false.
 end function openMultiLineComment
 
 !> Return True if a */ appears on this line
@@ -508,7 +508,7 @@ function closeMultiLineComment(string)
   logical                      :: closeMultiLineComment
 ! True if a */ appears on this line
   closeMultiLineComment = .false.
-  if (index(string, "*/")>0) closeMultiLineComment=.true.
+  if (index(string, "*/")>0) closeMultiLineComment = .true.
 end function closeMultiLineComment
 
 !> Find position of last character before any comments, As marked by "!", "//", or "/*"
@@ -545,9 +545,9 @@ function replaceTabs(string)
 
   do i=1, len(string)
     if (string(i:i)==achar(9)) then
-      replaceTabs(i:i)=" "
+      replaceTabs(i:i) = " "
     else
-      replaceTabs(i:i)=string(i:i)
+      replaceTabs(i:i) = string(i:i)
     endif
   enddo
 end function replaceTabs
@@ -559,9 +559,9 @@ function removeComments(string)
 
   integer :: last
 
-  removeComments=repeat(" ",len(string))
+  removeComments = repeat(" ", len(string))
   last = lastNonCommentNonBlank(string)
-  removeComments(:last)=adjustl(string(:last)) ! Copy only the non-comment part of string
+  removeComments(:last) = adjustl(string(:last)) ! Copy only the non-comment part of string
 end function removeComments
 
 !> Constructs a string with all repeated white space replaced with single blanks
@@ -573,42 +573,42 @@ function simplifyWhiteSpace(string)
   ! Local variables
   integer :: i, j
   logical :: nonBlank = .false., insideString = .false.
-  character(len=1) :: quoteChar=" "
+  character(len=1) :: quoteChar = " "
 
   nonBlank  = .false. ; insideString = .false. ! NOTE: For some reason this line is needed??
-  i=0
-  simplifyWhiteSpace=repeat(" ",len(string)+16)
+  i = 0
+  simplifyWhiteSpace = repeat(" ", len(string)+16)
   do j=1,len_trim(string)
     if (insideString) then ! Do not change formatting inside strings
-      i=i+1
-      simplifyWhiteSpace(i:i)=string(j:j)
-      if (string(j:j)==quoteChar) insideString=.false. ! End of string
+      i = i + 1
+      simplifyWhiteSpace(i:i) = string(j:j)
+      if (string(j:j) == quoteChar) insideString = .false. ! End of string
     else ! The following is outside of string delimiters
       if (string(j:j)==" " .or. string(j:j)==achar(9)) then ! Space or tab
         if (nonBlank) then ! Only copy a blank if the preceding character was non-blank
-          i=i+1
-          simplifyWhiteSpace(i:i)=" " ! Not string(j:j) so that tabs are replace by blanks
-          nonBlank=.false.
+          i = i + 1
+          simplifyWhiteSpace(i:i) = " " ! Not string(j:j) so that tabs are replace by blanks
+          nonBlank = .false.
         endif
       elseif (string(j:j)=='"' .or. string(j:j)=="'") then ! Start a sting
-        i=i+1
-        simplifyWhiteSpace(i:i)=string(j:j)
-        insideString=.true.
-        quoteChar=string(j:j) ! Keep copy of starting quote
-        nonBlank=.true.       ! For exit from string
+        i = i + 1
+        simplifyWhiteSpace(i:i) = string(j:j)
+        insideString = .true.
+        quoteChar = string(j:j) ! Keep copy of starting quote
+        nonBlank = .true.       ! For exit from string
       elseif (string(j:j)=='=') then
         ! Insert spaces if this character is "=" so that line contains " = "
         if (nonBlank) then
-          i=i+1
-          simplifyWhiteSpace(i:i)=" "
+          i = i + 1
+          simplifyWhiteSpace(i:i) = " "
         endif
-        i=i+2
-        simplifyWhiteSpace(i-1:i)=string(j:j)//" "
-        nonBlank=.false.
+        i = i + 2
+        simplifyWhiteSpace(i-1:i) = string(j:j)//" "
+        nonBlank = .false.
       else ! All other characters
-        i=i+1
-        simplifyWhiteSpace(i:i)=string(j:j)
-        nonBlank=.true.
+        i = i + 1
+        simplifyWhiteSpace(i:i) = string(j:j)
+        nonBlank = .true.
       endif
     endif ! if (insideString)
   enddo ! j
@@ -636,22 +636,22 @@ subroutine read_param_int(CS, varname, value, fail_if_missing, set)
 
   call get_variable_line(CS, varname, found, defined, value_string)
   if (found .and. defined .and. (LEN_TRIM(value_string(1)) > 0)) then
-    read(value_string(1),*,err = 1001) value
+    read(value_string(1), *, err=1001) value
     if (present(set)) set = .true.
   else
     if (present(fail_if_missing)) then ; if (fail_if_missing) then
       if (.not.found) then
-        call MOM_error(FATAL,'read_param_int: Unable to find variable '//trim(varname)// &
+        call MOM_error(FATAL, 'read_param_int: Unable to find variable '//trim(varname)// &
                              ' in any input files.')
       else
-        call MOM_error(FATAL,'read_param_int: Variable '//trim(varname)// &
+        call MOM_error(FATAL, 'read_param_int: Variable '//trim(varname)// &
                              ' found but not set in input files.')
       endif
     endif ; endif
     if (present(set)) set = .false.
   endif
   return
- 1001 call MOM_error(FATAL,'read_param_int: read error for integer variable '//trim(varname)// &
+ 1001 call MOM_error(FATAL, 'read_param_int: read error for integer variable '//trim(varname)// &
                              ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_int
 
@@ -673,22 +673,22 @@ subroutine read_param_int_array(CS, varname, value, fail_if_missing, set)
   call get_variable_line(CS, varname, found, defined, value_string)
   if (found .and. defined .and. (LEN_TRIM(value_string(1)) > 0)) then
     if (present(set)) set = .true.
-    read(value_string(1),*,end=991,err=1002) value
+    read(value_string(1), *, end=991, err=1002) value
  991 return
   else
     if (present(fail_if_missing)) then ; if (fail_if_missing) then
       if (.not.found) then
-        call MOM_error(FATAL,'read_param_int_array: Unable to find variable '//trim(varname)// &
+        call MOM_error(FATAL, 'read_param_int_array: Unable to find variable '//trim(varname)// &
                              ' in any input files.')
       else
-        call MOM_error(FATAL,'read_param_int_array: Variable '//trim(varname)// &
+        call MOM_error(FATAL, 'read_param_int_array: Variable '//trim(varname)// &
                              ' found but not set in input files.')
       endif
     endif ; endif
     if (present(set)) set = .false.
   endif
   return
- 1002 call MOM_error(FATAL,'read_param_int_array: read error for integer array '//trim(varname)// &
+ 1002 call MOM_error(FATAL, 'read_param_int_array: read error for integer array '//trim(varname)// &
                              ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_int_array
 
@@ -712,23 +712,23 @@ subroutine read_param_real(CS, varname, value, fail_if_missing, scale, set)
 
   call get_variable_line(CS, varname, found, defined, value_string)
   if (found .and. defined .and. (LEN_TRIM(value_string(1)) > 0)) then
-    read(value_string(1),*,err=1003) value
+    read(value_string(1), *, err=1003) value
     if (present(scale)) value = scale*value
     if (present(set)) set = .true.
   else
     if (present(fail_if_missing)) then ; if (fail_if_missing) then
       if (.not.found) then
-        call MOM_error(FATAL,'read_param_real: Unable to find variable '//trim(varname)// &
+        call MOM_error(FATAL, 'read_param_real: Unable to find variable '//trim(varname)// &
                              ' in any input files.')
       else
-        call MOM_error(FATAL,'read_param_real: Variable '//trim(varname)// &
+        call MOM_error(FATAL, 'read_param_real: Variable '//trim(varname)// &
                              ' found but not set in input files.')
       endif
     endif ; endif
     if (present(set)) set = .false.
   endif
   return
- 1003 call MOM_error(FATAL,'read_param_real: read error for real variable '//trim(varname)// &
+ 1003 call MOM_error(FATAL, 'read_param_real: read error for real variable '//trim(varname)// &
                              ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_real
 
@@ -752,24 +752,24 @@ subroutine read_param_real_array(CS, varname, value, fail_if_missing, scale, set
 
   call get_variable_line(CS, varname, found, defined, value_string)
   if (found .and. defined .and. (LEN_TRIM(value_string(1)) > 0)) then
-    read(value_string(1),*,end=991,err=1004) value
+    read(value_string(1), *, end=991, err=1004) value
 991 continue
     if (present(scale)) value(:) = scale*value(:)
     if (present(set)) set = .true.
   else
     if (present(fail_if_missing)) then ; if (fail_if_missing) then
       if (.not.found) then
-        call MOM_error(FATAL,'read_param_real_array: Unable to find variable '//trim(varname)// &
+        call MOM_error(FATAL, 'read_param_real_array: Unable to find variable '//trim(varname)// &
                              ' in any input files.')
       else
-        call MOM_error(FATAL,'read_param_real_array: Variable '//trim(varname)// &
+        call MOM_error(FATAL, 'read_param_real_array: Variable '//trim(varname)// &
                              ' found but not set in input files.')
       endif
     endif ; endif
     if (present(set)) set = .false.
   endif
   return
- 1004 call MOM_error(FATAL,'read_param_real_array: read error for real array '//trim(varname)// &
+ 1004 call MOM_error(FATAL, 'read_param_real_array: read error for real array '//trim(varname)// &
                              ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_real_array
 
@@ -819,17 +819,17 @@ subroutine read_param_char_array(CS, varname, value, fail_if_missing, set)
   call get_variable_line(CS, varname, found, defined, value_string)
   if (found) then
     loc_string = trim(value_string(1))
-    i = index(loc_string,",")
+    i = index(loc_string, ",")
     i_out = 1
     do while(i>0)
       value(i_out) = trim(strip_quotes(loc_string(:i-1)))
-      i_out = i_out+1
+      i_out = i_out + 1
       loc_string = trim(adjustl(loc_string(i+1:)))
-      i = index(loc_string,",")
+      i = index(loc_string, ",")
     enddo
     if (len_trim(loc_string)>0) then
       value(i_out) = trim(strip_quotes(adjustl(loc_string)))
-      i_out = i_out+1
+      i_out = i_out + 1
     endif
     do i=i_out,SIZE(value) ; value(i) = " " ; enddo
   elseif (present(fail_if_missing)) then ; if (fail_if_missing) then
@@ -896,25 +896,25 @@ subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing, date_f
   if (found .and. defined .and. (LEN_TRIM(value_string(1)) > 0)) then
     ! Determine whether value string should be parsed for a real number
     ! or a date, in either a string format or a comma-delimited list of values.
-    if ((INDEX(value_string(1),'-') > 0) .and. &
-        (INDEX(value_string(1),'-',back=.true.) > INDEX(value_string(1),'-'))) then
+    if ((INDEX(value_string(1), '-') > 0) .and. &
+        (INDEX(value_string(1), '-', back=.true.) > INDEX(value_string(1), '-'))) then
       ! There are two dashes, so this must be a date format.
       value = set_date(value_string(1), err_msg=err_msg)
-      if (LEN_TRIM(err_msg) > 0) call MOM_error(FATAL,'read_param_time: '//&
+      if (LEN_TRIM(err_msg) > 0) call MOM_error(FATAL, 'read_param_time: '//&
           trim(err_msg)//' in integer list read error for time-type variable '//&
           trim(varname)// ' parsing "'//trim(value_string(1))//'"')
       if (present(date_format)) date_format = .true.
-    elseif (INDEX(value_string(1),',') > 0) then
+    elseif (INDEX(value_string(1), ',') > 0) then
       ! Initialize vals with an invalid date.
       vals(:) = (/ -999, -999, -999, 0, 0, 0, 0 /)
       read(value_string(1), *, end=995, err=1005) vals
       995 continue
       if ((vals(1) < 0) .or. (vals(2) < 0) .or. (vals(3) < 0)) &
-        call MOM_error(FATAL,'read_param_time: integer list read error for time-type variable '//&
+        call MOM_error(FATAL, 'read_param_time: integer list read error for time-type variable '//&
                        trim(varname)// ' parsing "'//trim(value_string(1))//'"')
       value = set_date(vals(1), vals(2), vals(3), vals(4), vals(5), vals(6), &
                        vals(7), err_msg=err_msg)
-      if (LEN_TRIM(err_msg) > 0) call MOM_error(FATAL,'read_param_time: '//&
+      if (LEN_TRIM(err_msg) > 0) call MOM_error(FATAL, 'read_param_time: '//&
           trim(err_msg)//' in integer list read error for time-type variable '//&
           trim(varname)// ' parsing "'//trim(value_string(1))//'"')
       if (present(date_format)) date_format = .true.
@@ -947,17 +947,17 @@ function strip_quotes(val_str)
   ! Local variables
   integer :: i
   strip_quotes = val_str
-  i = index(strip_quotes,ACHAR(34)) ! Double quote
+  i = index(strip_quotes, ACHAR(34)) ! Double quote
   do while (i>0)
     if (i > 1) then ; strip_quotes = strip_quotes(:i-1)//strip_quotes(i+1:)
     else ; strip_quotes = strip_quotes(2:) ; endif
-    i = index(strip_quotes,ACHAR(34)) ! Double quote
+    i = index(strip_quotes, ACHAR(34)) ! Double quote
   enddo
-  i = index(strip_quotes,ACHAR(39)) ! Single quote
+  i = index(strip_quotes, ACHAR(39)) ! Single quote
   do while (i>0)
     if (i > 1) then ; strip_quotes = strip_quotes(:i-1)//strip_quotes(i+1:)
     else ; strip_quotes = strip_quotes(2:) ; endif
-    i = index(strip_quotes,ACHAR(39)) ! Single quote
+    i = index(strip_quotes, ACHAR(39)) ! Single quote
   enddo
 end function strip_quotes
 
@@ -1003,7 +1003,7 @@ function max_input_line_length(CS, pf_num) result(max_len)
         contBufSize = contBufSize + last - 1
         continuedLine = .true.
         if (count==CS%param_data(ipf)%num_lines .and. is_root_pe()) &
-           call MOM_error(FATAL, "MOM_file_parser : the last line of the file ends in a"// &
+          call MOM_error(FATAL, "MOM_file_parser : the last line of the file ends in a"// &
                  " continuation character but there are no more lines to read. "// &
                  " Line: '"//trim(CS%param_data(ipf)%fln(count)%line(:last))//"'"// &
                  " in file "//trim(filename)//".")
@@ -1054,7 +1054,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
   continuationBuffer = repeat(" ", CS%max_line_len)
   contBufSize = 0
 
-  variableKindIsLogical=.false.
+  variableKindIsLogical = .false.
   if (present(paramIsLogical)) variableKindIsLogical = paramIsLogical
 
   ! Find the first instance (if any) where the named variable is found, and
@@ -1075,15 +1075,15 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
       line = CS%param_data(ipf)%fln(count)%line
       last = len_trim(line)
 
-      last1 = max(1,last)
+      last1 = max(1, last)
       ! Check if line ends in continuation character (either & or \)
       ! Note achar(92) is a backslash
       if (line(last1:last1) == achar(92).or.line(last1:last1) == "&") then
-        continuationBuffer(contBufSize+1:contBufSize+len_trim(line))=line(:last-1)
-        contBufSize=contBufSize + len_trim(line)-1
+        continuationBuffer(contBufSize+1:contBufSize+len_trim(line)) = line(:last-1)
+        contBufSize = contBufSize + len_trim(line)-1
         continuedLine = .true.
         if (count==CS%param_data(ipf)%num_lines .and. is_root_pe()) &
-           call MOM_error(FATAL, "MOM_file_parser : the last line"// &
+          call MOM_error(FATAL, "MOM_file_parser : the last line"// &
                  " of the file ends in a continuation character but"// &
                  " there are no more lines to read. "// &
                  " Line: '"//trim(line(:last))//"'"//&
@@ -1091,9 +1091,9 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         cycle ! cycle inorder to append the next line of the file
       elseif (continuedLine) then
         ! If we reached this point then this is the end of line continuation
-        continuationBuffer(contBufSize+1:contBufSize+len_trim(line))=line(:last)
+        continuationBuffer(contBufSize+1:contBufSize+len_trim(line)) = line(:last)
         line = continuationBuffer
-        continuationBuffer=repeat(" ",CS%max_line_len) ! Clear for next use
+        continuationBuffer = repeat(" ", CS%max_line_len) ! Clear for next use
         contBufSize = 0
         continuedLine = .false.
         last = len_trim(line)
@@ -1116,7 +1116,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
       endif
 
       ! Newer form of parameter block, block%, %block or block%param or
-      iso=index(line(:last),'%')
+      iso = index(line(:last), '%')
       fullPathParameter = .false.
       if (iso==1) then ! % is first character means this is a close
         if (len_trim(blockName)==0 .and. is_root_pe()) call MOM_error(FATAL, &
@@ -1129,12 +1129,12 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
             call MOM_error(FATAL, 'get_variable_line: A named close for a parameter'// &
             ' block is required but found "%". Block="'//trim(blockName)//'"' )
         blockName = popBlockLevel(blockName)
-        call flag_line_as_read(CS%param_data(ipf)%line_used,count)
+        call flag_line_as_read(CS%param_data(ipf)%line_used, count)
       elseif (iso==last) then ! This is a new block if % is last character
         blockName = pushBlockLevel(blockName, line(:iso-1))
-        call flag_line_as_read(CS%param_data(ipf)%line_used,count)
+        call flag_line_as_read(CS%param_data(ipf)%line_used, count)
       else ! This is of the form block%parameter = ... (full path parameter)
-        iso=index(line(:last),'%',.true.)
+        iso = index(line(:last), '%', .true.)
         ! Check that the parameter block names on the line matches the state set by the caller
         if (iso>0 .and. trim(CS%blockName%name)==trim(line(:iso-1))) then
           fullPathParameter = .true.
@@ -1154,7 +1154,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
 
       if (inWrongBlock .and. .not. fullPathParameter) then
         if (index(" "//line(:last+1), " "//trim(varname)//" ")>0) &
-          call MOM_error(WARNING,"MOM_file_parser : "//trim(varname)// &
+          call MOM_error(WARNING, "MOM_file_parser : "//trim(varname)// &
                ' found outside of block '//trim(CS%blockName%name)//'%. Ignoring.')
         cycle
       endif
@@ -1235,7 +1235,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
       endif
 
       ! This line has now been used.
-      call flag_line_as_read(CS%param_data(ipf)%line_used,count)
+      call flag_line_as_read(CS%param_data(ipf)%line_used, count)
 
       ! Detect inconsistencies
       force_cycle = .false.
@@ -1243,13 +1243,13 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
       if (found_override .and. (oval >= max_vals)) then
         if (is_root_pe()) then
           if ((defined_in_line .neqv. defined) .or. .not. valueIsSame) then
-            call MOM_error(FATAL,"MOM_file_parser : "//trim(varname)// &
+            call MOM_error(FATAL, "MOM_file_parser : "//trim(varname)// &
                      " found with multiple inconsistent overrides."// &
                      " Line A: '"//trim(value_string(max_vals))//"'"//&
                      " Line B: '"//trim(line(:last))//"'"//&
                      " in file "//trim(filename)//" caused the model failure.")
           else
-            call MOM_error(WARNING,"MOM_file_parser : "//trim(varname)// &
+            call MOM_error(WARNING, "MOM_file_parser : "//trim(varname)// &
                      " over-ridden more times than is permitted."// &
                      " Line: '"//trim(line(:last))//"'"//&
                      " in file "//trim(filename)//" is being ignored.")
@@ -1259,7 +1259,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
       endif
       if (.not.found_override .and. (oval > 0)) then
         if (is_root_pe()) &
-          call MOM_error(WARNING,"MOM_file_parser : "//trim(varname)// &
+          call MOM_error(WARNING, "MOM_file_parser : "//trim(varname)// &
                    " has already been over-ridden."// &
                    " Line: '"//trim(line(:last))//"'"//&
                    " in file "//trim(filename)//" is being ignored.")
@@ -1268,13 +1268,13 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
       if (.not.found_override .and. (ival >= max_vals)) then
         if (is_root_pe()) then
           if ((defined_in_line .neqv. defined) .or. .not. valueIsSame) then
-            call MOM_error(FATAL,"MOM_file_parser : "//trim(varname)// &
+            call MOM_error(FATAL, "MOM_file_parser : "//trim(varname)// &
                      " found with multiple inconsistent definitions."// &
                      " Line A: '"//trim(value_string(max_vals))//"'"//&
                      " Line B: '"//trim(line(:last))//"'"//&
                      " in file "//trim(filename)//" caused the model failure.")
           else
-            call MOM_error(WARNING,"MOM_file_parser : "//trim(varname)// &
+            call MOM_error(WARNING, "MOM_file_parser : "//trim(varname)// &
                      " occurs more times than is permitted."// &
                      " Line: '"//trim(line(:last))//"'"//&
                      " in file "//trim(filename)//" is being ignored.")
@@ -1291,7 +1291,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         defined = defined_in_line
         if (verbose > 0 .and. ival > 0 .and. is_root_pe() .and. &
             .not. overrideWarningHasBeenIssued(CS%chain, trim(varname)) ) &
-          call MOM_error(WARNING,"MOM_file_parser : "//trim(varname)// &
+          call MOM_error(WARNING, "MOM_file_parser : "//trim(varname)// &
                  " over-ridden.  Line: '"//trim(line(:last))//"'"//&
                  " in file "//trim(filename)//".")
       else ! (.not. found_overide)
@@ -1300,7 +1300,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         defined = defined_in_line
 
         if (verbose > 1 .and. is_root_pe()) &
-          call MOM_error(WARNING,"MOM_file_parser : "//trim(varname)// &
+          call MOM_error(WARNING, "MOM_file_parser : "//trim(varname)// &
                  " set.  Line: '"//trim(line(:last))//"'"//&
                  " in file "//trim(filename)//".")
       endif
@@ -1663,7 +1663,7 @@ subroutine log_param_time(CS, modulename, varname, value, desc, units, &
   if (present(desc)) then
     if (present(timeunit)) use_timeunit = (timeunit > 0.0)
     if (date_format) then
-      myunits='[date]'
+      myunits = '[date]'
 
       date_string = convert_date_to_string(value)
       if (present(default)) then
@@ -1683,7 +1683,7 @@ subroutine log_param_time(CS, modulename, varname, value, desc, units, &
         elseif (abs(timeunit-3600.0) < 1.0) then ; myunits = "hours"
         elseif (abs(timeunit-86400.0) < 1.0) then ; myunits = "days"
         elseif (abs(timeunit-3.1e7) < 1.0e6) then ; myunits = "years"
-        else ; write(myunits,'(es8.2," sec")') timeunit ; endif
+        else ; write(myunits, '(es8.2," sec")') timeunit ; endif
       endif
       real_time = (86400.0/timeunit)*days + secs/timeunit
       if (ticks > 0) real_time = real_time + &
@@ -1715,20 +1715,20 @@ function convert_date_to_string(date) result(date_string)
   integer :: yrs, mons, days, hours, mins, secs, ticks, ticks_per_sec
 
   call get_date(date, yrs, mons, days, hours, mins, secs, ticks)
-  write (date_string, '(i8.4)') yrs
-  write (sub_string, '("-", i2.2, "-", I2.2, " ", i2.2, ":", i2.2, ":")') &
-         mons, days, hours, mins
+  write(date_string, '(i8.4)') yrs
+  write(sub_string, '("-", i2.2, "-", I2.2, " ", i2.2, ":", i2.2, ":")') &
+        mons, days, hours, mins
   date_string = trim(adjustl(date_string)) // trim(sub_string)
   if (ticks > 0) then
     ticks_per_sec = get_ticks_per_second()
     real_secs = secs + ticks/ticks_per_sec
     if (ticks_per_sec <= 100) then
-      write (sub_string, '(F7.3)') real_secs
+      write(sub_string, '(F7.3)') real_secs
     else
-      write (sub_string, '(F10.6)') real_secs
+      write(sub_string, '(F10.6)') real_secs
     endif
   else
-    write (sub_string, '(i2.2)') secs
+    write(sub_string, '(i2.2)') secs
   endif
   date_string = trim(date_string) // trim(adjustl(sub_string))
 
@@ -2356,7 +2356,7 @@ subroutine openParameterBlock(CS, blockName, desc, do_not_log)
 
   if (associated(CS%blockName)) then
     block => CS%blockName
-    block%name = pushBlockLevel(block%name,blockName)
+    block%name = pushBlockLevel(block%name, blockName)
     if (do_log) then
       call doc_openBlock(CS%doc, block%name, desc)
       block%log_access = .true.
@@ -2390,15 +2390,15 @@ subroutine closeParameterBlock(CS)
 end subroutine closeParameterBlock
 
 !> Extends block name (deeper level of parameter block)
-function pushBlockLevel(oldblockName,newBlockName)
+function pushBlockLevel(oldblockName, newBlockName)
   character(len=*),        intent(in) :: oldBlockName  !< A sequence of hierarchical parameter block names
   character(len=*),        intent(in) :: newBlockName  !< A new block name to add to the end of the sequence
   character(len=len(oldBlockName)+40) :: pushBlockLevel
 
   if (len_trim(oldBlockName)>0) then
-    pushBlockLevel=trim(oldBlockName)//'%'//trim(newBlockName)
+    pushBlockLevel = trim(oldBlockName)//'%'//trim(newBlockName)
   else
-    pushBlockLevel=trim(newBlockName)
+    pushBlockLevel = trim(newBlockName)
   endif
 end function pushBlockLevel
 

@@ -36,10 +36,10 @@ type, public :: sht_CS ; private
   logical :: reprod_sum !< True if use reproducible global sums
 end type sht_CS
 
-integer :: id_clock_sht=-1 !< CPU clock for SHT [MODULE]
-integer :: id_clock_sht_forward=-1 !< CPU clock for forward transforms [ROUTINE]
-integer :: id_clock_sht_inverse=-1  !< CPU clock for inverse transforms [ROUTINE]
-integer :: id_clock_sht_global_sum=-1  !< CPU clock for global summation in forward transforms [LOOP]
+integer :: id_clock_sht = -1 !< CPU clock for SHT [MODULE]
+integer :: id_clock_sht_forward = -1 !< CPU clock for forward transforms [ROUTINE]
+integer :: id_clock_sht_inverse = -1  !< CPU clock for inverse transforms [ROUTINE]
+integer :: id_clock_sht_global_sum = -1  !< CPU clock for global summation in forward transforms [LOOP]
 
 contains
 

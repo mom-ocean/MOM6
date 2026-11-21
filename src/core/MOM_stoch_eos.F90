@@ -67,7 +67,7 @@ logical function MOM_stoch_eos_init(Time, G, GV, US, param_file, diag, CS, resta
   ! local variables
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
-  integer :: i,j
+  integer :: i, j
 
   MOM_stoch_eos_init = .false.
 

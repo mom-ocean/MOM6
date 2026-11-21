@@ -683,7 +683,7 @@ subroutine global_j_mean(array, j_mean, G, mask, scale, tmp_scale, unscale)
 
   allocate(asum(G%isg:G%ieg))
   if (present(mask)) then
-    allocate (mask_sum(G%isg:G%ieg))
+    allocate(mask_sum(G%isg:G%ieg))
 
     do i=G%isg,G%ieg
       asum(i) = real_to_EFP(0.0) ; mask_sum(i) = real_to_EFP(0.0)
@@ -763,7 +763,7 @@ subroutine adjust_area_mean_to_zero(array, G, scaling, unit_scale, unscale)
   real :: scalefac  ! A scaling factor for the variable [a A-1 ~> 1]
   real :: areaIntPosVals, areaIntNegVals ! The global area integral of the positive and negative values [m2 a]
   real :: posScale, negScale ! The scaling factor to apply to positive or negative values [nondim]
-  integer :: i,j
+  integer :: i, j
 
   scalefac = 1.0
   if (present(unscale)) then ; scalefac = unscale

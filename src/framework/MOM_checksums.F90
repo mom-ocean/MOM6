@@ -110,11 +110,11 @@ interface field_checksum
 end interface field_checksum
 
 integer, parameter :: bc_modulus = 1000000000 !< Modulus of checksum bitcount
-integer, parameter :: default_shift=0 !< The default array shift
-logical :: calculateStatistics=.true. !< If true, report min, max and mean.
-logical :: writeChksums=.true. !< If true, report the bitcount checksum
-logical :: checkForNaNs=.true. !< If true, checks array for NaNs and cause
-                               !! FATAL error if any are found
+integer, parameter :: default_shift = 0 !< The default array shift
+logical :: calculateStatistics = .true. !< If true, report min, max and mean.
+logical :: writeChksums = .true. !< If true, report the bitcount checksum
+logical :: checkForNaNs = .true. !< If true, checks array for NaNs and cause
+                                 !! FATAL error if any are found
 logical :: writeHash = .false. !< If true, report the murmur hash
   !! NOTE: writeHash is currently disabled due to non-compliant diagnostics.
 
@@ -243,7 +243,7 @@ subroutine zchksum(array, mesg, scale, logunit, unscale)
       bc = bitcount(abs(unscale * array(k)))
       subchk = subchk + bc
     enddo
-    subchk=mod(subchk, bc_modulus)
+    subchk = mod(subchk, bc_modulus)
   end function subchk
 
   subroutine subStats(array, aMean, aMin, aMax)
@@ -472,7 +472,7 @@ subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
     write(0,*) 'chksum_h_2d: haloshift =',hshift
     write(0,*) 'chksum_h_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_h_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
-    call chksum_error(FATAL,'Error in chksum_h_2d '//trim(mesg))
+    call chksum_error(FATAL, 'Error in chksum_h_2d '//trim(mesg))
   endif
 
   bc0 = subchk(array, HI, 0, 0, scaling)
@@ -527,7 +527,7 @@ subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
       subchk = subchk + bc
     enddo ; enddo
     call sum_across_PEs(subchk)
-    subchk=mod(subchk, bc_modulus)
+    subchk = mod(subchk, bc_modulus)
   end function subchk
 
   subroutine subStats(HI, array, aMean, aMin, aMax)
@@ -779,7 +779,7 @@ subroutine chksum_B_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     write(0,*) 'chksum_B_2d: haloshift =',hshift
     write(0,*) 'chksum_B_2d: isd,isc,iec,ied=',HI%isdB,HI%iscB,HI%iecB,HI%iedB
     write(0,*) 'chksum_B_2d: jsd,jsc,jec,jed=',HI%jsdB,HI%jscB,HI%jecB,HI%jedB
-    call chksum_error(FATAL,'Error in chksum_B_2d '//trim(mesg))
+    call chksum_error(FATAL, 'Error in chksum_B_2d '//trim(mesg))
   endif
 
   bc0 = subchk(array, HI, 0, 0, scaling)
@@ -844,7 +844,7 @@ subroutine chksum_B_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
       subchk = subchk + bc
     enddo ; enddo
     call sum_across_PEs(subchk)
-    subchk=mod(subchk, bc_modulus)
+    subchk = mod(subchk, bc_modulus)
   end function subchk
 
   subroutine subStats(HI, array, sym_stats, aMean, aMin, aMax)
@@ -1104,7 +1104,7 @@ subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     write(0,*) 'chksum_u_2d: haloshift =',hshift
     write(0,*) 'chksum_u_2d: isd,isc,iec,ied=',HI%isdB,HI%iscB,HI%iecB,HI%iedB
     write(0,*) 'chksum_u_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
-    call chksum_error(FATAL,'Error in chksum_u_2d '//trim(mesg))
+    call chksum_error(FATAL, 'Error in chksum_u_2d '//trim(mesg))
   endif
 
   bc0 = subchk(array, HI, 0, 0, scaling)
@@ -1175,7 +1175,7 @@ subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
       subchk = subchk + bc
     enddo ; enddo
     call sum_across_PEs(subchk)
-    subchk=mod(subchk, bc_modulus)
+    subchk = mod(subchk, bc_modulus)
   end function subchk
 
   subroutine subStats(HI, array, sym_stats, aMean, aMin, aMax)
@@ -1308,7 +1308,7 @@ subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     write(0,*) 'chksum_v_2d: haloshift =',hshift
     write(0,*) 'chksum_v_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_v_2d: jsd,jsc,jec,jed=',HI%jsdB,HI%jscB,HI%jecB,HI%jedB
-    call chksum_error(FATAL,'Error in chksum_v_2d '//trim(mesg))
+    call chksum_error(FATAL, 'Error in chksum_v_2d '//trim(mesg))
   endif
 
   bc0 = subchk(array, HI, 0, 0, scaling)
@@ -1379,7 +1379,7 @@ subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
       subchk = subchk + bc
     enddo ; enddo
     call sum_across_PEs(subchk)
-    subchk=mod(subchk, bc_modulus)
+    subchk = mod(subchk, bc_modulus)
   end function subchk
 
   subroutine subStats(HI, array, sym_stats, aMean, aMin, aMax)
@@ -1499,7 +1499,7 @@ subroutine chksum_h_3d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
     write(0,*) 'chksum_h_3d: haloshift =',hshift
     write(0,*) 'chksum_h_3d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_h_3d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
-    call chksum_error(FATAL,'Error in chksum_h_3d '//trim(mesg))
+    call chksum_error(FATAL, 'Error in chksum_h_3d '//trim(mesg))
   endif
 
   bc0 = subchk(array, HI, 0, 0, scaling)
@@ -1555,7 +1555,7 @@ subroutine chksum_h_3d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
       subchk = subchk + bc
     enddo ; enddo ; enddo
     call sum_across_PEs(subchk)
-    subchk=mod(subchk, bc_modulus)
+    subchk = mod(subchk, bc_modulus)
   end function subchk
 
   subroutine subStats(HI, array, aMean, aMin, aMax)
@@ -1678,7 +1678,7 @@ subroutine chksum_B_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     write(0,*) 'chksum_B_3d: haloshift =',hshift
     write(0,*) 'chksum_B_3d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_B_3d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
-    call chksum_error(FATAL,'Error in chksum_B_3d '//trim(mesg))
+    call chksum_error(FATAL, 'Error in chksum_B_3d '//trim(mesg))
   endif
 
   bc0 = subchk(array, HI, 0, 0, scaling)
@@ -1748,7 +1748,7 @@ subroutine chksum_B_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
       subchk = subchk + bc
     enddo ; enddo ; enddo
     call sum_across_PEs(subchk)
-    subchk=mod(subchk, bc_modulus)
+    subchk = mod(subchk, bc_modulus)
   end function subchk
 
   subroutine subStats(HI, array, sym_stats, aMean, aMin, aMax)
@@ -1881,7 +1881,7 @@ subroutine chksum_u_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     write(0,*) 'chksum_u_3d: haloshift =',hshift
     write(0,*) 'chksum_u_3d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_u_3d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
-    call chksum_error(FATAL,'Error in chksum_u_3d '//trim(mesg))
+    call chksum_error(FATAL, 'Error in chksum_u_3d '//trim(mesg))
   endif
 
   bc0 = subchk(array, HI, 0, 0, scaling)
@@ -1952,7 +1952,7 @@ subroutine chksum_u_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
       subchk = subchk + bc
     enddo ; enddo ; enddo
     call sum_across_PEs(subchk)
-    subchk=mod(subchk, bc_modulus)
+    subchk = mod(subchk, bc_modulus)
   end function subchk
 
   subroutine subStats(HI, array, sym_stats, aMean, aMin, aMax)
@@ -2085,7 +2085,7 @@ subroutine chksum_v_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
     write(0,*) 'chksum_v_3d: haloshift =',hshift
     write(0,*) 'chksum_v_3d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_v_3d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
-    call chksum_error(FATAL,'Error in chksum_v_3d '//trim(mesg))
+    call chksum_error(FATAL, 'Error in chksum_v_3d '//trim(mesg))
   endif
 
   bc0 = subchk(array, HI, 0, 0, scaling)
@@ -2156,7 +2156,7 @@ subroutine chksum_v_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
       subchk = subchk + bc
     enddo ; enddo ; enddo
     call sum_across_PEs(subchk)
-    subchk=mod(subchk, bc_modulus)
+    subchk = mod(subchk, bc_modulus)
   end function subchk
 
   !subroutine subStats(HI, array, mesg, sym_stats)
@@ -2224,7 +2224,7 @@ subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs, logunit)
 
   pe_num = pe_here() + 1 - root_pe() ; nPEs = num_pes()
   allocate(sum_here(nPEs), source=0.0) ; sum_here(pe_num) = sum
-  call sum_across_PEs(sum_here,nPEs)
+  call sum_across_PEs(sum_here, nPEs)
 
   sum1 = sum_bc
   call sum_across_PEs(sum1)

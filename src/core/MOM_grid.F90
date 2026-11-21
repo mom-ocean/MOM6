@@ -336,8 +336,8 @@ subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_v
        "nblocks(=NI_BLOCK*NJ_BLOCK) must be no less than 1")
 
   allocate(ibegin(niblock), iend(niblock), jbegin(njblock), jend(njblock))
-  call compute_block_extent(G%HI%isc,G%HI%iec,niblock,ibegin,iend)
-  call compute_block_extent(G%HI%jsc,G%HI%jec,njblock,jbegin,jend)
+  call compute_block_extent(G%HI%isc, G%HI%iec, niblock, ibegin, iend)
+  call compute_block_extent(G%HI%jsc, G%HI%jec, njblock, jbegin, jend)
   !-- make sure the last block is the largest.
   do i = 1, niblock-1
     if (iend(i)-ibegin(i) > iend(niblock)-ibegin(niblock) ) call MOM_error(FATAL, &
@@ -478,8 +478,8 @@ logical function isPointInCell(G, i, j, x, y)
   xSE = G%geoLonBu(i  ,j-1) ; ySE = G%geoLatBu(i  ,j-1)
   xSW = G%geoLonBu(i-1,j-1) ; ySW = G%geoLatBu(i-1,j-1)
   ! This is a crude calculation that assumes a geographic coordinate system
-  if (x<min(xNE,xNW,xSE,xSW) .or. x>max(xNE,xNW,xSE,xSW) .or. &
-      y<min(yNE,yNW,ySE,ySW) .or. y>max(yNE,yNW,ySE,ySW) ) then
+  if (x<min(xNE, xNW, xSE, xSW) .or. x>max(xNE, xNW, xSE, xSW) .or. &
+      y<min(yNE, yNW, ySE, ySW) .or. y>max(yNE, yNW, ySE, ySW) ) then
     return ! Avoid the more complicated calculation
   endif
   l0 = (x-xSW)*(ySE-ySW) - (y-ySW)*(xSE-xSW)
@@ -487,13 +487,13 @@ logical function isPointInCell(G, i, j, x, y)
   l2 = (x-xNE)*(yNW-yNE) - (y-yNE)*(xNW-xNE)
   l3 = (x-xNW)*(ySW-yNW) - (y-yNW)*(xSW-xNW)
 
-  p0 = sign(1., l0) ; if (l0 == 0.) p0=0.
-  p1 = sign(1., l1) ; if (l1 == 0.) p1=0.
-  p2 = sign(1., l2) ; if (l2 == 0.) p2=0.
-  p3 = sign(1., l3) ; if (l3 == 0.) p3=0.
+  p0 = sign(1., l0) ; if (l0 == 0.) p0 = 0.
+  p1 = sign(1., l1) ; if (l1 == 0.) p1 = 0.
+  p2 = sign(1., l2) ; if (l2 == 0.) p2 = 0.
+  p3 = sign(1., l3) ; if (l3 == 0.) p3 = 0.
 
   if ( (abs(p0)+abs(p2)) + (abs(p1)+abs(p3)) == abs((p0+p2) + (p1+p3)) ) then
-    isPointInCell=.true.
+    isPointInCell = .true.
   endif
 end function isPointInCell
 

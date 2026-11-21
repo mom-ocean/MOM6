@@ -558,11 +558,11 @@ subroutine pass_vector_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete,
 
   if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_update_domains(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
-                   gridtype=stagger_local, complete = block_til_complete, &
+                   gridtype=stagger_local, complete=block_til_complete, &
                    whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
   else
     call mpp_update_domains(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
-                   gridtype=stagger_local, complete = block_til_complete)
+                   gridtype=stagger_local, complete=block_til_complete)
   endif
 
   if (present(clock)) then ; if (clock>0) call cpu_clock_end(clock) ; endif
@@ -704,11 +704,11 @@ subroutine pass_vector_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete,
 
   if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_update_domains(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
-                   gridtype=stagger_local, complete = block_til_complete, &
+                   gridtype=stagger_local, complete=block_til_complete, &
                    whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
   else
     call mpp_update_domains(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
-                   gridtype=stagger_local, complete = block_til_complete)
+                   gridtype=stagger_local, complete=block_til_complete)
   endif
 
   if (present(clock)) then ; if (clock>0) call cpu_clock_end(clock) ; endif
@@ -967,7 +967,7 @@ subroutine create_var_group_pass_2d(group, array, MOM_dom, sideflag, position, &
   if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
   if (mpp_group_update_initialized(group)) then
-    call mpp_reset_group_update_field(group,array)
+    call mpp_reset_group_update_field(group, array)
   elseif (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_create_group_update(group, array, MOM_dom%mpp_domain, flags=dirflag, &
                                  position=position, whalo=halo, ehalo=halo, &
@@ -1012,7 +1012,7 @@ subroutine create_var_group_pass_3d(group, array, MOM_dom, sideflag, position, h
   if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
   if (mpp_group_update_initialized(group)) then
-    call mpp_reset_group_update_field(group,array)
+    call mpp_reset_group_update_field(group, array)
   elseif (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_create_group_update(group, array, MOM_dom%mpp_domain, flags=dirflag, &
                                  position=position, whalo=halo, ehalo=halo, &
@@ -1068,7 +1068,7 @@ subroutine create_vector_group_pass_2d(group, u_cmpt, v_cmpt, MOM_dom, direction
   if (present(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
   if (mpp_group_update_initialized(group)) then
-    call mpp_reset_group_update_field(group,u_cmpt, v_cmpt)
+    call mpp_reset_group_update_field(group, u_cmpt, v_cmpt)
   elseif (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_create_group_update(group, u_cmpt, v_cmpt, MOM_dom%mpp_domain, &
             flags=dirflag, gridtype=stagger_local, whalo=halo, ehalo=halo, &
@@ -1125,7 +1125,7 @@ subroutine create_vector_group_pass_3d(group, u_cmpt, v_cmpt, MOM_dom, direction
   if (present(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
   if (mpp_group_update_initialized(group)) then
-    call mpp_reset_group_update_field(group,u_cmpt, v_cmpt)
+    call mpp_reset_group_update_field(group, u_cmpt, v_cmpt)
   elseif (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_create_group_update(group, u_cmpt, v_cmpt, MOM_dom%mpp_domain, &
             flags=dirflag, gridtype=stagger_local, whalo=halo, ehalo=halo, &
@@ -1214,7 +1214,7 @@ subroutine redistribute_array_2d(Domain1, array1, Domain2, array2, complete)
   ! Local variables
   logical :: do_complete
 
-  do_complete=.true. ; if (PRESENT(complete)) do_complete = complete
+  do_complete = .true. ; if (PRESENT(complete)) do_complete = complete
 
   call mpp_redistribute(Domain1, array1, Domain2, array2, do_complete)
 
@@ -1233,7 +1233,7 @@ subroutine redistribute_array_3d(Domain1, array1, Domain2, array2, complete)
   ! Local variables
   logical :: do_complete
 
-  do_complete=.true. ; if (PRESENT(complete)) do_complete = complete
+  do_complete = .true. ; if (PRESENT(complete)) do_complete = complete
 
   call mpp_redistribute(Domain1, array1, Domain2, array2, do_complete)
 
@@ -1252,7 +1252,7 @@ subroutine redistribute_array_4d(Domain1, array1, Domain2, array2, complete)
   ! Local variables
   logical :: do_complete
 
-  do_complete=.true. ; if (PRESENT(complete)) do_complete = complete
+  do_complete = .true. ; if (PRESENT(complete)) do_complete = complete
 
   call mpp_redistribute(Domain1, array1, Domain2, array2, do_complete)
 
@@ -1386,7 +1386,7 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
   if (reentrant(2)) Y_FLAGS = CYCLIC_GLOBAL_DOMAIN
   if (tripolar_N) then
     Y_FLAGS = FOLD_NORTH_EDGE
-    if (reentrant(2)) call MOM_error(FATAL,"MOM_domains: "// &
+    if (reentrant(2)) call MOM_error(FATAL, "MOM_domains: "// &
       "TRIPOLAR_N and REENTRANT_Y may not be used together.")
   endif
 

@@ -29,7 +29,7 @@ contains
 
 
 
-    Profiles=>NULL()
+    Profiles => NULL()
     return
   end subroutine ocean_da_core_init
 
@@ -41,8 +41,8 @@ contains
     type(ocean_profile_type), pointer :: Current_profiles !< A returned list of profiles for the
                                                           !! current analysis step.
 
-    Profiles=>NULL()
-    Current_Profiles=>NULL()
+    Profiles => NULL()
+    Current_Profiles => NULL()
 
     return
   end subroutine get_profiles

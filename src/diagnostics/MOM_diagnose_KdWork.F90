@@ -104,7 +104,7 @@ end type vbf_CS
 contains
 
 !> Loop over all implemented diffusivities to diagnose and output Kd Work/buoyancy fluxes
-subroutine KdWork_Diagnostics(G,GV,US,diag,VBF,N2_Salt,N2_Temp,dz)
+subroutine KdWork_Diagnostics(G, GV, US, diag, VBF, N2_Salt, N2_Temp, dz)
   type(ocean_grid_type),      intent(in)    :: G       !< Grid type
   type(verticalGrid_type),    intent(in)    :: GV      !< ocean vertical grid structure
   type(unit_scale_type),      intent(in)    :: US      !< A dimensional unit scaling type
@@ -140,7 +140,7 @@ subroutine KdWork_Diagnostics(G,GV,US,diag,VBF,N2_Salt,N2_Temp,dz)
     ! Do Temp
     if (VBF%id_Bdif_temp_dz>0 .or. VBF%id_Bdif_dz>0 .or. VBF%id_Bdif_temp>0 .or. VBF%id_Bdif>0 .or. &
         VBF%id_Bdif_idz>0 .or. VBF%id_Bdif_temp_idz>0 .or. VBF%id_Bdif_idV>0 .or. VBF%id_Bdif_temp_idV>0) &
-       call diagnoseKdWork(G, GV, N2_temp, VBF%Kd_temp, VBF%Bflx_temp, dz=dz, Bdif_flx_dz=VBF%Bflx_temp_dz)
+      call diagnoseKdWork(G, GV, N2_temp, VBF%Kd_temp, VBF%Bflx_temp, dz=dz, Bdif_flx_dz=VBF%Bflx_temp_dz)
     if (VBF%id_Bdif_temp_idz>0 .or. VBF%id_Bdif_idz>0) then
       work2d_temp(:,:) = 0.0
       do k = 1,nz ; do j = jsc,jec ; do i = isc,iec
@@ -779,11 +779,11 @@ subroutine Allocate_VBF_CS(G, GV, VBF)
   if (VBF%do_bflx_salt) &
     allocate(VBF%Bflx_salt(isd:ied,jsd:jed,nz+1), source=0.0)
   if (VBF%do_bflx_salt_dz) &
-     allocate(VBF%Bflx_salt_dz(isd:ied,jsd:jed,nz), source=0.0)
+    allocate(VBF%Bflx_salt_dz(isd:ied,jsd:jed,nz), source=0.0)
   if (VBF%do_bflx_temp) &
-     allocate(VBF%Bflx_temp(isd:ied,jsd:jed,nz+1), source=0.0)
+    allocate(VBF%Bflx_temp(isd:ied,jsd:jed,nz+1), source=0.0)
   if (VBF%do_bflx_temp_dz) &
-     allocate(VBF%Bflx_temp_dz(isd:ied,jsd:jed,nz), source=0.0)
+    allocate(VBF%Bflx_temp_dz(isd:ied,jsd:jed,nz), source=0.0)
 
   if (VBF%id_Bdif_salt_dz>0 .or. VBF%id_Bdif_dz>0 .or. VBF%id_Bdif_salt>0 .or. VBF%id_Bdif>0 .or. &
       VBF%id_Bdif_idz>0 .or. VBF%id_Bdif_salt_idz>0 .or. VBF%id_Bdif_idV>0 .or. VBF%id_Bdif_salt_idV>0) &
@@ -871,7 +871,7 @@ subroutine Deallocate_VBF_CS(VBF)
 end subroutine Deallocate_VBF_CS
 
 !> Handles all KdWork diagnostics and flags which calculations should be done.
-subroutine KdWork_init(Time, G,GV,US,diag,VBF,Use_KdWork_diag)
+subroutine KdWork_init(Time, G, GV, US, diag, VBF, Use_KdWork_diag)
   type(time_type), target                :: Time             !< model time
   type(ocean_grid_type),   intent(in)    :: G        !< ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV       !< ocean vertical grid structure
@@ -887,224 +887,224 @@ subroutine KdWork_init(Time, G,GV,US,diag,VBF,Use_KdWork_diag)
   VBF%do_bflx_temp = .false.
   VBF%do_bflx_temp_dz = .false.
 
-  VBF%id_Bdif = register_diag_field('ocean_model',"Bflx_dia_diff", diag%axesTi, &
+  VBF%id_Bdif = register_diag_field('ocean_model', "Bflx_dia_diff", diag%axesTi, &
         Time, "Diffusive diapycnal buoyancy flux across interfaces", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_dz = register_diag_field('ocean_model',"Bflx_dia_diff_dz", diag%axesTl, &
+  VBF%id_Bdif_dz = register_diag_field('ocean_model', "Bflx_dia_diff_dz", diag%axesTl, &
         Time, "Layerwise integral of diffusive diapycnal buoyancy flux.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idz = register_diag_field('ocean_model',"Bflx_dia_diff_idz", diag%axesT1, &
+  VBF%id_Bdif_idz = register_diag_field('ocean_model', "Bflx_dia_diff_idz", diag%axesT1, &
         Time, "Layer integrated diffusive diapycnal buoyancy flux.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idV = register_scalar_field('ocean_model',"Bflx_dia_diff_idV", Time, diag, &
+  VBF%id_Bdif_idV = register_scalar_field('ocean_model', "Bflx_dia_diff_idV", Time, diag, &
         "Global integrated diffusive diapycnal buoyancy flux.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_salt = register_diag_field('ocean_model',"Bflx_salt_dia_diff", diag%axesTi, &
+  VBF%id_Bdif_salt = register_diag_field('ocean_model', "Bflx_salt_dia_diff", diag%axesTi, &
         Time, "Salinity contribution to diffusive diapycnal buoyancy flux across interfaces", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_salt_dz = register_diag_field('ocean_model',"Bflx_salt_dia_diff_dz", diag%axesTl, &
+  VBF%id_Bdif_salt_dz = register_diag_field('ocean_model', "Bflx_salt_dia_diff_dz", diag%axesTl, &
         Time, "Salinity contribution to layer integral of diffusive diapycnal buoyancy flux.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_salt_idz = register_diag_field('ocean_model',"Bflx_salt_dia_diff_idz", diag%axesT1, &
+  VBF%id_Bdif_salt_idz = register_diag_field('ocean_model', "Bflx_salt_dia_diff_idz", diag%axesT1, &
         Time, "Salinity contribution to layer integrated diffusive diapycnal buoyancy flux.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_salt_idV = register_scalar_field('ocean_model',"Bflx_salt_dia_diff_idV", Time, diag, &
+  VBF%id_Bdif_salt_idV = register_scalar_field('ocean_model', "Bflx_salt_dia_diff_idV", Time, diag, &
         "Salinity contribution to global integrated diffusive diapycnal buoyancy flux.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_temp = register_diag_field('ocean_model',"Bflx_temp_dia_diff", diag%axesTi, &
+  VBF%id_Bdif_temp = register_diag_field('ocean_model', "Bflx_temp_dia_diff", diag%axesTi, &
         Time, "Temperature contribution to diffusive diapycnal buoyancy flux across interfaces", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_temp_dz = register_diag_field('ocean_model',"Bflx_temp_dia_diff_dz", diag%axesTl, &
+  VBF%id_Bdif_temp_dz = register_diag_field('ocean_model', "Bflx_temp_dia_diff_dz", diag%axesTl, &
         Time, "Temperature contribution to layer integral of diffusive diapycnal buoyancy flux.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_temp_idz = register_diag_field('ocean_model',"Bflx_temp_dia_diff_idz", diag%axesT1, &
+  VBF%id_Bdif_temp_idz = register_diag_field('ocean_model', "Bflx_temp_dia_diff_idz", diag%axesT1, &
         Time, "Temperature contribution to layer integrated diffusive diapycnal buoyancy flux.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_temp_idV = register_scalar_field('ocean_model',"Bflx_temp_dia_diff_idV", Time, diag, &
+  VBF%id_Bdif_temp_idV = register_scalar_field('ocean_model', "Bflx_temp_dia_diff_idV", Time, diag, &
         "Temperature contribution to global integrated diffusive diapycnal buoyancy flux.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_BBL = register_diag_field('ocean_model',"Bflx_dia_diff_BBL", diag%axesTi, &
+  VBF%id_Bdif_BBL = register_diag_field('ocean_model', "Bflx_dia_diff_BBL", diag%axesTi, &
         Time, "Diffusive diapycnal buoyancy flux across interfaces due to the BBL parameterization.", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_dz_BBL = register_diag_field('ocean_model',"Bflx_dia_diff_dz_BBL", diag%axesTl, &
+  VBF%id_Bdif_dz_BBL = register_diag_field('ocean_model', "Bflx_dia_diff_dz_BBL", diag%axesTl, &
         Time, "Layerwise integral of diffusive diapycnal buoyancy flux due to the BBL parameterization.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idz_BBL = register_diag_field('ocean_model',"Bflx_dia_diff_idz_BBL", diag%axesT1, &
+  VBF%id_Bdif_idz_BBL = register_diag_field('ocean_model', "Bflx_dia_diff_idz_BBL", diag%axesT1, &
         Time, "Layer integrated diffusive diapycnal buoyancy flux due to the BBL parameterization.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idV_BBL = register_scalar_field('ocean_model',"Bflx_dia_diff_idV_BBL", Time, diag, &
+  VBF%id_Bdif_idV_BBL = register_scalar_field('ocean_model', "Bflx_dia_diff_idV_BBL", Time, diag, &
         "Global integrated diffusive diapycnal buoyancy flux due to BBL.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_ePBL = register_diag_field('ocean_model',"Bflx_dia_diff_ePBL", diag%axesTi, &
+  VBF%id_Bdif_ePBL = register_diag_field('ocean_model', "Bflx_dia_diff_ePBL", diag%axesTi, &
         Time, "Diffusive diapycnal buoyancy flux across interfaces due to ePBL", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_dz_ePBL = register_diag_field('ocean_model',"Bflx_dia_diff_dz_ePBL", diag%axesTl, &
+  VBF%id_Bdif_dz_ePBL = register_diag_field('ocean_model', "Bflx_dia_diff_dz_ePBL", diag%axesTl, &
         Time, "Layerwise integral of diffusive diapycnal buoyancy flux due to ePBL.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idz_ePBL = register_diag_field('ocean_model',"Bflx_dia_diff_idz_ePBL", diag%axesT1, &
+  VBF%id_Bdif_idz_ePBL = register_diag_field('ocean_model', "Bflx_dia_diff_idz_ePBL", diag%axesT1, &
         Time, "Layer integrated diffusive diapycnal buoyancy flux due to ePBL.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idV_ePBL = register_scalar_field('ocean_model',"Bflx_dia_diff_idV_ePBL", Time, diag, &
+  VBF%id_Bdif_idV_ePBL = register_scalar_field('ocean_model', "Bflx_dia_diff_idV_ePBL", Time, diag, &
         "Global integrated diffusive diapycnal buoyancy flux due to ePBL.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_KS = register_diag_field('ocean_model',"Bflx_dia_diff_KS", diag%axesTi, &
+  VBF%id_Bdif_KS = register_diag_field('ocean_model', "Bflx_dia_diff_KS", diag%axesTi, &
         Time, "Diffusive diapycnal buoyancy flux across interfaces due to Kappa Shear", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_dz_KS = register_diag_field('ocean_model',"Bflx_dia_diff_dz_KS", diag%axesTl, &
+  VBF%id_Bdif_dz_KS = register_diag_field('ocean_model', "Bflx_dia_diff_dz_KS", diag%axesTl, &
         Time, "Layerwise integral of diffusive diapycnal buoyancy flux due to Kappa Shear.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idz_KS = register_diag_field('ocean_model',"Bflx_dia_diff_idz_KS", diag%axesT1, &
+  VBF%id_Bdif_idz_KS = register_diag_field('ocean_model', "Bflx_dia_diff_idz_KS", diag%axesT1, &
         Time, "Layer integrated diffusive diapycnal buoyancy flux due to Kappa Shear.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idV_KS = register_scalar_field('ocean_model',"Bflx_dia_diff_idV_KS", Time, diag, &
+  VBF%id_Bdif_idV_KS = register_scalar_field('ocean_model', "Bflx_dia_diff_idV_KS", Time, diag, &
         "Global integrated diffusive diapycnal buoyancy flux due to Kappa Shear.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_bkgnd = register_diag_field('ocean_model',"Bflx_dia_diff_bkgnd", diag%axesTi, &
+  VBF%id_Bdif_bkgnd = register_diag_field('ocean_model', "Bflx_dia_diff_bkgnd", diag%axesTi, &
         Time, "Diffusive diapycnal buoyancy flux across interfaces due to bkgnd mixing", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_dz_bkgnd = register_diag_field('ocean_model',"Bflx_dia_diff_dz_bkgnd", diag%axesTl, &
+  VBF%id_Bdif_dz_bkgnd = register_diag_field('ocean_model', "Bflx_dia_diff_dz_bkgnd", diag%axesTl, &
         Time, "Layerwise integral of diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idz_bkgnd = register_diag_field('ocean_model',"Bflx_dia_diff_idz_bkgnd", diag%axesT1, &
+  VBF%id_Bdif_idz_bkgnd = register_diag_field('ocean_model', "Bflx_dia_diff_idz_bkgnd", diag%axesT1, &
         Time, "Layer integrated diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idV_bkgnd = register_scalar_field('ocean_model',"Bflx_dia_diff_idV_bkgnd", Time, diag, &
+  VBF%id_Bdif_idV_bkgnd = register_scalar_field('ocean_model', "Bflx_dia_diff_idV_bkgnd", Time, diag, &
         "Global integrated diffusive diapycnal buoyancy flux due to Kd_bkgnd.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_ddiff_temp = register_diag_field('ocean_model',"Bflx_dia_diff_ddiff_heat", diag%axesTi, &
+  VBF%id_Bdif_ddiff_temp = register_diag_field('ocean_model', "Bflx_dia_diff_ddiff_heat", diag%axesTi, &
         Time, "Diffusive diapycnal buoyancy flux across interfaces due to double diffusion of heat", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_dz_ddiff_temp = register_diag_field('ocean_model',"Bflx_dia_diff_dz_ddiff_heat", diag%axesTl, &
+  VBF%id_Bdif_dz_ddiff_temp = register_diag_field('ocean_model', "Bflx_dia_diff_dz_ddiff_heat", diag%axesTl, &
         Time, "Layerwise integral of diffusive diapycnal buoyancy flux due to double diffusion of heat.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idz_ddiff_temp = register_diag_field('ocean_model',"Bflx_dia_diff_idz_ddiff_heat", diag%axesT1, &
+  VBF%id_Bdif_idz_ddiff_temp = register_diag_field('ocean_model', "Bflx_dia_diff_idz_ddiff_heat", diag%axesT1, &
         Time, "Layer integrated diffusive diapycnal buoyancy flux due to double diffusion of heat.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idV_ddiff_temp = register_scalar_field('ocean_model',"Bflx_dia_diff_idV_ddiff_heat", Time, diag, &
+  VBF%id_Bdif_idV_ddiff_temp = register_scalar_field('ocean_model', "Bflx_dia_diff_idV_ddiff_heat", Time, diag, &
         "Global integrated diffusive diapycnal buoyancy flux due to double diffusion of heat.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_ddiff_salt = register_diag_field('ocean_model',"Bflx_dia_diff_ddiff_salt", diag%axesTi, &
+  VBF%id_Bdif_ddiff_salt = register_diag_field('ocean_model', "Bflx_dia_diff_ddiff_salt", diag%axesTi, &
         Time, "Diffusive diapycnal buoyancy flux across interfaces due to double diffusion of salt", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_dz_ddiff_salt = register_diag_field('ocean_model',"Bflx_dia_diff_dz_ddiff_salt", diag%axesTl, &
+  VBF%id_Bdif_dz_ddiff_salt = register_diag_field('ocean_model', "Bflx_dia_diff_dz_ddiff_salt", diag%axesTl, &
         Time, "Layerwise integral of diffusive diapycnal buoyancy flux due to double diffusion of salt.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idz_ddiff_salt = register_diag_field('ocean_model',"Bflx_dia_diff_idz_ddiff_salt", diag%axesT1, &
+  VBF%id_Bdif_idz_ddiff_salt = register_diag_field('ocean_model', "Bflx_dia_diff_idz_ddiff_salt", diag%axesT1, &
         Time, "Layer integrated diffusive diapycnal buoyancy flux due to double diffusion of salt.", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idV_ddiff_salt = register_scalar_field('ocean_model',"Bflx_dia_diff_idV_ddiff_salt", Time, diag, &
+  VBF%id_Bdif_idV_ddiff_salt = register_scalar_field('ocean_model', "Bflx_dia_diff_idV_ddiff_salt", Time, diag, &
         "Global integrated diffusive diapycnal buoyancy flux due to double diffusion of salt.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_leak = register_diag_field('ocean_model',"Bflx_dia_diff_leak", diag%axesTi, &
+  VBF%id_Bdif_leak = register_diag_field('ocean_model', "Bflx_dia_diff_leak", diag%axesTi, &
         Time, "Diffusive diapycnal buoyancy flux across interfaces due to Kd_leak mixing", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_dz_leak = register_diag_field('ocean_model',"Bflx_dia_diff_dz_leak", diag%axesTl, &
+  VBF%id_Bdif_dz_leak = register_diag_field('ocean_model', "Bflx_dia_diff_dz_leak", diag%axesTl, &
         Time, "Layerwise integral of diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idz_leak = register_diag_field('ocean_model',"Bflx_dia_diff_idz_leak", diag%axesT1, &
+  VBF%id_Bdif_idz_leak = register_diag_field('ocean_model', "Bflx_dia_diff_idz_leak", diag%axesT1, &
         Time, "Layer integrated diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idV_leak = register_scalar_field('ocean_model',"Bflx_dia_diff_idV_leak", Time, diag, &
+  VBF%id_Bdif_idV_leak = register_scalar_field('ocean_model', "Bflx_dia_diff_idV_leak", Time, diag, &
         "Global integrated diffusive diapycnal buoyancy flux due to Kd_leak.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_quad = register_diag_field('ocean_model',"Bflx_dia_diff_quad", diag%axesTi, &
+  VBF%id_Bdif_quad = register_diag_field('ocean_model', "Bflx_dia_diff_quad", diag%axesTi, &
         Time, "Diffusive diapycnal buoyancy flux across interfaces due to Kd_quad mixing", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_dz_quad = register_diag_field('ocean_model',"Bflx_dia_diff_dz_quad", diag%axesTl, &
+  VBF%id_Bdif_dz_quad = register_diag_field('ocean_model', "Bflx_dia_diff_dz_quad", diag%axesTl, &
         Time, "Layerwise integral of diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idz_quad = register_diag_field('ocean_model',"Bflx_dia_diff_idz_quad", diag%axesT1, &
+  VBF%id_Bdif_idz_quad = register_diag_field('ocean_model', "Bflx_dia_diff_idz_quad", diag%axesT1, &
         Time, "Layer integrated diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idV_quad = register_scalar_field('ocean_model',"Bflx_dia_diff_idV_quad", Time, diag, &
+  VBF%id_Bdif_idV_quad = register_scalar_field('ocean_model', "Bflx_dia_diff_idV_quad", Time, diag, &
         "Global integrated diffusive diapycnal buoyancy flux due to Kd_quad.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_itidal = register_diag_field('ocean_model',"Bflx_dia_diff_itidal", diag%axesTi, &
+  VBF%id_Bdif_itidal = register_diag_field('ocean_model', "Bflx_dia_diff_itidal", diag%axesTi, &
         Time, "Diffusive diapycnal buoyancy flux across interfaces due to Kd_itidal mixing", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_dz_itidal = register_diag_field('ocean_model',"Bflx_dia_diff_dz_itidal", diag%axesTl, &
+  VBF%id_Bdif_dz_itidal = register_diag_field('ocean_model', "Bflx_dia_diff_dz_itidal", diag%axesTl, &
         Time, "Layerwise integral of diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idz_itidal = register_diag_field('ocean_model',"Bflx_dia_diff_idz_itidal", diag%axesT1, &
+  VBF%id_Bdif_idz_itidal = register_diag_field('ocean_model', "Bflx_dia_diff_idz_itidal", diag%axesT1, &
         Time, "Layer integrated diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idV_itidal = register_scalar_field('ocean_model',"Bflx_dia_diff_idV_itidal", Time, diag, &
+  VBF%id_Bdif_idV_itidal = register_scalar_field('ocean_model', "Bflx_dia_diff_idV_itidal", Time, diag, &
         "Global integrated diffusive diapycnal buoyancy flux due to Kd_itidal.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_Froude = register_diag_field('ocean_model',"Bflx_dia_diff_Froude", diag%axesTi, &
+  VBF%id_Bdif_Froude = register_diag_field('ocean_model', "Bflx_dia_diff_Froude", diag%axesTi, &
         Time, "Diffusive diapycnal buoyancy flux across interfaces due to Kd_Froude mixing", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_dz_Froude = register_diag_field('ocean_model',"Bflx_dia_diff_dz_Froude", diag%axesTl, &
+  VBF%id_Bdif_dz_Froude = register_diag_field('ocean_model', "Bflx_dia_diff_dz_Froude", diag%axesTl, &
         Time, "Layerwise integral of diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idz_Froude = register_diag_field('ocean_model',"Bflx_dia_diff_idz_Froude", diag%axesT1, &
+  VBF%id_Bdif_idz_Froude = register_diag_field('ocean_model', "Bflx_dia_diff_idz_Froude", diag%axesT1, &
         Time, "Layer integrated diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idV_Froude = register_scalar_field('ocean_model',"Bflx_dia_diff_idV_Froude", Time, diag, &
+  VBF%id_Bdif_idV_Froude = register_scalar_field('ocean_model', "Bflx_dia_diff_idV_Froude", Time, diag, &
         "Global integrated diffusive diapycnal buoyancy flux due to Kd_Froude.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_slope = register_diag_field('ocean_model',"Bflx_dia_diff_slope", diag%axesTi, &
+  VBF%id_Bdif_slope = register_diag_field('ocean_model', "Bflx_dia_diff_slope", diag%axesTi, &
         Time, "Diffusive diapycnal buoyancy flux across interfaces due to Kd_slope mixing", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_dz_slope = register_diag_field('ocean_model',"Bflx_dia_diff_dz_slope", diag%axesTl, &
+  VBF%id_Bdif_dz_slope = register_diag_field('ocean_model', "Bflx_dia_diff_dz_slope", diag%axesTl, &
         Time, "Layerwise integral of diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idz_slope = register_diag_field('ocean_model',"Bflx_dia_diff_idz_slope", diag%axesT1, &
+  VBF%id_Bdif_idz_slope = register_diag_field('ocean_model', "Bflx_dia_diff_idz_slope", diag%axesT1, &
         Time, "Layer integrated diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idV_slope = register_scalar_field('ocean_model',"Bflx_dia_diff_idV_slope", Time, diag, &
+  VBF%id_Bdif_idV_slope = register_scalar_field('ocean_model', "Bflx_dia_diff_idV_slope", Time, diag, &
         "Global integrated diffusive diapycnal buoyancy flux due to Kd_slope.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_lowmode = register_diag_field('ocean_model',"Bflx_dia_diff_lowmode", diag%axesTi, &
+  VBF%id_Bdif_lowmode = register_diag_field('ocean_model', "Bflx_dia_diff_lowmode", diag%axesTi, &
         Time, "Diffusive diapycnal buoyancy flux across interfaces due to Kd_lowmode mixing", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_dz_lowmode = register_diag_field('ocean_model',"Bflx_dia_diff_dz_lowmode", diag%axesTl, &
+  VBF%id_Bdif_dz_lowmode = register_diag_field('ocean_model', "Bflx_dia_diff_dz_lowmode", diag%axesTl, &
         Time, "Layerwise integral of diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idz_lowmode = register_diag_field('ocean_model',"Bflx_dia_diff_idz_lowmode", diag%axesT1, &
+  VBF%id_Bdif_idz_lowmode = register_diag_field('ocean_model', "Bflx_dia_diff_idz_lowmode", diag%axesT1, &
         Time, "Layer integrated diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idV_lowmode = register_scalar_field('ocean_model',"Bflx_dia_diff_idV_lowmode", Time, diag, &
+  VBF%id_Bdif_idV_lowmode = register_scalar_field('ocean_model', "Bflx_dia_diff_idV_lowmode", Time, diag, &
         "Global integrated diffusive diapycnal buoyancy flux due to Kd_lowmode.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_Niku = register_diag_field('ocean_model',"Bflx_dia_diff_Niku", diag%axesTi, &
+  VBF%id_Bdif_Niku = register_diag_field('ocean_model', "Bflx_dia_diff_Niku", diag%axesTi, &
         Time, "Diffusive diapycnal buoyancy flux across interfaces due to Kd_Niku mixing", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_dz_Niku = register_diag_field('ocean_model',"Bflx_dia_diff_dz_Niku", diag%axesTl, &
+  VBF%id_Bdif_dz_Niku = register_diag_field('ocean_model', "Bflx_dia_diff_dz_Niku", diag%axesTl, &
         Time, "Layerwise integral of diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idz_Niku = register_diag_field('ocean_model',"Bflx_dia_diff_idz_Niku", diag%axesT1, &
+  VBF%id_Bdif_idz_Niku = register_diag_field('ocean_model', "Bflx_dia_diff_idz_Niku", diag%axesT1, &
         Time, "Layer integrated diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idV_Niku = register_scalar_field('ocean_model',"Bflx_dia_diff_idV_Niku", Time, diag, &
+  VBF%id_Bdif_idV_Niku = register_scalar_field('ocean_model', "Bflx_dia_diff_idV_Niku", Time, diag, &
         "Global integrated diffusive diapycnal buoyancy flux due to Kd_Niku.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 
-  VBF%id_Bdif_itides = register_diag_field('ocean_model',"Bflx_dia_diff_itides", diag%axesTi, &
+  VBF%id_Bdif_itides = register_diag_field('ocean_model', "Bflx_dia_diff_itides", diag%axesTi, &
         Time, "Diffusive diapycnal buoyancy flux across interfaces due to Kd_itides mixing", &
         "W m-3", conversion=GV%H_to_kg_m2*US%Z_to_m*US%s_to_T**3)
-  VBF%id_Bdif_dz_itides = register_diag_field('ocean_model',"Bflx_dia_diff_dz_itides", diag%axesTl, &
+  VBF%id_Bdif_dz_itides = register_diag_field('ocean_model', "Bflx_dia_diff_dz_itides", diag%axesTl, &
         Time, "Layerwise integral of diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idz_itides = register_diag_field('ocean_model',"Bflx_dia_diff_idz_itides", diag%axesT1, &
+  VBF%id_Bdif_idz_itides = register_diag_field('ocean_model', "Bflx_dia_diff_idz_itides", diag%axesT1, &
         Time, "Layer integrated diffusive diapycnal buoyancy flux due to bkgnd mixing", &
         "W m-2", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3)
-  VBF%id_Bdif_idV_itides = register_scalar_field('ocean_model',"Bflx_dia_diff_idV_itides", Time, diag, &
+  VBF%id_Bdif_idV_itides = register_scalar_field('ocean_model', "Bflx_dia_diff_idV_itides", Time, diag, &
         "Global integrated diffusive diapycnal buoyancy flux due to Kd_itides.", &
         units="W", conversion=GV%H_to_kg_m2*US%Z_to_m**2*US%s_to_T**3*US%L_to_m**2)
 

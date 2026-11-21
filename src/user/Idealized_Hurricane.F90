@@ -609,7 +609,7 @@ subroutine idealized_hurricane_wind_profile(CS, US, absf, YY, XX, UOCN, VOCN, Tx
     endif
   endif
 
-  Adir = atan2(YY,XX)
+  Adir = atan2(YY, XX)
 
   !\
 

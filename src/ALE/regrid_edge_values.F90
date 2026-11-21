@@ -62,7 +62,7 @@ subroutine bound_edge_values( N, h, u, edge_val, h_neglect, answer_date )
     ! is assumed to be the same as the left boundary cell and the right neighbor of the right
     ! boundary cell is assumed to be the same as the right boundary cell. This effectively makes
     ! boundary cells look like extrema.
-    km1 = max(1,k-1) ; kp1 = min(k+1,N)
+    km1 = max(1, k-1) ; kp1 = min(k+1, N)
 
     slope_x_h = 0.0
     if (use_2018_answers) then
@@ -73,7 +73,7 @@ subroutine bound_edge_values( N, h, u, edge_val, h_neglect, answer_date )
       ! The limiter is used in the local coordinate system to each cell, so for convenience store
       ! the slope times a half grid spacing.  (See White and Adcroft JCP 2008 Eqs 19 and 20)
       if ( (sigma_l * sigma_r) > 0.0 ) &
-        slope_x_h = 0.5 * h(k) * sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
+        slope_x_h = 0.5 * h(k) * sign( min(abs(sigma_l), abs(sigma_c), abs(sigma_r)), sigma_c )
     elseif ( ((h(km1) + h(kp1)) + 2.0*h(k)) > 0.0 ) then
       sigma_l = ( u(k) - u(km1) )
       sigma_c = ( u(kp1) - u(km1) ) * ( h(k) / ((h(km1) + h(kp1)) + 2.0*h(k)) )
@@ -82,7 +82,7 @@ subroutine bound_edge_values( N, h, u, edge_val, h_neglect, answer_date )
       ! The limiter is used in the local coordinate system to each cell, so for convenience store
       ! the slope times a half grid spacing.  (See White and Adcroft JCP 2008 Eqs 19 and 20)
       if ( (sigma_l * sigma_r) > 0.0 ) &
-        slope_x_h = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
+        slope_x_h = sign( min(abs(sigma_l), abs(sigma_c), abs(sigma_r)), sigma_c )
     endif
 
     ! Limit the edge values
@@ -1441,7 +1441,7 @@ subroutine test_line(msg, N, A, C, R, mag, tol)
 
   tolerance = 1.0e-12 ; if (present(tol)) tolerance = tol
 
-  sum = 0.0 ; sum_mag = max(0.0,mag)
+  sum = 0.0 ; sum_mag = max(0.0, mag)
   do i=1,N
     sum = sum + A(i) * C(i)
     sum_mag = sum_mag + abs(A(i) * C(i))

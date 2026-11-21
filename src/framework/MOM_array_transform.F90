@@ -428,7 +428,7 @@ recursive function symmetric_sum_2d(field) result(sum)
       ic = szi_2+1 ; jc = szj_2+1 ! The index of the central point
       sum = field(ic,jc)
       ! Add pairs of pairs of values, working from the inside out.
-      do ij=1,min(szi_2,szj_2)
+      do ij = 1, min(szi_2, szj_2)
         sum = sum + ((field(ic-ij,jc) + field(ic+ij,jc)) + (field(ic,jc-ij) + field(ic,jc+ij)))
       enddo
       ! Add extra pairs of values, working from the inside out.
@@ -509,7 +509,7 @@ logical function symmetric_sum_unit_tests(verbose)
   logical, intent(in) :: verbose !< If true, write results to stdout
   ! Local variables
   character(len=120) :: fail_message !< Blank or a description of the first failed test.
-  integer, parameter :: sz=13 ! The maximum size of the test arrays
+  integer, parameter :: sz = 13 ! The maximum size of the test arrays
   real :: array(sz,sz)  ! An array of inexact real values for testing in arbitrary units [A]
   real :: ar_90(sz,sz)  ! Array rotated by 90 degrees in arbitrary units [A]
   real :: ar_180(sz,sz) ! Array rotated by 180 degrees in arbitrary units [A]

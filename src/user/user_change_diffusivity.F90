@@ -84,10 +84,10 @@ subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_i
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  if (.not.associated(CS)) call MOM_error(FATAL,"user_set_diffusivity: "//&
+  if (.not.associated(CS)) call MOM_error(FATAL, "user_set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
-  if (.not.CS%initialized) call MOM_error(FATAL,"user_set_diffusivity: "//&
+  if (.not.CS%initialized) call MOM_error(FATAL, "user_set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
   use_EOS = associated(tv%eqn_of_state)

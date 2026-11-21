@@ -249,7 +249,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
           Kh_loc = Kh_loc * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
         Kh_u(I,j,1) = max(Kh_loc, CS%KhTr_min)
         if (CS%KhTr_passivity_coeff>0.) then ! Apply passivity
-          Rd_dx=0.5*( VarMix%Rd_dx_h(i,j)+VarMix%Rd_dx_h(i+1,j) ) ! Rd/dx at u-points
+          Rd_dx = 0.5*( VarMix%Rd_dx_h(i,j)+VarMix%Rd_dx_h(i+1,j) ) ! Rd/dx at u-points
           Kh_loc = Kh_u(I,j,1)*max( CS%KhTr_passivity_min, CS%KhTr_passivity_coeff*Rd_dx )
           if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max) ! Re-apply max
           Kh_u(I,j,1) = max(Kh_loc, CS%KhTr_min) ! Re-apply min
@@ -469,7 +469,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
     endif
 
     do itt=1,num_itts
-      if (CS%show_call_tree) call callTree_waypoint("Calling horizontal boundary diffusion (tracer_hordiff)",itt)
+      if (CS%show_call_tree) call callTree_waypoint("Calling horizontal boundary diffusion (tracer_hordiff)", itt)
       if (itt>1) then ! Update halos for subsequent iterations
         call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
       endif
@@ -547,7 +547,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
     endif
 
     do itt=1,num_itts
-      if (CS%show_call_tree) call callTree_waypoint("Calling neutral diffusion (tracer_hordiff)",itt)
+      if (CS%show_call_tree) call callTree_waypoint("Calling neutral diffusion (tracer_hordiff)", itt)
       if (itt>1) then ! Update halos for subsequent iterations
         call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
         if (CS%recalc_neutral_surf) then
@@ -891,7 +891,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   endif
 
   do i=is-2,ie+2 ; p_ref_cv(i) = tv%P_Ref ; enddo
-  EOSdom(:) = EOS_domain(G%HI,halo=2)
+  EOSdom(:) = EOS_domain(G%HI, halo=2)
 
   call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
   ! Determine which layers the mixed- and buffer-layers map into...
@@ -979,7 +979,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   !$OMP end parallel
 
   do j=js,je
-    k_size = max(2*max_srt(j),1)
+    k_size = max(2*max_srt(j), 1)
     allocate(deep_wt_Lu(j)%p(IsdB:IedB,k_size))
     allocate(deep_wt_Ru(j)%p(IsdB:IedB,k_size))
     allocate(hP_Lu(j)%p(IsdB:IedB,k_size))
@@ -1132,7 +1132,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   endif ; enddo ; enddo ! i- & j- loops over zonal faces.
 
   do J=js-1,je
-    k_size = max(max_srt(j)+max_srt(j+1),1)
+    k_size = max(max_srt(j)+max_srt(j+1), 1)
     allocate(deep_wt_Lv(J)%p(isd:ied,k_size))
     allocate(deep_wt_Rv(J)%p(isd:ied,k_size))
     allocate(hP_Lv(J)%p(isd:ied,k_size))
@@ -1794,7 +1794,7 @@ subroutine tracer_hor_diff_init(Time, G, GV, US, param_file, diag, EOS, diabatic
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
 
   id_clock_diffuse = cpu_clock_id('(Ocean diffuse tracer)',          grain=CLOCK_MODULE)
-  id_clock_epimix  = cpu_clock_id('(Ocean epipycnal diffuse tracer)',grain=CLOCK_MODULE)
+  id_clock_epimix  = cpu_clock_id('(Ocean epipycnal diffuse tracer)', grain=CLOCK_MODULE)
   id_clock_pass    = cpu_clock_id('(Ocean tracer halo updates)',     grain=CLOCK_ROUTINE)
   id_clock_sync    = cpu_clock_id('(Ocean tracer global synch)',     grain=CLOCK_ROUTINE)
 
@@ -1810,8 +1810,8 @@ subroutine tracer_hor_diff_init(Time, G, GV, US, param_file, diag, EOS, diabatic
   CS%id_KhTr_h = register_diag_field('ocean_model', 'KHTR_h', diag%axesTi, Time, &
       'Epipycnal tracer diffusivity at tracer cell center', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T, &
       cmor_field_name='diftrelo',                                                &
-      cmor_standard_name= 'ocean_tracer_epineutral_laplacian_diffusivity',       &
-      cmor_long_name = 'Ocean Tracer Epineutral Laplacian Diffusivity')
+      cmor_standard_name='ocean_tracer_epineutral_laplacian_diffusivity',       &
+      cmor_long_name='Ocean Tracer Epineutral Laplacian Diffusivity')
 
   CS%id_khdt_x = register_diag_field('ocean_model', 'KHDT_x', diag%axesCu1, Time, &
       'Epipycnal tracer diffusivity operator at zonal faces of tracer cell', 'm2', conversion=US%L_to_m**2)

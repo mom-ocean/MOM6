@@ -242,9 +242,9 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "The total number of thickness grid points in the y-direction in the physical "//&
                  "domain. With STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.", &
                  default=NJGLOBAL)
-    if (n_global(1) /= NIGLOBAL) call MOM_error(FATAL,"MOM_domains_init: " // &
+    if (n_global(1) /= NIGLOBAL) call MOM_error(FATAL, "MOM_domains_init: " // &
           "static mismatch for NIGLOBAL_ domain size. Header file does not match input namelist")
-    if (n_global(2) /= NJGLOBAL) call MOM_error(FATAL,"MOM_domains_init: " // &
+    if (n_global(2) /= NJGLOBAL) call MOM_error(FATAL, "MOM_domains_init: " // &
           "static mismatch for NJGLOBAL_ domain size. Header file does not match input namelist")
 
     ! Check the requirement of equal sized compute domains when STATIC_MEMORY_ is used.
@@ -256,7 +256,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
       call MOM_error(WARNING, 'MOM_domains: Processor decomposition (NIPROC_,NJPROC_) = ('//&
               trim(char_xsiz)//','//trim(char_ysiz)//') does not evenly divide size '//&
               'set by preprocessor macro ('//trim(char_niglobal)//','//trim(char_njglobal)//').')
-      call MOM_error(FATAL,'MOM_domains:  #undef STATIC_MEMORY_ in '//trim(inc_nm)//' to use '//&
+      call MOM_error(FATAL, 'MOM_domains:  #undef STATIC_MEMORY_ in '//trim(inc_nm)//' to use '//&
               'dynamic allocation, or change processor decomposition to evenly divide the domain.')
     endif
   else
@@ -288,9 +288,9 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     call log_param(param_file, mdl, "!NJHALO min_halo", n_halo(2), layoutParam=.true.)
   endif
   if (is_static .and. .not.present(min_halo)) then
-    if (n_halo(1) /= NIHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
+    if (n_halo(1) /= NIHALO) call MOM_error(FATAL, "MOM_domains_init: " // &
            "static mismatch for "//trim(nihalo_nm)//" domain size")
-    if (n_halo(2) /= NJHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
+    if (n_halo(2) /= NJHALO) call MOM_error(FATAL, "MOM_domains_init: " // &
            "static mismatch for "//trim(njhalo_nm)//" domain size")
   endif
 
@@ -310,7 +310,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 
   auto_mask_table = .false.
   if (.not. present(param_suffix) .and. .not. is_static .and. trim(topo_config) == 'file') then
-     call get_param(param_file, mdl, 'AUTO_MASKTABLE', auto_mask_table, &
+    call get_param(param_file, mdl, 'AUTO_MASKTABLE', auto_mask_table, &
                  "Turn on automatic mask table generation to eliminate land blocks.", &
                  default=.false., layoutParam=.true.)
   endif
@@ -496,7 +496,7 @@ subroutine MOM_define_layout(n_global, ndivs, layout)
   ! First try to divide ndivs to match the domain aspect ratio.  If this is not an even
   ! divisor of ndivs, reduce idiv until a factor is found.
   idiv = max(nint( sqrt(float(ndivs*isz)/jsz) ), 1)
-  do while( mod(ndivs,idiv) /= 0 )
+  do while( mod(ndivs, idiv) /= 0 )
     idiv = idiv - 1
   enddo ! This will terminate at idiv=1 if not before
   jdiv = ndivs / idiv
@@ -534,7 +534,7 @@ subroutine gen_auto_mask_table(n_global, reentrant, tripolar_N, npes, param_file
   real :: ar             ! layout aspect ratio to check if it is too extreme        [nondim]
   real :: m_to_Z         ! A conversion factor from m to height units           [Z m-1 ~> 1]
   integer :: nx, ny      ! global domain sizes
-  integer, parameter :: ibuf=2, jbuf=2
+  integer, parameter :: ibuf = 2, jbuf = 2
   real, parameter :: r_extreme = 4.0 ! aspect ratio limit (>1) for a layout to be considered [nondim]
   integer :: num_masked_blocks
   integer, allocatable :: mask_table(:,:)
@@ -704,7 +704,7 @@ subroutine determine_land_blocks(mask, nx, ny, idiv, jdiv, ibuf, jbuf, num_maske
   integer, dimension(idiv) :: iend     !< The ending index of each division along x axis
   integer, dimension(jdiv) :: jbegin   !< The starting index of each division along y axis
   integer, dimension(jdiv) :: jend     !< The ending index of each division along y axis
-  integer :: i, j, ib, ie, jb,je
+  integer :: i, j, ib, ie, jb, je
 
   call compute_extent(1, nx, idiv, ibegin, iend)
   call compute_extent(1, ny, jdiv, jbegin, jend)
@@ -742,7 +742,7 @@ subroutine write_auto_mask_file(mask_table, layout, npes, filename)
   integer, intent(in) :: npes                 !> Number of divisions (incl. eliminated ones)
   character(len=:), allocatable, intent(in) :: filename !> file name for the mask_table to be written
   ! local
-  integer :: file_ascii= -1  !< The unit number of the auto-generated mask_file file.
+  integer :: file_ascii = -1  !< The unit number of the auto-generated mask_file file.
   integer :: true_num_masked_blocks
   integer :: p
 

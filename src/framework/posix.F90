@@ -191,7 +191,7 @@ interface
       !! specified by the corresponding longjmp() call.
   end function setjmp
 
-  !> Save the current execution and ,optionally, the signal state to `env`.
+  !> Save the current execution and, optionally, the signal state to `env`.
   !!
   !! This function creates a snapshot of the process state to `env`, which can
   !! be restored by calling `longjmp`.  When `setjmp` is called, the function

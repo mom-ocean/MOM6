@@ -25,9 +25,9 @@ character(len=40) :: fn_labels(n_fns)
 !       to overcome limited resolution of the timer
 !  nsamp repeats the timing to collect statistics on the measurement
 #ifdef PDF_ONLY
-integer, parameter :: nic=26, halo=4, nits=10000, nsamp=400
+integer, parameter :: nic = 26, halo = 4, nits = 10000, nsamp = 400
 #else
-integer, parameter :: nic=23, halo=4, nits=1000, nsamp=400
+integer, parameter :: nic = 23, halo = 4, nits = 1000, nsamp = 400
 #endif
 
 real :: times(nsamp) ! CPU times for observing the PDF [seconds]

@@ -295,7 +295,7 @@ subroutine define_axes_group(diag_cs, handles, axes, &
   n = size(handles)
   if (n<1 .or. n>2) call MOM_error(FATAL, "define_axes_group: wrong size for list of handles!")
   allocate( axes%handles(n) )
-  axes%id = ints_to_string(handles, max(n,2)) ! Identifying string
+  axes%id = ints_to_string(handles, max(n, 2)) ! Identifying string
   axes%rank = n
   axes%handles(:) = handles(:)
   axes%diag_cs => diag_cs ! A (circular) link back to the diag_ctrl structure
@@ -457,9 +457,9 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   elseif ( size(field,1) == cszi + 1 ) then
     isv = 1 ; iev = cszi+1 ; i_data = .false. ! Symmetric computational domain
   else
-    write (mesg,*) " peculiar size ",size(field,1)," in i-direction\n"//&
+    write(mesg,*) " peculiar size ",size(field,1)," in i-direction\n"//&
        "does not match one of ", cszi, cszi+1, dszi, dszi+1
-    call MOM_error(FATAL,"post_IS_data_2d_low: "//trim(diag%debug_str)//trim(mesg))
+    call MOM_error(FATAL, "post_IS_data_2d_low: "//trim(diag%debug_str)//trim(mesg))
   endif
 
   if ( size(field,2) == dszj ) then
@@ -472,9 +472,9 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   elseif ( size(field,2) == cszj + 1 ) then
     jsv = 1 ; jev = cszj+1 ; j_data = .false. ! Symmetric computational domain
   else
-    write (mesg,*) " peculiar size ",size(field,2)," in j-direction\n"//&
+    write(mesg,*) " peculiar size ",size(field,2)," in j-direction\n"//&
        "does not match one of ", cszj, cszj+1, dszj, dszj+1
-    call MOM_error(FATAL,"post_IS_data_2d_low: "//trim(diag%debug_str)//trim(mesg))
+    call MOM_error(FATAL, "post_IS_data_2d_low: "//trim(diag%debug_str)//trim(mesg))
   endif
 
   if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) then
@@ -1000,16 +1000,16 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, x_cell_method, y
         call get_MOM_diag_axis_name(axes%handles(1), axis_name)
         call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(x_cell_method)
-        if (trim(x_cell_method)=='mean') x_mean=.true.
-        if (trim(x_cell_method)=='sum') x_sum=.true.
+        if (trim(x_cell_method) == 'mean') x_mean = .true.
+        if (trim(x_cell_method) == 'sum') x_sum = .true.
       endif
     else
       if (len(trim(axes%x_cell_method))>0) then
         call get_MOM_diag_axis_name(axes%handles(1), axis_name)
         call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%x_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%x_cell_method)
-        if (trim(axes%x_cell_method)=='mean') x_mean=.true.
-        if (trim(axes%x_cell_method)=='sum') x_sum=.true.
+        if (trim(axes%x_cell_method) == 'mean') x_mean = .true.
+        if (trim(axes%x_cell_method) == 'sum') x_sum = .true.
       endif
     endif
     if (present(y_cell_method)) then
@@ -1017,16 +1017,16 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, x_cell_method, y
         call get_MOM_diag_axis_name(axes%handles(2), axis_name)
         call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(y_cell_method)
-        if (trim(y_cell_method)=='mean') y_mean=.true.
-        if (trim(y_cell_method)=='sum') y_sum=.true.
+        if (trim(y_cell_method) == 'mean') y_mean = .true.
+        if (trim(y_cell_method) == 'sum') y_sum = .true.
       endif
     else
       if (len(trim(axes%y_cell_method))>0) then
         call get_MOM_diag_axis_name(axes%handles(2), axis_name)
         call MOM_diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%y_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%y_cell_method)
-        if (trim(axes%y_cell_method)=='mean') y_mean=.true.
-        if (trim(axes%y_cell_method)=='sum') y_sum=.true.
+        if (trim(axes%y_cell_method) == 'mean') y_mean = .true.
+        if (trim(axes%y_cell_method) == 'sum') y_sum = .true.
       endif
     endif
     if (x_mean .and. y_mean) then

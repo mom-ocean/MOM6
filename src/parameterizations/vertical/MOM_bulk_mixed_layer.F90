@@ -160,7 +160,7 @@ type, public :: bulkmixedlayer_CS ; private
 end type bulkmixedlayer_CS
 
 !>@{ CPU clock IDs
-integer :: id_clock_pass=0
+integer :: id_clock_pass = 0
 !>@}
 
 contains
@@ -398,8 +398,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     enddo
 
     call cpu_clock_begin(id_clock_pass)
-    call create_group_pass(CS%pass_h_sum_hmbl_prev, h_sum,G%Domain)
-    call create_group_pass(CS%pass_h_sum_hmbl_prev, hmbl_prev,G%Domain)
+    call create_group_pass(CS%pass_h_sum_hmbl_prev, h_sum, G%Domain)
+    call create_group_pass(CS%pass_h_sum_hmbl_prev, hmbl_prev, G%Domain)
     call do_group_pass(CS%pass_h_sum_hmbl_prev, G%Domain)
     call cpu_clock_end(id_clock_pass)
   endif
@@ -660,10 +660,10 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
         do i=is,ie
           H_nbr = min(dHsfc*max(hmbl_prev(i-1,j), hmbl_prev(i+1,j), &
                                 hmbl_prev(i,j-1), hmbl_prev(i,j+1)), &
-                      max(hmbl_prev(i-1,j) - dHD*min(h_sum(i,j),h_sum(i-1,j)), &
-                          hmbl_prev(i+1,j) - dHD*min(h_sum(i,j),h_sum(i+1,j)), &
-                          hmbl_prev(i,j-1) - dHD*min(h_sum(i,j),h_sum(i,j-1)), &
-                          hmbl_prev(i,j+1) - dHD*min(h_sum(i,j),h_sum(i,j+1))) )
+                      max(hmbl_prev(i-1,j) - dHD*min(h_sum(i,j), h_sum(i-1,j)), &
+                          hmbl_prev(i+1,j) - dHD*min(h_sum(i,j), h_sum(i+1,j)), &
+                          hmbl_prev(i,j-1) - dHD*min(h_sum(i,j), h_sum(i,j-1)), &
+                          hmbl_prev(i,j+1) - dHD*min(h_sum(i,j), h_sum(i,j+1))) )
 
           Hsfc_min(i,j) = max(h(i,0), min(Hsfc(i), H_nbr))
 
@@ -915,7 +915,7 @@ subroutine convective_adjustment(h, u, v, R0, SpV0, Rcv, T, S, eps, d_eb, &
 !   Undergo instantaneous entrainment into the buffer layers and mixed layers
 ! to remove hydrostatic instabilities.  Any water that is lighter than currently
 ! in the layer is entrained.
-  do k1=min(nzc-1,nkmb),1,-1
+  do k1 = min(nzc-1, nkmb), 1, -1
     do i=is,ie
       h_orig_k1(i) = h(i,k1)
       KE_orig(i) = 0.5*h(i,k1)*((u(i,k1)**2) + (v(i,k1)**2))
@@ -987,7 +987,7 @@ subroutine convective_adjustment(h, u, v, R0, SpV0, Rcv, T, S, eps, d_eb, &
   enddo
 ! If lower mixed or buffer layers are massless, give them the properties of the
 ! layer above.
-  do k=2,min(nzc,nkmb) ; do i=is,ie ; if (h(i,k) == 0.0) then
+  do k = 2, min(nzc, nkmb) ; do i=is,ie ; if (h(i,k) == 0.0) then
     if (CS%nonBous_energetics) then
       SpV0(i,k) = SpV0(i,k-1)
     else
@@ -1161,7 +1161,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
     endif
 
     ! htot is an Angstrom (taken from layer 1) plus any net precipitation.
-    h_ent     = max(min(Angstrom,h(i,k)-eps(i,k)),0.0)
+    h_ent     = max(min(Angstrom, h(i,k)-eps(i,k)), 0.0)
     htot(i)   = h_ent + netMassIn(i)
     h(i,k)    = h(i,k) - h_ent
     d_eb(i,k) = d_eb(i,k) - h_ent
@@ -1840,7 +1840,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
 
         HpE = htot(i)+h_avail
         MKE_rate = 1.0/(1.0 + (cMKE(1,i)*HpE + cMKE(2,i)*HpE**2))
-        EF4_val = EF4(htot(i)+h_neglect,h_avail,Idecay_len_TKE(i))
+        EF4_val = EF4(htot(i)+h_neglect, h_avail, Idecay_len_TKE(i))
         TKE_full_ent = (exp_kh*TKE(i) - h_avail*(dRL*f1_kh + Pen_En_Contrib)) + &
             MKE_rate*dMKE*EF4_val
         if ((TKE_full_ent >= 0.0) .or. (h_avail+htot(i) <= Hmix_min)) then
@@ -1925,7 +1925,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
               endif ; enddo ! (Pen_SW_bnd(n,i) > 0.0)
 
               TKE_ent1 = exp_kh* TKE(i) - h_ent*(dRL*f1_kh + Pen_En_Contrib)
-              EF4_val = EF4(htot(i)+h_neglect,h_ent,Idecay_len_TKE(i),dEF4_dh)
+              EF4_val = EF4(htot(i)+h_neglect, h_ent, Idecay_len_TKE(i), dEF4_dh)
               HpE = htot(i)+h_ent
               MKE_rate = 1.0/(1.0 + (cMKE(1,i)*HpE + cMKE(2,i)*HpE**2))
               TKE_ent = TKE_ent1 + dMKE*EF4_val*MKE_rate
@@ -1962,7 +1962,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
           if (CS%TKE_diagnostics) then
             HpE = htot(i)+h_ent
             MKE_rate = 1.0/(1.0 + cMKE(1,i)*HpE + cMKE(2,i)*HpE**2)
-            EF4_val = EF4(htot(i)+h_neglect,h_ent,Idecay_len_TKE(i))
+            EF4_val = EF4(htot(i)+h_neglect, h_ent, Idecay_len_TKE(i))
 
             E_HxHpE = h_ent / ((htot(i)+h_neglect)*(HpE+h_neglect))
             CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) + &
@@ -2783,7 +2783,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Spv0, Rcv, RcvTgt, dt, dt_diag, d_e
       ! denser interior layer and upwind advection from the upper buffer layer
       ! into the lower one, each with an energy change that equals that required
       ! to mix the detrained water with the upper buffer layer.
-      h1_avail = h1 - MAX(0.0,h_min_bl-h_to_bl)
+      h1_avail = h1 - MAX(0.0, h_min_bl-h_to_bl)
       if (CS%nonBous_energetics) then
         intermediate = (SpV0(i,kb1) > SpV0(i,kb2)) .and. (h_to_bl*SpV0(i,kb1) < SpV0_to_bl)
       else
@@ -3132,7 +3132,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Spv0, Rcv, RcvTgt, dt, dt_diag, d_e
       h_det_to_h2 = MIN(h_to_bl, h_det_h2)
       h_ml_to_h2 = h_det_h2 - h_det_to_h2
       h_det_to_h1 = h_to_bl - h_det_to_h2
-      h_ml_to_h1 = MAX(h_min_bl-h_det_to_h1,0.0)
+      h_ml_to_h1 = MAX(h_min_bl-h_det_to_h1, 0.0)
 
       Ih = 1.0/h_min_bl
       Ihdet = 0.0 ; if (h_to_bl > 0.0) Ihdet = 1.0 / h_to_bl
@@ -3201,7 +3201,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Spv0, Rcv, RcvTgt, dt, dt_diag, d_e
     ! the lower buffer layer and the properties with which it is moving.
     ! This implementation assumes a 2nd-order upwind advection of density
     ! from the uppermost buffer layer into the next one down.
-      h_from_ml = h_min_bl + MAX(h_min_bl-h2,0.0) - h1 - h_to_bl
+      h_from_ml = h_min_bl + MAX(h_min_bl-h2, 0.0) - h1 - h_to_bl
       if (h_from_ml > 0.0) then
         ! Some water needs to be moved from the mixed layer so that the upper
         ! (and perhaps lower) buffer layers exceed their minimum thicknesses.
@@ -3236,7 +3236,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Spv0, Rcv, RcvTgt, dt, dt_diag, d_e
           b1 = abs(R0(i,kb1) - R0_det) / (R0(i,kb2) - R0(i,kb1))
       endif
       stays_min = MAX((1.0-b1)*h1 - b1*h2, 0.0, h_min_bl - h_to_bl)
-      stays_max = h1 - MAX(h_min_bl-h2,0.0)
+      stays_max = h1 - MAX(h_min_bl-h2, 0.0)
 
       scale_slope = 1.0
       if (stays_max <= stays_min) then
@@ -3254,9 +3254,9 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Spv0, Rcv, RcvTgt, dt, dt_diag, d_e
         if (s2 < 0.0) then
           ! The energy released by detrainment from the lower buffer layer can be
           ! used to mix water from the upper buffer layer into the lower one.
-          s3sq = I_ya*MAX(bh0*h1-dPE_extrap_rhoG, 0.0)
+          s3sq = I_ya * MAX(bh0*h1-dPE_extrap_rhoG, 0.0)
         else
-          s3sq = I_ya*(bh0*h1-MIN(dPE_extrap_rhoG,0.0))
+          s3sq = I_ya * (bh0*h1 - MIN(dPE_extrap_rhoG, 0.0))
         endif
 
         if (s3sq == 0.0) then
@@ -3324,7 +3324,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Spv0, Rcv, RcvTgt, dt, dt_diag, d_e
         ! water into the lower buffer layer, and detrain undiluted into the
         ! upper buffer layer.
         h1_to_k0 = (h1-stays_merge)
-        stays = MAX(h_min_bl-h_to_bl,0.0)
+        stays = MAX(h_min_bl-h_to_bl, 0.0)
         h1_to_h2 = stays_merge - stays
 
         Ihk0 = 1.0 / ((h1_to_k0 + h2) + h(i,k0))
@@ -3658,7 +3658,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, SpV0, Rcv, RcvTgt, dt, dt_diag, d_e
 
   is = G%isc ; ie = G%iec ; nz = GV%ke
   nkmb = CS%nkml+CS%nkbl
-  if (CS%nkbl /= 1) call MOM_error(FATAL,"MOM_mixed_layer: "// &
+  if (CS%nkbl /= 1) call MOM_error(FATAL, "MOM_mixed_layer: "// &
                         "CS%nkbl must be 1 in mixedlayer_detrain_1.")
 
   dt_Time = dt / CS%BL_detrain_time

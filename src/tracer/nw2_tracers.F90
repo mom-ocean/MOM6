@@ -290,7 +290,7 @@ real function nw2_tracer_dist(m, G, GV, eta, i, j, k)
   x = ( G%geolonT(i,j) - G%west_lon ) / G%len_lon ! 0 ... 1
   y = -G%geolatT(i,j) / G%south_lat ! -1 ... 1
   z = - 0.5 * ( eta(i,j,K) + eta(i,j,K+1) ) / GV%max_depth ! 0 ... 1
-  select case ( mod(m-1,3) )
+  select case ( mod(m-1, 3) )
   case (0) ! sin(2 pi x/L)
     nw2_tracer_dist = sin( 2.0 * pi * x )
   case (1) ! y/L

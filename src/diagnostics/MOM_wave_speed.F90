@@ -361,7 +361,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, halo_size, use_ebt_mode, mono_N
             else
               do K=kf(i),2,-1
                 H_bot(K) = H_bot(K+1) + Hf(k,i)
-                drxh_sum = drxh_sum + ((H_top(K) * H_bot(K)) * I_Htot) * max(0.0,Rf(k,i)-Rf(k-1,i))
+                drxh_sum = drxh_sum + ((H_top(K) * H_bot(K)) * I_Htot) * max(0.0, Rf(k,i)-Rf(k-1,i))
               enddo
             endif
           endif
@@ -373,7 +373,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, halo_size, use_ebt_mode, mono_N
             enddo
           else
             do K=2,kf(i)
-              drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * max(0.0,Rf(k,i)-Rf(k-1,i))
+              drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * max(0.0, Rf(k,i)-Rf(k-1,i))
             enddo
           endif
         endif
@@ -675,7 +675,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, halo_size, use_ebt_mode, mono_N
             if (mode_struct(1)/=0.) then ! Normalize
               mode_struct(1:kc) = mode_struct(1:kc) / mode_struct(1)
             else
-              mode_struct(1:kc)=0.
+              mode_struct(1:kc) = 0.
             endif
 
             if (CS%remap_answer_date < 20190101) then
@@ -1074,13 +1074,13 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
               else
                 do K=kf(i),2,-1
                   H_bot(K) = H_bot(K+1) + Hf(k,i)
-                  drxh_sum = drxh_sum + ((H_top(K) * H_bot(K)) * I_Htot) * max(0.0,Rf(k,i)-Rf(k-1,i))
+                  drxh_sum = drxh_sum + ((H_top(K) * H_bot(K)) * I_Htot) * max(0.0, Rf(k,i)-Rf(k-1,i))
                 enddo
               endif
             endif
           else
             do K=2,kf(i)
-              drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * max(0.0,Rf(k,i)-Rf(k-1,i))
+              drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * max(0.0, Rf(k,i)-Rf(k-1,i))
             enddo
           endif
         endif

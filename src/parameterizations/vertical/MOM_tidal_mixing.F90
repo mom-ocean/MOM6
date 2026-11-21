@@ -283,7 +283,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
   CS%use_CVmix_tidal = use_CVmix_tidal
   CS%int_tide_dissipation = int_tide_dissipation
 
-  call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".",do_not_log=.true.)
+  call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".", do_not_log=.true.)
   CS%inputdir = slasher(CS%inputdir)
 
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
@@ -551,10 +551,10 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
     call MOM_read_data(filename, TKE_input_var, CS%TKE_Niku, G%domain, timelevel=1, &  ! ??? timelevel -aja
                        scale=Niku_scale*US%W_m2_to_RZ3_T3)
 
-    call get_param(param_file, mdl, "GAMMA_NIKURASHIN",CS%Gamma_lee, &
+    call get_param(param_file, mdl, "GAMMA_NIKURASHIN", CS%Gamma_lee, &
                  "The fraction of the lee wave energy that is dissipated "//&
                  "locally with LEE_WAVE_DISSIPATION.", units="nondim", default=0.3333)
-    call get_param(param_file, mdl, "DECAY_SCALE_FACTOR_LEE",CS%Decay_scale_factor_lee, &
+    call get_param(param_file, mdl, "DECAY_SCALE_FACTOR_LEE", CS%Decay_scale_factor_lee, &
                  "Scaling for the vertical decay scale of the local "//&
                  "dissipation of lee wave dissipation.", units="nondim", default=1.0)
   else
@@ -581,7 +581,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
                     units="nondim", default=1.0, do_not_log=.true.)
     call CVMix_put(CS%CVMix_glb_params, 'Prandtl', prandtl_tidal)
 
-    call get_param(param_file, mdl, "TIDAL_ENERGY_TYPE",tidal_energy_type, &
+    call get_param(param_file, mdl, "TIDAL_ENERGY_TYPE", tidal_energy_type, &
                  "The type of input tidal energy flux dataset. Valid values are"//&
                    "\t Jayne\n"//&
                    "\t ER03 \n",&
@@ -597,13 +597,13 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
     CVMix_tidal_scheme_str = lowercase(CVMix_tidal_scheme_str)
 
     ! Set up CVMix
-    call CVMix_init_tidal(CVmix_tidal_params_user = CS%CVMix_tidal_params,    &
-                          mix_scheme              = CVMix_tidal_scheme_str,   &
-                          efficiency              = CS%Mu_itides,             &
-                          vertical_decay_scale    = CS%int_tide_decay_scale*US%Z_to_m,  &
-                          max_coefficient         = CS%tidal_max_coef*US%Z2_T_to_m2_s,  &
-                          local_mixing_frac       = CS%Gamma_itides,          &
-                          depth_cutoff            = CS%min_zbot_itides*US%Z_to_m)
+    call CVMix_init_tidal(CVmix_tidal_params_user=CS%CVMix_tidal_params, &
+                          mix_scheme=CVMix_tidal_scheme_str, &
+                          efficiency=CS%Mu_itides, &
+                          vertical_decay_scale=CS%int_tide_decay_scale*US%Z_to_m, &
+                          max_coefficient=CS%tidal_max_coef*US%Z2_T_to_m2_s, &
+                          local_mixing_frac=CS%Gamma_itides, &
+                          depth_cutoff=CS%min_zbot_itides*US%Z_to_m)
 
     call read_tidal_energy(G, GV, US, tidal_energy_type, param_file, CS)
 
@@ -616,45 +616,45 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. &
       CS%Lowmode_itidal_dissipation) then
 
-    CS%id_Kd_itidal = register_diag_field('ocean_model','Kd_itides',diag%axesTi,Time, &
+    CS%id_Kd_itidal = register_diag_field('ocean_model', 'Kd_itides', diag%axesTi, Time, &
          'Internal Tide Driven Diffusivity', 'm2 s-1', conversion=GV%HZ_T_to_m2_s)
 
     if (CS%use_CVMix_tidal) then
-      CS%id_N2_int = register_diag_field('ocean_model','N2_int',diag%axesTi,Time, &
+      CS%id_N2_int = register_diag_field('ocean_model', 'N2_int', diag%axesTi, Time, &
           'Bouyancy frequency squared, at interfaces', 's-2', conversion=US%s_to_T**2)
       !> TODO: add units
       if (CS%CVMix_tidal_scheme .eq. SIMMONS) then
-        CS%id_Simmons_coeff = register_diag_field('ocean_model','Simmons_coeff',diag%axesT1,Time, &
+        CS%id_Simmons_coeff = register_diag_field('ocean_model', 'Simmons_coeff', diag%axesT1, Time, &
              'time-invariant portion of the tidal mixing coefficient using the Simmons', '')
       else if (CS%CVMix_tidal_scheme .eq. SCHMITTNER) then
-        CS%id_Schmittner_coeff = register_diag_field('ocean_model','Schmittner_coeff',diag%axesTL,Time, &
+        CS%id_Schmittner_coeff = register_diag_field('ocean_model', 'Schmittner_coeff', diag%axesTL, Time, &
              'time-invariant portion of the tidal mixing coefficient using the Schmittner', '')
-        CS%id_tidal_qe_md = register_diag_field('ocean_model','tidal_qe_md',diag%axesTL,Time, &
+        CS%id_tidal_qe_md = register_diag_field('ocean_model', 'tidal_qe_md', diag%axesTL, Time, &
              'input tidal energy dissipated locally interpolated to model vertical coordinates', &
              'W m-2', conversion=US%RZ3_T3_to_W_m2)
       endif
-      CS%id_vert_dep = register_diag_field('ocean_model','vert_dep',diag%axesTi,Time, &
+      CS%id_vert_dep = register_diag_field('ocean_model', 'vert_dep', diag%axesTi, Time, &
            'vertical deposition function needed for Simmons et al tidal  mixing', '')
     else
-      CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',diag%axesT1,Time, &
+      CS%id_TKE_itidal = register_diag_field('ocean_model', 'TKE_itidal', diag%axesT1, Time, &
           'Internal Tide Driven Turbulent Kinetic Energy', &
           'W m-2', conversion=US%RZ3_T3_to_W_m2)
-      CS%id_Nb = register_diag_field('ocean_model','Nb',diag%axesT1,Time, &
+      CS%id_Nb = register_diag_field('ocean_model', 'Nb', diag%axesT1, Time, &
            'Bottom Buoyancy Frequency', 's-1', conversion=US%s_to_T)
 
-      CS%id_Kd_lowmode = register_diag_field('ocean_model','Kd_lowmode',diag%axesTi,Time, &
+      CS%id_Kd_lowmode = register_diag_field('ocean_model', 'Kd_lowmode', diag%axesTi, Time, &
            'Internal Tide Driven Diffusivity (from propagating low modes)', &
            'm2 s-1', conversion=GV%HZ_T_to_m2_s)
 
-      CS%id_Fl_itidal = register_diag_field('ocean_model','Fl_itides',diag%axesTi,Time, &
+      CS%id_Fl_itidal = register_diag_field('ocean_model', 'Fl_itides', diag%axesTi, Time, &
           'Vertical flux of tidal turbulent dissipation', &
           'm3 s-3', conversion=(GV%H_to_m*US%Z_to_m**2*US%s_to_T**3))
 
-      CS%id_Fl_lowmode = register_diag_field('ocean_model','Fl_lowmode',diag%axesTi,Time, &
+      CS%id_Fl_lowmode = register_diag_field('ocean_model', 'Fl_lowmode', diag%axesTi, Time, &
            'Vertical flux of tidal turbulent dissipation (from propagating low modes)', &
            'm3 s-3', conversion=(GV%H_to_m*US%Z_to_m**2*US%s_to_T**3))
 
-      CS%id_Polzin_decay_scale = register_diag_field('ocean_model','Polzin_decay_scale', diag%axesT1, Time, &
+      CS%id_Polzin_decay_scale = register_diag_field('ocean_model', 'Polzin_decay_scale', diag%axesT1, Time, &
            'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme', &
            units='m', conversion=US%Z_to_m)
 
@@ -663,29 +663,29 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
            'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, '// &
            'scaled by N2_bot/N2_meanz', units='m', conversion=US%Z_to_m)
 
-      CS%id_N2_bot = register_diag_field('ocean_model','N2_b',diag%axesT1,Time, &
+      CS%id_N2_bot = register_diag_field('ocean_model', 'N2_b', diag%axesT1, Time, &
            'Bottom Buoyancy frequency squared', 's-2', conversion=US%s_to_T**2)
 
-      CS%id_N2_meanz = register_diag_field('ocean_model','N2_meanz', diag%axesT1, Time, &
+      CS%id_N2_meanz = register_diag_field('ocean_model', 'N2_meanz', diag%axesT1, Time, &
            'Buoyancy frequency squared averaged over the water column', 's-2', conversion=US%s_to_T**2)
 
-      CS%id_Kd_Itidal_Work = register_diag_field('ocean_model','Kd_Itidal_Work',diag%axesTL,Time, &
+      CS%id_Kd_Itidal_Work = register_diag_field('ocean_model', 'Kd_Itidal_Work', diag%axesTL, Time, &
            'Work done by Internal Tide Diapycnal Mixing', &
            'W m-2', conversion=US%RZ3_T3_to_W_m2)
 
-      CS%id_Kd_Niku_Work = register_diag_field('ocean_model','Kd_Nikurashin_Work',diag%axesTL,Time, &
+      CS%id_Kd_Niku_Work = register_diag_field('ocean_model', 'Kd_Nikurashin_Work', diag%axesTL, Time, &
            'Work done by Nikurashin Lee Wave Drag Scheme', &
            'W m-2', conversion=US%RZ3_T3_to_W_m2)
 
-      CS%id_Kd_Lowmode_Work = register_diag_field('ocean_model','Kd_Lowmode_Work',diag%axesTL,Time, &
+      CS%id_Kd_Lowmode_Work = register_diag_field('ocean_model', 'Kd_Lowmode_Work', diag%axesTL, Time, &
            'Work done by Internal Tide Diapycnal Mixing (low modes)', &
            'W m-2', conversion=US%RZ3_T3_to_W_m2)
 
       if (CS%Lee_wave_dissipation) then
-        CS%id_TKE_leewave = register_diag_field('ocean_model','TKE_leewave',diag%axesT1,Time, &
+        CS%id_TKE_leewave = register_diag_field('ocean_model', 'TKE_leewave', diag%axesT1, Time, &
             'Lee wave Driven Turbulent Kinetic Energy', &
             'W m-2', conversion=US%RZ3_T3_to_W_m2)
-        CS%id_Kd_Niku = register_diag_field('ocean_model','Kd_Nikurashin',diag%axesTi,Time, &
+        CS%id_Kd_Niku = register_diag_field('ocean_model', 'Kd_Nikurashin', diag%axesTi, Time, &
             'Lee Wave Driven Diffusivity', 'm2 s-1', conversion=GV%HZ_T_to_m2_s)
       endif
     endif ! S%use_CVMix_tidal
@@ -810,14 +810,14 @@ subroutine calculate_CVMix_tidal(dz, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_in
         iFaceHeight(k+1) = iFaceHeight(k) - US%Z_to_m*dh
       enddo
 
-      call CVMix_compute_Simmons_invariant( nlev                    = GV%ke,               &
-                                            energy_flux             = US%RZ3_T3_to_W_m2*CS%tidal_qe_2d(i,j), &
-                                            rho                     = rho_fw,              &
-                                            SimmonsCoeff            = Simmons_coeff,       &
-                                            VertDep                 = vert_dep,            &
-                                            zw                      = iFaceHeight,         &
-                                            zt                      = cellHeight,          &
-                                            CVMix_tidal_params_user = CS%CVMix_tidal_params)
+      call CVMix_compute_Simmons_invariant( nlev=GV%ke, &
+                                            energy_flux=US%RZ3_T3_to_W_m2*CS%tidal_qe_2d(i,j), &
+                                            rho=rho_fw, &
+                                            SimmonsCoeff=Simmons_coeff, &
+                                            VertDep=vert_dep, &
+                                            zw=iFaceHeight, &
+                                            zt=cellHeight, &
+                                            CVMix_tidal_params_user=CS%CVMix_tidal_params)
 
       ! Since we pass tidal_qe_2d=(CS%Gamma_itides)*tidal_energy_flux_2d, and not tidal_energy_flux_2d in
       ! above subroutine call, we divide Simmons_coeff by CS%Gamma_itides as a corrective step:
@@ -830,16 +830,16 @@ subroutine calculate_CVMix_tidal(dz, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_in
         N2_int_i(K) = US%s_to_T**2 * N2_int(i,K)
       enddo
 
-      call CVMix_coeffs_tidal( Mdiff_out               = Kv_tidal,             &
-                               Tdiff_out               = Kd_tidal,             &
-                               Nsqr                    = N2_int_i,             &
-                               OceanDepth              = -iFaceHeight(GV%ke+1),&
-                               SimmonsCoeff            = Simmons_coeff,        &
-                               vert_dep                = vert_dep,             &
-                               nlev                    = GV%ke,                &
-                               max_nlev                = GV%ke,                &
-                               CVMix_params            = CS%CVMix_glb_params,  &
-                               CVMix_tidal_params_user = CS%CVMix_tidal_params)
+      call CVMix_coeffs_tidal( Mdiff_out=Kv_tidal, &
+                               Tdiff_out=Kd_tidal, &
+                               Nsqr=N2_int_i, &
+                               OceanDepth=-iFaceHeight(GV%ke+1), &
+                               SimmonsCoeff=Simmons_coeff, &
+                               vert_dep=vert_dep, &
+                               nlev=GV%ke, &
+                               max_nlev=GV%ke, &
+                               CVMix_params=CS%CVMix_glb_params, &
+                               CVMix_tidal_params_user=CS%CVMix_tidal_params)
 
       ! Update diffusivity
       if (present(Kd_lay)) then
@@ -902,13 +902,13 @@ subroutine calculate_CVMix_tidal(dz, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_in
       SchmittnerSocn = 0.0 ! TODO: compute this
 
       ! form the time-invariant part of Schmittner coefficient term
-      call CVMix_compute_Schmittner_invariant(nlev                    = GV%ke,          &
-                                              VertDep                 = vert_dep,       &
-                                              efficiency              = CS%Mu_itides,   &
-                                              rho                     = rho_fw,         &
-                                              exp_hab_zetar           = exp_hab_zetar,  &
-                                              zw                      = iFaceHeight,    &
-                                              CVmix_tidal_params_user = CS%CVMix_tidal_params)
+      call CVMix_compute_Schmittner_invariant(nlev=GV%ke, &
+                                              VertDep=vert_dep, &
+                                              efficiency=CS%Mu_itides, &
+                                              rho=rho_fw, &
+                                              exp_hab_zetar=exp_hab_zetar, &
+                                              zw=iFaceHeight, &
+                                              CVmix_tidal_params_user=CS%CVMix_tidal_params)
                   !TODO: in above call, there is no need to pass efficiency, since it gets
                   ! passed via CVMix_init_tidal and stored in CVMix_tidal_params. Change
                   ! CVMix API to prevent this redundancy.
@@ -920,27 +920,27 @@ subroutine calculate_CVMix_tidal(dz, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_in
 
       ! form the Schmittner coefficient that is based on 3D q*E, which is formed from
       ! summing q_i*TidalConstituent_i over the number of constituents.
-      call CVMix_compute_SchmittnerCoeff( nlev                    = GV%ke,              &
-                                          energy_flux             = US%RZ3_T3_to_W_m2*tidal_qe_md(:), &
-                                          SchmittnerCoeff         = Schmittner_coeff,   &
-                                          exp_hab_zetar           = exp_hab_zetar,      &
-                                          CVmix_tidal_params_user = CS%CVMix_tidal_params)
+      call CVMix_compute_SchmittnerCoeff( nlev=GV%ke, &
+                                          energy_flux=US%RZ3_T3_to_W_m2*tidal_qe_md(:), &
+                                          SchmittnerCoeff=Schmittner_coeff, &
+                                          exp_hab_zetar=exp_hab_zetar, &
+                                          CVmix_tidal_params_user=CS%CVMix_tidal_params)
 
       ! XXX: Temporary de-scaling of N2_int(i,:) into a temporary variable
       do k=1,GV%ke+1
         N2_int_i(k) = US%s_to_T**2 * N2_int(i,k)
       enddo
 
-      call CVMix_coeffs_tidal_schmittner( Mdiff_out               = Kv_tidal,             &
-                                          Tdiff_out               = Kd_tidal,             &
-                                          Nsqr                    = N2_int_i,             &
-                                          OceanDepth              = -iFaceHeight(GV%ke+1), &
-                                          nlev                    = GV%ke,                &
-                                          max_nlev                = GV%ke,                &
-                                          SchmittnerCoeff         = Schmittner_coeff,     &
-                                          SchmittnerSouthernOcean = SchmittnerSocn,       &
-                                          CVmix_params            = CS%CVMix_glb_params,  &
-                                          CVmix_tidal_params_user = CS%CVMix_tidal_params)
+      call CVMix_coeffs_tidal_schmittner( Mdiff_out=Kv_tidal, &
+                                          Tdiff_out=Kd_tidal, &
+                                          Nsqr=N2_int_i, &
+                                          OceanDepth=-iFaceHeight(GV%ke+1), &
+                                          nlev=GV%ke, &
+                                          max_nlev=GV%ke, &
+                                          SchmittnerCoeff=Schmittner_coeff, &
+                                          SchmittnerSouthernOcean=SchmittnerSocn, &
+                                          CVmix_params=CS%CVMix_glb_params, &
+                                          CVmix_tidal_params_user=CS%CVMix_tidal_params)
 
       ! Update diffusivity
       if (present(Kd_lay)) then
@@ -1250,7 +1250,7 @@ subroutine add_int_tide_diffusivity(dz, j, N2_bot, Rho_bot, N2_lay, TKE_to_Kd, m
     TKE_lowmode_bot(i) = 0.0
     if (CS%Lowmode_itidal_dissipation) then
       ! get loss rate due to wave drag on low modes (already multiplied by q)
-      call get_lowmode_loss(i,j,G,CS%int_tide_CSp,"WaveDrag",TKE_lowmode_tot)
+      call get_lowmode_loss(i, j, G, CS%int_tide_CSp, "WaveDrag", TKE_lowmode_tot)
       TKE_lowmode_bot(i) = CS%Mu_itides * GV%RZ_to_H * TKE_lowmode_tot
     endif
     ! Vertical energy flux at bottom
@@ -1548,7 +1548,7 @@ subroutine post_tidal_diagnostics(G, GV, h ,CS)
     if (CS%id_TKE_leewave > 0) call post_data(CS%id_TKE_leewave, CS%TKE_Niku,        CS%diag)
     if (CS%id_Nb          > 0) call post_data(CS%id_Nb,      CS%Nb,      CS%diag)
     if (CS%id_N2_bot      > 0) call post_data(CS%id_N2_bot,  CS%dd%N2_bot,  CS%diag)
-    if (CS%id_N2_meanz    > 0) call post_data(CS%id_N2_meanz,CS%dd%N2_meanz,CS%diag)
+    if (CS%id_N2_meanz    > 0) call post_data(CS%id_N2_meanz, CS%dd%N2_meanz, CS%diag)
 
     if (CS%id_Fl_itidal > 0) call post_data(CS%id_Fl_itidal, CS%dd%Fl_itidal, CS%diag)
     if (CS%id_Kd_itidal > 0) call post_data(CS%id_Kd_itidal, CS%dd%Kd_itidal, CS%diag)

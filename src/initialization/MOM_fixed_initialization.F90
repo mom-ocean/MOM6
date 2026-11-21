@@ -272,7 +272,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF, US, meanSL)
     case ("ISOMIP");    call ISOMIP_initialize_topography(D, G, PF, max_depth, US)
     case ("bbuilder");  call basin_builder_topography(D, G, PF, max_depth)
     case ("benchmark"); call benchmark_initialize_topography(D, G, PF, max_depth, US)
-    case ("Neverworld","Neverland"); call Neverworld_initialize_topography(D, G, PF, max_depth)
+    case ("Neverworld", "Neverland"); call Neverworld_initialize_topography(D, G, PF, max_depth)
     case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF, max_depth)
     case ("Kelvin");    call Kelvin_initialize_topography(D, G, PF, max_depth, US)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)
@@ -282,7 +282,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF, US, meanSL)
     case ("Phillips");  call Phillips_initialize_topography(D, G, PF, max_depth, US)
     case ("dense");     call dense_water_initialize_topography(D, G, PF, max_depth)
     case ("USER");      call user_initialize_topography(D, G, PF, max_depth, US)
-    case default ;      call MOM_error(FATAL,"MOM_initialize_topography: "// &
+    case default ;      call MOM_error(FATAL, "MOM_initialize_topography: "// &
       "Unrecognized topography setup '"//trim(config)//"'")
   end select
   if (max_depth /= max_depth_default * US%m_to_Z) then

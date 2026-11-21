@@ -88,7 +88,7 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
   call get_param(param_file, mdl, "SHELF_SPEED", CS%shelf_speed, &
                  units="axis_units day-1", default=0.0)
 
-  call USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, CS, set_time(0,0), new_sim)
+  call USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, CS, set_time(0, 0), new_sim)
 
 end subroutine USER_initialize_shelf_mass
 
@@ -159,20 +159,20 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
             ! Everything past the edge is open ocean.
             mass_shelf(i,j) = 0.0
             area_shelf_h(i,j) = 0.0
-            hmask (i,j) = 0.0
-            h_shelf (i,j) = 0.0
+            hmask(i,j) = 0.0
+            h_shelf(i,j) = 0.0
           else
             if (G%geoLonCu(i,j) > edge_pos) then
               area_shelf_h(i,j) = G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
                                   (G%geoLonCu(i,j) - G%geoLonCu(i-1,j))
-              hmask (i,j) = 2.0
+              hmask(i,j) = 2.0
             else
               area_shelf_h(i,j) = G%areaT(i,j)
-              hmask (i,j) = 1.0
+              hmask(i,j) = 1.0
             endif
 
             if (G%geoLonT(i,j) > slope_pos) then
-              h_shelf (i,j) = CS%min_draft
+              h_shelf(i,j) = CS%min_draft
               mass_shelf(i,j) = CS%Rho_ocean * CS%min_draft
             else
               mass_shelf(i,j) = CS%Rho_ocean * (CS%min_draft + &

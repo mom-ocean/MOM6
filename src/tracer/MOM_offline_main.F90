@@ -344,11 +344,11 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, C
       h_new(i,j,k) = h_vol(i,j,k) * G%IareaT(i,j)
     enddo ; enddo ; enddo
 
-    if (MODULO(iter,CS%off_ale_mod)==0) then
+    if (MODULO(iter, CS%off_ale_mod)==0) then
       ! Do ALE remapping/regridding to allow for more advection to occur in the next iteration
-      call pass_var(h_new,G%Domain)
+      call pass_var(h_new, G%Domain)
       if (CS%debug) then
-        call hchksum(h_new,"h_new before ALE", G%HI, unscale=GV%H_to_MKS)
+        call hchksum(h_new, "h_new before ALE", G%HI, unscale=GV%H_to_MKS)
         write(debug_msg, '(A,I4.4)') 'Before ALE ', iter
         call MOM_tracer_chkinv(debug_msg, G, GV, h_new, CS%tracer_reg)
       endif
@@ -497,7 +497,7 @@ subroutine offline_redistribute_residual(CS, G, GV, US, h_pre, uhtr, vhtr, conve
         do k=1,nz ; do j=js,je ; do i=is,ie
           h_vol(i,j,k) = h_pre(i,j,k) * G%areaT(i,j)
         enddo ; enddo ; enddo
-        call pass_var(h_vol,G%Domain)
+        call pass_var(h_vol, G%Domain)
         call pass_vector(uhtr, vhtr, G%Domain)
 
         if (CS%debug) then
@@ -838,7 +838,7 @@ subroutine offline_fw_fluxes_out_ocean(G, GV, CS, fluxes, h, out_flux_optional)
     ! Layer thicknesses should only be updated after the last tracer is finished
     update_h = ( m == CS%tracer_reg%ntr )
     call applyTracerBoundaryFluxesInOut(G, GV, CS%tracer_reg%tr(m)%t, CS%dt_offline, fluxes, h, &
-                                        CS%evap_CFL_limit, CS%minimum_forcing_depth, update_h_opt = update_h)
+                                        CS%evap_CFL_limit, CS%minimum_forcing_depth, update_h_opt=update_h)
   enddo
   if (CS%debug) then
     call hchksum(h, "h after fluxes out of ocean", G%HI, unscale=GV%H_to_MKS)
@@ -927,7 +927,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, G, GV, US,
       do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
         h_pre(i,j,k) = h_new(i,j,k)
       enddo ; enddo ; enddo
-      call pass_var(h_pre,G%Domain)
+      call pass_var(h_pre, G%Domain)
 
       ! Second zonal and meridional advection
       call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
@@ -984,10 +984,10 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, G, GV, US,
       vhtr(i,J,k) = vhtr(i,J,k) - vhtr_sub(i,J,k)
     enddo ; enddo ; enddo
 
-    call pass_var(eatr,G%Domain)
-    call pass_var(ebtr,G%Domain)
-    call pass_var(h_pre,G%Domain)
-    call pass_vector(uhtr,vhtr,G%Domain)
+    call pass_var(eatr, G%Domain)
+    call pass_var(ebtr, G%Domain)
+    call pass_var(h_pre, G%Domain)
+    call pass_vector(uhtr, vhtr, G%Domain)
 
     ! Calculate how close we are to converging by summing the remaining fluxes at each point
     rem_col_flux(:,:) = 0.0
@@ -1082,7 +1082,7 @@ subroutine update_offline_fields(CS, G, GV, US, h, fluxes, do_ale)
     if (CS%debug) then
       call uvchksum("[uv]htr after ALE regridding/remapping of inputs", CS%uhtr, CS%vhtr, G%HI, &
                     unscale=US%L_to_m**2*GV%H_to_kg_m2)
-      call hchksum(h_start,"h_start after ALE regridding/remapping of inputs", G%HI, unscale=GV%H_to_MKS)
+      call hchksum(h_start, "h_start after ALE regridding/remapping of inputs", G%HI, unscale=GV%H_to_MKS)
     endif
   endif
 
@@ -1098,8 +1098,8 @@ subroutine update_offline_fields(CS, G, GV, US, h, fluxes, do_ale)
   endif
 
   ! Update the read indices
-  CS%ridx_snap = next_modulo_time(CS%ridx_snap,CS%numtime)
-  CS%ridx_sum = next_modulo_time(CS%ridx_sum,CS%numtime)
+  CS%ridx_snap = next_modulo_time(CS%ridx_snap, CS%numtime)
+  CS%ridx_sum = next_modulo_time(CS%ridx_sum, CS%numtime)
 
   ! Apply masks/factors at T, U, and V points
   do k=1,nz ; do j=js,je ; do i=is,ie
@@ -1181,16 +1181,16 @@ subroutine register_diags_offline_transport(Time, diag, CS, GV, US)
   !              'Remaining thickness entrained from above', 'm')
   ! Unused:  CS%id_ebr  = register_diag_field('ocean_model', 'ebr', diag%axesTL, Time, &
   !              'Remaining thickness entrained from below', 'm')
-  CS%id_eta_pre_distribute = register_diag_field('ocean_model','eta_pre_distribute', &
+  CS%id_eta_pre_distribute = register_diag_field('ocean_model', 'eta_pre_distribute', &
     diag%axesT1, Time, 'Total water column height before residual transport redistribution', &
     'm', conversion=GV%H_to_m)
-  CS%id_eta_post_distribute = register_diag_field('ocean_model','eta_post_distribute', &
+  CS%id_eta_post_distribute = register_diag_field('ocean_model', 'eta_post_distribute', &
     diag%axesT1, Time, 'Total water column height after residual transport redistribution', &
     'm', conversion=GV%H_to_m)
-  CS%id_eta_diff_end = register_diag_field('ocean_model','eta_diff_end', diag%axesT1, Time, &
+  CS%id_eta_diff_end = register_diag_field('ocean_model', 'eta_diff_end', diag%axesT1, Time, &
     'Difference in total water column height from online and offline ' // &
     'at the end of the offline timestep', 'm', conversion=GV%H_to_m)
-  CS%id_h_redist = register_diag_field('ocean_model','h_redist', diag%axesTL, Time, &
+  CS%id_h_redist = register_diag_field('ocean_model', 'h_redist', diag%axesTL, Time, &
     'Layer thicknesses before redistribution of mass fluxes', &
     get_thickness_units(GV), conversion=GV%H_to_MKS)
 
@@ -1470,7 +1470,7 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV, US)
   CS%vertical_time = CS%accumulated_time
   ! Set the starting read index for time-averaged and snapshotted fields
   CS%ridx_sum = CS%start_index
-  if (CS%fields_are_offset) CS%ridx_snap = next_modulo_time(CS%start_index,CS%numtime)
+  if (CS%fields_are_offset) CS%ridx_snap = next_modulo_time(CS%start_index, CS%numtime)
   if (.not. CS%fields_are_offset) CS%ridx_snap = CS%start_index
 
   ! Copy members from other modules
@@ -1493,10 +1493,10 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV, US)
   endif
 
   ! Initialize ids for clocks used in offline routines
-  CS%id_clock_read_fields =      cpu_clock_id('(Offline read fields)',grain=CLOCK_MODULE)
-  CS%id_clock_offline_diabatic = cpu_clock_id('(Offline diabatic)',grain=CLOCK_MODULE)
-  CS%id_clock_offline_adv =      cpu_clock_id('(Offline transport)',grain=CLOCK_MODULE)
-  CS%id_clock_redistribute =     cpu_clock_id('(Offline redistribute)',grain=CLOCK_MODULE)
+  CS%id_clock_read_fields =      cpu_clock_id('(Offline read fields)', grain=CLOCK_MODULE)
+  CS%id_clock_offline_diabatic = cpu_clock_id('(Offline diabatic)', grain=CLOCK_MODULE)
+  CS%id_clock_offline_adv =      cpu_clock_id('(Offline transport)', grain=CLOCK_MODULE)
+  CS%id_clock_redistribute =     cpu_clock_id('(Offline redistribute)', grain=CLOCK_MODULE)
 
   call callTree_leave("offline_transport_init")
 
@@ -1536,11 +1536,11 @@ subroutine read_all_input(CS, G, GV, US)
       call MOM_read_vector(CS%snap_file, 'uhtr_sum', 'vhtr_sum', CS%uhtr_all(:,:,1:CS%nk_input,t), &
                        CS%vhtr_all(:,:,1:CS%nk_input,t), G%Domain, timelevel=t, &
                        scale=US%m_to_L**2*GV%kg_m2_to_H)
-      call MOM_read_data(CS%snap_file,'h_end', CS%hend_all(:,:,1:CS%nk_input,t), G%Domain, &
+      call MOM_read_data(CS%snap_file, 'h_end', CS%hend_all(:,:,1:CS%nk_input,t), G%Domain, &
                        timelevel=t, position=CENTER, scale=GV%kg_m2_to_H)
-      call MOM_read_data(CS%mean_file,'temp', CS%temp_all(:,:,1:CS%nk_input,t), G%Domain, &
+      call MOM_read_data(CS%mean_file, 'temp', CS%temp_all(:,:,1:CS%nk_input,t), G%Domain, &
                        timelevel=t, position=CENTER, scale=US%degC_to_C)
-      call MOM_read_data(CS%mean_file,'salt', CS%salt_all(:,:,1:CS%nk_input,t), G%Domain, &
+      call MOM_read_data(CS%mean_file, 'salt', CS%salt_all(:,:,1:CS%nk_input,t), G%Domain, &
                        timelevel=t, position=CENTER, scale=US%ppt_to_S)
     enddo
   endif

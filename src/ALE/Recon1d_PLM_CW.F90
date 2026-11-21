@@ -211,7 +211,7 @@ real function x(this, k, t)
     x = ( t - this%ul(k) ) / slp
     x = max( 0., min( x, 1. ) )
   else
-    slp = this%ul(min(k+1,this%n)) - this%ur(max(k-1,1))
+    slp = this%ul(min(k+1, this%n)) - this%ur(max(k-1, 1))
     if ( abs(slp) > 0. ) slp = sign(1., slp)
     x = 0.5 ! Fall back if t==u_mean
     ! if t>u_mean & slp=1 then x=1

@@ -239,14 +239,14 @@ integer function register_static_field_infra(module_name, field_name, axes, long
   integer,            optional, intent(in) :: area      !< Diagnostic ID of the field containing the area attribute
   integer,            optional, intent(in) :: volume    !< Diagnostic ID of the field containing the volume attribute
 
-  if(present(missing_value) .or. present(range)) then
-    register_static_field_infra = register_static_field_fms(module_name, field_name, axes, long_name, units,&
-       & missing_value, range, mask_variant=mask_variant, standard_name=standard_name, dynamic=.false.,&
-       do_not_log=do_not_log, interp_method=interp_method,tile_count=tile_count, area=area, volume=volume)
+  if (present(missing_value) .or. present(range)) then
+    register_static_field_infra = register_static_field_fms(module_name, field_name, axes, long_name, units, &
+       & missing_value, range, mask_variant=mask_variant, standard_name=standard_name, dynamic=.false., &
+       do_not_log=do_not_log, interp_method=interp_method, tile_count=tile_count, area=area, volume=volume)
   else
-    register_static_field_infra = register_static_field_fms(module_name, field_name, axes, long_name, units,&
-       &  mask_variant=mask_variant, standard_name=standard_name, dynamic=.false.,do_not_log=do_not_log, &
-       interp_method=interp_method,tile_count=tile_count, area=area, volume=volume)
+    register_static_field_infra = register_static_field_fms(module_name, field_name, axes, long_name, units, &
+       &  mask_variant=mask_variant, standard_name=standard_name, dynamic=.false., do_not_log=do_not_log, &
+       interp_method=interp_method, tile_count=tile_count, area=area, volume=volume)
   endif
 end function register_static_field_infra
 
@@ -455,7 +455,7 @@ subroutine MOM_diag_field_add_attribute_i1d(diag_field_id, att_name, att_value)
 end subroutine MOM_diag_field_add_attribute_i1d
 
 !> Needed for backwards compatibility, does nothing
-subroutine diag_send_complete_infra ()
+subroutine diag_send_complete_infra()
 end subroutine diag_send_complete_infra
 
 !> Needed for backwards compatibility, does nothing

@@ -199,11 +199,11 @@ elemental subroutine calculate_density_derivs_elem_buggy_Wright(this, T, S, pres
   I_denom2 = 1.0 / (lambda + al0*(pressure + p0))
   I_denom2 = I_denom2 *I_denom2
   drho_dT = I_denom2 * &
-    (lambda* (b1 + T*(2.0*b2 + 3.0*b3*T) + b5*S) - &
-     (pressure+p0) * ( (pressure+p0)*a1 + &
-      (c1 + T*(c2*2.0 + c3*3.0*T) + c5*S) ))
+      (lambda* (b1 + T*(2.0*b2 + 3.0*b3*T) + b5*S) - &
+       (pressure+p0) * ( (pressure+p0)*a1 + &
+        (c1 + T*(c2*2.0 + c3*3.0*T) + c5*S) ))
   drho_dS = I_denom2 * (lambda* (b4 + b5*T) - &
-    (pressure+p0) * ( (pressure+p0)*a2 + (c4 + c5*T) ))
+      (pressure+p0) * ( (pressure+p0)*a2 + (c4 + c5*T) ))
 
 end subroutine calculate_density_derivs_elem_buggy_Wright
 
@@ -758,10 +758,10 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, halo
 
   Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
-  halo = 0 ; if (present(halo_size)) halo = MAX(halo_size,0)
+  halo = 0 ; if (present(halo_size)) halo = MAX(halo_size, 0)
   ish = HI%isc-halo ; ieh = HI%iec+halo ; jsh = HI%jsc-halo ; jeh = HI%jec+halo
-  if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh) ; endif
-  if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh) ; endif
+  if (present(intx_dza)) then ; ish = MIN(Isq, ish) ; ieh = MAX(Ieq+1, ieh) ; endif
+  if (present(inty_dza)) then ; jsh = MIN(Jsq, jsh) ; jeh = MAX(Jeq+1, jeh) ; endif
 
 
   al0_scale = 1.0 ; if (present(SV_scale)) al0_scale = SV_scale

@@ -39,7 +39,7 @@ integer, parameter :: NTR_MAX = 1
 
 !> The control structure for the boundary impulse tracer package
 type, public :: boundary_impulse_tracer_CS ; private
-  integer :: ntr=NTR_MAX    !< The number of tracers that are actually used.
+  integer :: ntr = NTR_MAX  !< The number of tracers that are actually used.
   logical :: coupled_tracers = .false. !< These tracers are not offered to the  coupler.
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
@@ -109,7 +109,7 @@ function register_boundary_impulse_tracer(HI, GV, US, param_file, CS, tr_Reg, re
   CS%ntr = NTR_MAX
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr), source=0.0)
 
-  CS%nkml = max(GV%nkml,1)
+  CS%nkml = max(GV%nkml, 1)
 
   do m=1,CS%ntr
     ! This is needed to force the compiler not to do a copy in the registration

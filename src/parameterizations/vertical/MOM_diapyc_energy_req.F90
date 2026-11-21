@@ -39,10 +39,10 @@ type, public :: diapyc_energy_req_CS ; private
                                !! regulate the timing of diagnostic output.
 
   !>@{ Diagnostic IDs
-  integer :: id_ERt=-1, id_ERb=-1, id_ERc=-1, id_ERh=-1, id_Kddt=-1, id_Kd=-1
-  integer :: id_CHCt=-1, id_CHCb=-1, id_CHCc=-1, id_CHCh=-1
-  integer :: id_T0=-1, id_Tf=-1, id_S0=-1, id_Sf=-1, id_N2_0=-1, id_N2_f=-1
-  integer :: id_h=-1, id_zInt=-1
+  integer :: id_ERt = -1, id_ERb = -1, id_ERc = -1, id_ERh = -1, id_Kddt = -1, id_Kd = -1
+  integer :: id_CHCt = -1, id_CHCb = -1, id_CHCc = -1, id_CHCh = -1
+  integer :: id_T0 = -1, id_Tf = -1, id_S0 = -1, id_Sf = -1, id_N2_0 = -1, id_N2_f = -1
+  integer :: id_h = -1, id_zInt = -1
   !>@}
 end type diapyc_energy_req_CS
 

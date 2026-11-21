@@ -53,14 +53,14 @@ subroutine seamount_initialize_topography( D, G, param_file, max_depth )
   real :: rLx, rLy  ! The Adcroft reciprocals of Lx and Ly [nondim]
   integer   :: i, j
 
-  call get_param(param_file, mdl,"SEAMOUNT_DELTA", delta, &
+  call get_param(param_file, mdl, "SEAMOUNT_DELTA", delta, &
                  "Non-dimensional height of seamount.", &
                  units="nondim", default=0.5)
-  call get_param(param_file, mdl,"SEAMOUNT_X_LENGTH_SCALE", Lx, &
+  call get_param(param_file, mdl, "SEAMOUNT_X_LENGTH_SCALE", Lx, &
                  "Length scale of seamount in x-direction. "//&
                  "Set to zero make topography uniform in the x-direction.", &
                  units=G%x_ax_unit_short, default=20.)
-  call get_param(param_file, mdl,"SEAMOUNT_Y_LENGTH_SCALE", Ly, &
+  call get_param(param_file, mdl, "SEAMOUNT_Y_LENGTH_SCALE", Ly, &
                  "Length scale of seamount in y-direction. "//&
                  "Set to zero make topography uniform in the y-direction.", &
                  units=G%y_ax_unit_short, default=0.)
@@ -81,7 +81,7 @@ end subroutine seamount_initialize_topography
 
 !> Initialization of thicknesses.
 !! This subroutine initializes the layer thicknesses to be uniform.
-subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, just_read)
+subroutine seamount_initialize_thickness(h, depth_tot, G, GV, US, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
@@ -109,10 +109,10 @@ subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, j
   if (.not.just_read) &
     call MOM_mesg("seamount_initialization.F90, seamount_initialize_thickness: setting thickness")
 
-  call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
+  call get_param(param_file, mdl, "MIN_THICKNESS", min_thickness, &
                 'Minimum thickness for layer', &
                  units='m', default=1.0e-3, do_not_log=just_read, scale=US%m_to_Z)
-  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
+  call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
 
   ! WARNING: this routine specifies the interface heights so that the last layer
@@ -129,9 +129,9 @@ subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, j
   select case ( coordinateMode(verticalCoordinate) )
 
   case ( REGRIDDING_LAYER, REGRIDDING_RHO ) ! Initial thicknesses for isopycnal coordinates
-    call get_param(param_file, mdl,"INITIAL_SSS", S_surf, &
+    call get_param(param_file, mdl, "INITIAL_SSS", S_surf, &
                    units="ppt", default=34., scale=US%ppt_to_S, do_not_log=.true.)
-    call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, &
+    call get_param(param_file, mdl, "INITIAL_S_RANGE", S_range, &
                    units="ppt", default=2., scale=US%ppt_to_S, do_not_log=.true.)
     call get_param(param_file, mdl, "S_REF", S_ref, &
                    units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=.true.)
@@ -230,19 +230,19 @@ subroutine seamount_initialize_temperature_salinity(T, S, h, G, GV, US, param_fi
 
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
-  call get_param(param_file, mdl,"INITIAL_DENSITY_PROFILE", density_profile, &
+  call get_param(param_file, mdl, "INITIAL_DENSITY_PROFILE", density_profile, &
                  'Initial profile shape. Valid values are "linear", "parabolic" '//&
                  'and "exponential".', default='linear', do_not_log=just_read)
-  call get_param(param_file, mdl,"INITIAL_SSS", S_surf, &
+  call get_param(param_file, mdl, "INITIAL_SSS", S_surf, &
                  'Initial surface salinity', &
                  units="ppt", default=34., scale=US%ppt_to_S, do_not_log=just_read)
-  call get_param(param_file, mdl,"INITIAL_SST", T_surf, &
+  call get_param(param_file, mdl, "INITIAL_SST", T_surf, &
                  'Initial surface temperature', &
                  units="degC", default=0., scale=US%degC_to_C, do_not_log=just_read)
-  call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, &
+  call get_param(param_file, mdl, "INITIAL_S_RANGE", S_range, &
                  'Initial salinity range (bottom - surface)', &
                  units="ppt", default=2., scale=US%ppt_to_S, do_not_log=just_read)
-  call get_param(param_file, mdl,"INITIAL_T_RANGE", T_range, &
+  call get_param(param_file, mdl, "INITIAL_T_RANGE", T_range, &
                  'Initial temperature range (bottom - surface)', &
                  units="degC", default=0., scale=US%degC_to_C, do_not_log=just_read)
 

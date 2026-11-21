@@ -298,7 +298,7 @@ function diag_buffer_unit_tests_2d(verbose) result(fail)
   function grow_buffer_2d() result(local_fail)
     type(diag_buffer_2d) :: buffer
     logical :: local_fail !< True if any of the unit tests fail
-    integer, parameter :: is=1, ie=2, js=3, je=6
+    integer, parameter :: is = 1, ie = 2, js = 3, je = 6
     integer :: i
 
     local_fail = .false.
@@ -320,7 +320,7 @@ function diag_buffer_unit_tests_2d(verbose) result(fail)
   function fill_value_2d() result(local_fail)
     type(diag_buffer_2d) :: buffer
     logical :: local_fail !< True if any of the unit tests fail
-    integer, parameter :: is=1, ie=2, js=3, je=6
+    integer, parameter :: is = 1, ie = 2, js = 3, je = 6
     real, parameter :: fill_value = -123.456
 
 
@@ -338,7 +338,7 @@ function diag_buffer_unit_tests_2d(verbose) result(fail)
     type(diag_buffer_2d) :: buffer
     logical :: local_fail !< True if any of the unit tests fail
 
-    integer, parameter :: is=1, ie=2, js=3, je=6, nlen=3
+    integer, parameter :: is = 1, ie = 2, js = 3, je = 6, nlen = 3
     integer :: i, slot
     real, allocatable, dimension(:,:,:) :: test_2d
 
@@ -367,7 +367,7 @@ function diag_buffer_unit_tests_2d(verbose) result(fail)
     type(diag_buffer_2d) :: buffer
     logical :: local_fail !< True if any of the unit tests fail
 
-    integer, parameter :: is=1, ie=2, js=3, je=6, nlen=3
+    integer, parameter :: is = 1, ie = 2, js = 3, je = 6, nlen = 3
     integer :: i, new_i, id, new_id
     real, dimension(nlen, is:ie, js:je) :: test_2d_first, test_2d_second
     integer, dimension(nlen) :: reorder = [2,1,3]
@@ -431,7 +431,7 @@ function diag_buffer_unit_tests_3d(verbose) result(fail)
   function grow_buffer_3d() result(local_fail)
     type(diag_buffer_3d) :: buffer
     logical :: local_fail !< True if any of the unit tests fail
-    integer, parameter :: is=1, ie=2, js=3, je=6, ks=1, ke=10
+    integer, parameter :: is = 1, ie = 2, js = 3, je = 6, ks = 1, ke = 10
     integer :: i
 
     local_fail = .false.
@@ -457,7 +457,7 @@ function diag_buffer_unit_tests_3d(verbose) result(fail)
   function fill_value_3d() result(local_fail)
     type(diag_buffer_3d) :: buffer
     logical :: local_fail !< True if any of the unit tests fail
-    integer, parameter :: is=1, ie=2, js=3, je=6, ks=1, ke=10
+    integer, parameter :: is = 1, ie = 2, js = 3, je = 6, ks = 1, ke = 10
     real, parameter :: fill_value = -123.456
 
     local_fail = .false.
@@ -475,7 +475,7 @@ function diag_buffer_unit_tests_3d(verbose) result(fail)
     type(diag_buffer_3d) :: buffer
     logical :: local_fail !< True if any of the unit tests fail
 
-    integer, parameter :: is=1, ie=2, js=3, je=6, ks=1, ke=10, nlen=3
+    integer, parameter :: is = 1, ie = 2, js = 3, je = 6, ks = 1, ke = 10, nlen = 3
     integer :: i, slot
     real, dimension(nlen,is:ie,js:je,ks:ke) :: test_3d
 
@@ -504,7 +504,7 @@ function diag_buffer_unit_tests_3d(verbose) result(fail)
     type(diag_buffer_3d) :: buffer
     logical :: local_fail !< True if any of the unit tests fail
 
-    integer, parameter :: is=1, ie=2, js=3, je=6, ks=1, ke=10, nlen=3
+    integer, parameter :: is = 1, ie = 2, js = 3, je = 6, ks = 1, ke = 10, nlen = 3
     integer :: i, new_i, id, new_id
     real, dimension(nlen, is:ie, js:je, ks:ke) :: test_3d_first, test_3d_second
     integer, dimension(nlen) :: reorder = [2,1,3]

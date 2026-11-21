@@ -53,7 +53,7 @@ subroutine MOM_shared_init_init(PF)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   call log_version(PF, mdl, version, &
-   "Sharable code to initialize time-invariant fields, like bathymetry and Coriolis parameters.")
+      "Sharable code to initialize time-invariant fields, like bathymetry and Coriolis parameters.")
 
 end subroutine MOM_shared_init_init
 ! -----------------------------------------------------------------------------
@@ -85,7 +85,7 @@ subroutine MOM_initialize_rotation(f, G, PF, US)
     case ("beta"); call set_rotation_beta_plane(f, G, PF, US)
     case ("betaplane"); call set_rotation_beta_plane(f, G, PF, US)
    !case ("nonrotating") ! Note from AJA: Missing case?
-    case default ; call MOM_error(FATAL,"MOM_initialize: "// &
+    case default ; call MOM_error(FATAL, "MOM_initialize: "// &
       "Unrecognized rotation setup "//trim(config))
   end select
   call callTree_leave(trim(mdl)//'()')
@@ -101,7 +101,7 @@ subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G, US)
   type(unit_scale_type),    optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
   character(len=40)  :: mdl = "MOM_calculate_grad_Coriolis" ! This subroutine's name.
-  integer :: i,j
+  integer :: i, j
   real :: f1, f2 ! Average of adjacent Coriolis parameters [T-1 ~> s-1]
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
@@ -132,10 +132,10 @@ function diagnoseMaximumDepth(D, G)
                            intent(in) :: D !< Ocean bottom depth in [m] or [Z ~> m]
   real :: diagnoseMaximumDepth             !< The global maximum ocean bottom depth in [m] or [Z ~> m]
   ! Local variables
-  integer :: i,j
+  integer :: i, j
   diagnoseMaximumDepth = D(G%isc,G%jsc)
   do j=G%jsc, G%jec ; do i=G%isc, G%iec
-    diagnoseMaximumDepth = max(diagnoseMaximumDepth,D(i,j))
+    diagnoseMaximumDepth = max(diagnoseMaximumDepth, D(i,j))
   enddo ; enddo
   call max_across_PEs(diagnoseMaximumDepth)
 end function diagnoseMaximumDepth
@@ -350,7 +350,7 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
 
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
-  if (max_depth<=0.) call MOM_error(FATAL,"initialize_topography_named: "// &
+  if (max_depth<=0.) call MOM_error(FATAL, "initialize_topography_named: "// &
       "MAXIMUM_DEPTH has a non-sensical value! Was it set?")
 
   if (trim(topog_config) /= "flat") then
@@ -400,7 +400,7 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
       D(i,j) =  Dedge + D0 * ABS(sin(PI*(G%geoLatT(i,j) - G%south_lat)/G%len_lat))
     enddo ; enddo
   else
-    call MOM_error(FATAL,"initialize_topography_named: "// &
+    call MOM_error(FATAL, "initialize_topography_named: "// &
       "Unrecognized topography name "//trim(topog_config))
   endif
 
@@ -466,12 +466,12 @@ subroutine limit_topography(D, G, param_file, max_depth, US)
     ! If min_depth<mask_depth (which happens when using positive depths and not changing
     ! MINIMUM_DEPTH) then the shallower is used to modify and determine values on land points.
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
-      if (D(i,j) > min(min_depth,mask_depth)) then
+      if (D(i,j) > min(min_depth, mask_depth)) then
         D(i,j) = min( max( D(i,j), min_depth ), max_depth )
       else
         ! This statement is required for cases with masked-out PEs over the land,
         ! to remove the large initialized values (-9e30) from the halos.
-        D(i,j) = min(min_depth,mask_depth)
+        D(i,j) = min(min_depth, mask_depth)
       endif
     enddo ; enddo
   endif
@@ -744,7 +744,7 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
                    &" by ",ES11.4," at lon/lat of ", ES11.4, ES11.4)') &
                    US%L_to_m*G%dy_Cu(I,j), US%L_to_m*G%dyCu(I,j), US%L_to_m*(G%dy_Cu(I,j)-G%dyCu(I,j)), &
                    G%geoLonCu(I,j), G%geoLatCu(I,j)
-      call MOM_error(FATAL,"reset_face_lengths_named "//mesg)
+      call MOM_error(FATAL, "reset_face_lengths_named "//mesg)
     endif
     G%areaCu(I,j) = G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
@@ -758,7 +758,7 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
                    US%L_to_m*G%dx_Cv(i,J), US%L_to_m*G%dxCv(i,J), US%L_to_m*(G%dx_Cv(i,J)-G%dxCv(i,J)), &
                    G%geoLonCv(i,J), G%geoLatCv(i,J)
 
-      call MOM_error(FATAL,"reset_face_lengths_named "//mesg)
+      call MOM_error(FATAL, "reset_face_lengths_named "//mesg)
     endif
     G%areaCv(i,J) = G%dyCv(i,J) * G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
@@ -798,7 +798,7 @@ subroutine reset_face_lengths_file(G, param_file, US)
   call log_param(param_file, mdl, "INPUTDIR/CHANNEL_WIDTH_FILE", filename)
 
   if (is_root_pe()) then ; if (.not.file_exists(filename)) &
-    call MOM_error(FATAL," reset_face_lengths_file: Unable to open "//&
+    call MOM_error(FATAL, " reset_face_lengths_file: Unable to open "//&
                            trim(filename))
   endif
 
@@ -818,7 +818,7 @@ subroutine reset_face_lengths_file(G, param_file, US)
                    &" by ",ES11.4," at lon/lat of ", ES11.4, ES11.4)') &
                    US%L_to_m*G%dy_Cu(I,j), US%L_to_m*G%dyCu(I,j), US%L_to_m*(G%dy_Cu(I,j)-G%dyCu(I,j)), &
                    G%geoLonCu(I,j), G%geoLatCu(I,j)
-      call MOM_error(FATAL,"reset_face_lengths_file "//mesg)
+      call MOM_error(FATAL, "reset_face_lengths_file "//mesg)
     endif
     G%areaCu(I,j) = G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = 0.0
@@ -832,7 +832,7 @@ subroutine reset_face_lengths_file(G, param_file, US)
                    US%L_to_m*G%dx_Cv(i,J), US%L_to_m*G%dxCv(i,J), US%L_to_m*(G%dx_Cv(i,J)-G%dxCv(i,J)), &
                    G%geoLonCv(i,J), G%geoLatCv(i,J)
 
-      call MOM_error(FATAL,"reset_face_lengths_file "//mesg)
+      call MOM_error(FATAL, "reset_face_lengths_file "//mesg)
     endif
     G%areaCv(i,J) = G%dyCv(i,J) * G%dx_Cv(i,J)
     G%IareaCv(i,J) = 0.0
@@ -907,7 +907,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
 
     ! Find an unused unit number.
     do iounit=10,512
-      INQUIRE(iounit,OPENED=unit_in_use) ; if (.not.unit_in_use) exit
+      INQUIRE(iounit, OPENED=unit_in_use) ; if (.not.unit_in_use) exit
     enddo
     if (iounit >= 512) call MOM_error(FATAL, &
         "reset_face_lengths_list: No unused file unit could be found.")
@@ -1405,36 +1405,36 @@ subroutine write_ocean_geometry_file(G, param_file, directory, US, geom_file)
   !     'i' (interface), or '1' (no vertical location)
   ! (6) a character indicating the time levels of the field, which may be
   !    's' (snap-shot), 'p' (periodic), or '1' (no time variation)
-  vars(1) = var_desc("geolatb","degree","latitude at corner (Bu) points",'q','1','1')
-  vars(2) = var_desc("geolonb","degree","longitude at corner (Bu) points",'q','1','1')
-  vars(3) = var_desc("geolat","degree", "latitude at tracer (T) points", 'h','1','1')
-  vars(4) = var_desc("geolon","degree","longitude at tracer (T) points",'h','1','1')
-  vars(5) = var_desc("geolatu","degree","latitude at zonal velocity (Cu) points",'u','1','1')
-  vars(6) = var_desc("geolonu","degree","longitude at zonal velocity (Cu) points",'u','1','1')
-  vars(7) = var_desc("geolatv","degree","latitude at meridional velocity (Cv) points",'v','1','1')
-  vars(8) = var_desc("geolonv","degree","longitude at meridional velocity (Cv) points",'v','1','1')
-  vars(9) = var_desc("D","meter","Basin Depth",'h','1','1')
-  vars(10)= var_desc("f","s-1","Coriolis Parameter",'q','1','1')
-  vars(11)= var_desc("dxCv","m","Zonal grid spacing at v points",'v','1','1')
-  vars(12)= var_desc("dyCu","m","Meridional grid spacing at u points",'u','1','1')
-  vars(13)= var_desc("dxCu","m","Zonal grid spacing at u points",'u','1','1')
-  vars(14)= var_desc("dyCv","m","Meridional grid spacing at v points",'v','1','1')
-  vars(15)= var_desc("dxT","m","Zonal grid spacing at h points",'h','1','1')
-  vars(16)= var_desc("dyT","m","Meridional grid spacing at h points",'h','1','1')
-  vars(17)= var_desc("dxBu","m","Zonal grid spacing at q points",'q','1','1')
-  vars(18)= var_desc("dyBu","m","Meridional grid spacing at q points",'q','1','1')
-  vars(19)= var_desc("Ah","m2","Area of h cells",'h','1','1')
-  vars(20)= var_desc("Aq","m2","Area of q cells",'q','1','1')
+  vars(1)  = var_desc("geolatb", "degree", "latitude at corner (Bu) points", 'q', '1', '1')
+  vars(2)  = var_desc("geolonb", "degree", "longitude at corner (Bu) points", 'q', '1', '1')
+  vars(3)  = var_desc("geolat", "degree", "latitude at tracer (T) points", 'h', '1', '1')
+  vars(4)  = var_desc("geolon", "degree", "longitude at tracer (T) points", 'h', '1', '1')
+  vars(5)  = var_desc("geolatu", "degree", "latitude at zonal velocity (Cu) points", 'u', '1', '1')
+  vars(6)  = var_desc("geolonu", "degree", "longitude at zonal velocity (Cu) points", 'u', '1', '1')
+  vars(7)  = var_desc("geolatv", "degree", "latitude at meridional velocity (Cv) points", 'v', '1', '1')
+  vars(8)  = var_desc("geolonv", "degree", "longitude at meridional velocity (Cv) points", 'v', '1', '1')
+  vars(9)  = var_desc("D", "meter", "Basin Depth", 'h', '1', '1')
+  vars(10) = var_desc("f", "s-1", "Coriolis Parameter", 'q', '1', '1')
+  vars(11) = var_desc("dxCv", "m", "Zonal grid spacing at v points", 'v', '1', '1')
+  vars(12) = var_desc("dyCu", "m", "Meridional grid spacing at u points", 'u', '1', '1')
+  vars(13) = var_desc("dxCu", "m", "Zonal grid spacing at u points", 'u', '1', '1')
+  vars(14) = var_desc("dyCv", "m", "Meridional grid spacing at v points", 'v', '1', '1')
+  vars(15) = var_desc("dxT", "m", "Zonal grid spacing at h points", 'h', '1', '1')
+  vars(16) = var_desc("dyT", "m", "Meridional grid spacing at h points", 'h', '1', '1')
+  vars(17) = var_desc("dxBu", "m", "Zonal grid spacing at q points", 'q', '1', '1')
+  vars(18) = var_desc("dyBu", "m", "Meridional grid spacing at q points", 'q', '1', '1')
+  vars(19) = var_desc("Ah", "m2", "Area of h cells", 'h', '1', '1')
+  vars(20) = var_desc("Aq", "m2", "Area of q cells", 'q', '1', '1')
 
-  vars(21)= var_desc("dxCvo","m","Open zonal grid spacing at v points",'v','1','1')
-  vars(22)= var_desc("dyCuo","m","Open meridional grid spacing at u points",'u','1','1')
-  vars(23)= var_desc("wet", "nondim", "land or ocean?", 'h','1','1')
+  vars(21) = var_desc("dxCvo", "m", "Open zonal grid spacing at v points", 'v', '1', '1')
+  vars(22) = var_desc("dyCuo", "m", "Open meridional grid spacing at u points", 'u', '1', '1')
+  vars(23) = var_desc("wet", "nondim", "land or ocean?", 'h', '1', '1')
 
   if (G%bathymetry_at_vel) then
-    vars(24) = var_desc("Dblock_u","m","Blocked depth at u points",'u','1','1')
-    vars(25) = var_desc("Dopen_u","m","Open depth at u points",'u','1','1')
-    vars(26) = var_desc("Dblock_v","m","Blocked depth at v points",'v','1','1')
-    vars(27) = var_desc("Dopen_v","m","Open depth at v points",'v','1','1')
+    vars(24) = var_desc("Dblock_u", "m", "Blocked depth at u points", 'u', '1', '1')
+    vars(25) = var_desc("Dopen_u", "m", "Open depth at u points", 'u', '1', '1')
+    vars(26) = var_desc("Dblock_v", "m", "Blocked depth at v points", 'v', '1', '1')
+    vars(27) = var_desc("Dopen_v", "m", "Open depth at v points", 'v', '1', '1')
   endif
 
   if (present(geom_file)) then

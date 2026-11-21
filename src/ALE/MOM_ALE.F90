@@ -385,7 +385,7 @@ end subroutine ALE_set_OM4_remap_algorithm
 
 !> Initialize diagnostics for the ALE module.
 subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
-  type(time_type),target,     intent(in)  :: Time  !< Time structure
+  type(time_type), target,    intent(in)  :: Time  !< Time structure
   type(ocean_grid_type),      intent(in)  :: G     !< Grid structure
   type(unit_scale_type),      intent(in)  :: US    !< A dimensional unit scaling type
   type(verticalGrid_type),    intent(in)  :: GV    !< Ocean vertical grid structure
@@ -1155,7 +1155,7 @@ subroutine ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u
 
   ! Setup related to KE conservation
   variance_option = .false.
-  if (present(allow_preserve_variance)) variance_option=allow_preserve_variance
+  if (present(allow_preserve_variance)) variance_option = allow_preserve_variance
   if (present(dt)) I_dt = 1.0 / dt
 
   if (CS%id_remap_delta_integ_u2>0) du2h_tot(:,:) = 0.

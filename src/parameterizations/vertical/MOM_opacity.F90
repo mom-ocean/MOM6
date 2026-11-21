@@ -104,8 +104,8 @@ type, public :: opacity_CS ; private
 end type opacity_CS
 
 !>@{ Coded integers to specify the opacity scheme
-integer, parameter :: NO_SCHEME = 0, MANIZZA_05 = 1, MOREL_88 = 2, SINGLE_EXP = 3, DOUBLE_EXP = 4,&
-     &                OHLMANN_03 = 5
+integer, parameter :: NO_SCHEME = 0, MANIZZA_05 = 1, MOREL_88 = 2, SINGLE_EXP = 3, DOUBLE_EXP = 4, &
+                    & OHLMANN_03 = 5
 !>@}
 
 character*(10), parameter :: MANIZZA_05_STRING = "MANIZZA_05" !< String to specify the opacity scheme
@@ -211,7 +211,7 @@ subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_
         !$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie
           Pen_SW_tot(i,j) = 0.0
-          do n=1,min(optics%nbands,2)
+          do n = 1, min(optics%nbands, 2)
             Pen_SW_tot(i,j) = Pen_SW_tot(i,j) + optics%sw_pen_band(n,i,j)
           enddo
         enddo ; enddo
@@ -392,7 +392,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
         do n=1,nbands
           optics%sw_pen_band(n,i,j) = Inv_nbands*sw_pen_tot
         enddo
-     enddo ; enddo
+      enddo ; enddo
     case (OHLMANN_03)
       ! want exactly two penetrating bands. If not, throw an error.
       if ( nbands /= 2 ) then
@@ -413,7 +413,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
           endif
 
           ! Bands 1-2 (Ohlmann factors A with coefficients for Table 1a)
-          optics%sw_pen_band(1:2,i,j)  = lookup_ohlmann_swpen(chl_data(i,j),optics)*SW_vis_tot
+          optics%sw_pen_band(1:2,i,j) = lookup_ohlmann_swpen(chl_data(i,j), optics)*SW_vis_tot
         endif
       enddo ; enddo
     case default
@@ -468,7 +468,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
             optics%opacity_band(1:2,i,j,k) = CS%opacity_land_value
           else
             ! Bands 1-2 (Ohlmann factors B with coefficients for Table 1a
-            optics%opacity_band(1:2,i,j,k) = lookup_ohlmann_opacity(chl_data(i,j),optics) * US%Z_to_m
+            optics%opacity_band(1:2,i,j,k) = lookup_ohlmann_opacity(chl_data(i,j), optics) * US%Z_to_m
           endif
         enddo ; enddo
       case default
@@ -487,7 +487,7 @@ function opacity_morel(chl_data, CS)
 
   real :: Chl, Chl2 ! The log10 of chl_data (in mg m-3), and Chl^2 [nondim]
 
-  Chl = log10(min(max(chl_data,0.02),60.0)) ; Chl2 = Chl*Chl
+  Chl = log10(min(max(chl_data, 0.02), 60.0)) ; Chl2 = Chl*Chl
   ! All frequency bands currently use the same opacities.
   opacity_morel = 1.0 / ( (CS%opacity_coef(1,1) + CS%opacity_coef(2,1)*Chl) + Chl2 * &
                           ((CS%opacity_coef(3,1) + Chl*CS%opacity_coef(4,1)) + &
@@ -508,7 +508,7 @@ function SW_pen_frac_morel(chl_data, CS)
   ! three-dimensional chl-a values.
   real :: Chl, Chl2         ! The log10 of chl_data in mg m-3, and Chl^2 [nondim]
 
-  Chl = log10(min(max(chl_data,0.02),60.0)) ; Chl2 = Chl*Chl
+  Chl = log10(min(max(chl_data, 0.02), 60.0)) ; Chl2 = Chl*Chl
   SW_pen_frac_morel = 1.0 - ( (CS%SW_pen_frac_coef(1) + CS%SW_pen_frac_coef(2)*Chl) + Chl2 * &
                               ((CS%SW_pen_frac_coef(3) + Chl*CS%SW_pen_frac_coef(4)) + &
                                Chl2*(CS%SW_pen_frac_coef(5) + Chl*CS%SW_pen_frac_coef(6))) )
@@ -942,7 +942,7 @@ subroutine sumSWoverBands(G, GV, US, h, dz, nsw, optics, j, dt, &
   do i=is,ie ; h_heat(i) = 0.0 ; enddo
   do i=is,ie
     netPen(i,1) = 0.
-    do n=1,max(nsw,1)
+    do n = 1, max(nsw, 1)
       netPen(i,1) = netPen(i,1) + pen_SW_bnd(n,i)   ! Surface interface
     enddo
   enddo
@@ -1245,7 +1245,7 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
   if (CS%opacity_scheme == MANIZZA_05) then
     allocate(CS%opacity_coef(2,optics%nbands))
     allocate(CS%chl_power(optics%nbands))
-    do n=1,min(3,optics%nbands)
+    do n = 1, min(3, optics%nbands)
       CS%opacity_coef(1,n) = opacity_coefs(2*n-1) ; CS%opacity_coef(2,n) = opacity_coefs(2*n)
       CS%chl_power(n) = opacity_powers(n)
     enddo
@@ -1310,8 +1310,8 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
   enddo
 
   if (CS%opacity_scheme == OHLMANN_03) then
-     ! Set up the lookup table
-     call init_ohlmann_table(optics)
+    ! Set up the lookup table
+    call init_ohlmann_table(optics)
   endif
 
 end subroutine opacity_init
@@ -1388,15 +1388,15 @@ subroutine init_ohlmann_table(optics)
 
   !! Make the table big enough so step size is smaller
   !! in log-space that any increment in Table 1a
-  integer, parameter :: nval_lut=401
+  integer, parameter :: nval_lut = 401
   real :: chl, log10chl_lut, w1, w2
-  integer :: n,m,mm1,err
+  integer :: n, m, mm1, err
 
-  allocate(optics%a1_lut(nval_lut),optics%b1_lut(nval_lut),&
-       &   optics%a2_lut(nval_lut),optics%b2_lut(nval_lut),&
+  allocate(optics%a1_lut(nval_lut), optics%b1_lut(nval_lut), &
+       &   optics%a2_lut(nval_lut), optics%b2_lut(nval_lut), &
        &   stat=err)
   if ( err /= 0 ) then
-     call MOM_error(FATAL,"init_ohlmann: Cannot allocate lookup table")
+    call MOM_error(FATAL, "init_ohlmann: Cannot allocate lookup table")
   endif
 
   optics%chl_min = chl_tab1a(1)
@@ -1407,32 +1407,32 @@ subroutine init_ohlmann_table(optics)
   ! step through the lookup table
   m = 2
   do n=1,nval_lut
-     log10chl_lut = optics%log10chl_min + (n-1)*optics%dlog10chl
-     chl = 10.0**log10chl_lut
-     chl = max(chl_tab1a(1),min(chl,chl_tab1a(nval_tab1a)))
+    log10chl_lut = optics%log10chl_min + (n-1)*optics%dlog10chl
+    chl = 10.0**log10chl_lut
+    chl = max(chl_tab1a(1), min(chl, chl_tab1a(nval_tab1a)))
 
-     ! find interval in Table 1a (m-1,m]
-     do while (chl > chl_tab1a(m))
-        m = m + 1
-     enddo
-     mm1 = m-1
+    ! find interval in Table 1a (m-1,m]
+    do while (chl > chl_tab1a(m))
+      m = m + 1
+    enddo
+    mm1 = m-1
 
-     ! interpolation weights
-     w2 = (chl - chl_tab1a(mm1))/(chl_tab1a(m) - chl_tab1a(mm1))
-     w1 = 1. - w2
+    ! interpolation weights
+    w2 = (chl - chl_tab1a(mm1))/(chl_tab1a(m) - chl_tab1a(mm1))
+    w1 = 1. - w2
 
-     ! fill in the tables
-     optics%a1_lut(n) = w1*a1_tab1a(mm1) + w2*a1_tab1a(m)
-     optics%a2_lut(n) = w1*a2_tab1a(mm1) + w2*a2_tab1a(m)
-     optics%b1_lut(n) = w1*b1_tab1a(mm1) + w2*b1_tab1a(m)
-     optics%b2_lut(n) = w1*b2_tab1a(mm1) + w2*b2_tab1a(m)
+    ! fill in the tables
+    optics%a1_lut(n) = w1*a1_tab1a(mm1) + w2*a1_tab1a(m)
+    optics%a2_lut(n) = w1*a2_tab1a(mm1) + w2*a2_tab1a(m)
+    optics%b1_lut(n) = w1*b1_tab1a(mm1) + w2*b1_tab1a(m)
+    optics%b2_lut(n) = w1*b2_tab1a(mm1) + w2*b2_tab1a(m)
   enddo
 
   return
 end subroutine init_ohlmann_table
 
 !> Get the partion of total solar into bands from Ohlmann lookup table
-function lookup_ohlmann_swpen(chl,optics) result(A)
+function lookup_ohlmann_swpen(chl, optics) result(A)
 
   implicit none
 
@@ -1447,7 +1447,7 @@ function lookup_ohlmann_swpen(chl,optics) result(A)
 
   ! Make sure we are in the table
   if (chl > optics%chl_min) then
-    log10chl = min(log10(chl),optics%log10chl_max)
+    log10chl = min(log10(chl), optics%log10chl_max)
   else
     log10chl = optics%log10chl_min
   endif
@@ -1460,7 +1460,7 @@ function lookup_ohlmann_swpen(chl,optics) result(A)
 end function lookup_ohlmann_swpen
 
 !> Get the opacity (decay scale) from Ohlmann lookup table
-function lookup_ohlmann_opacity(chl,optics) result(B)
+function lookup_ohlmann_opacity(chl, optics) result(B)
 
   implicit none
   real, intent(in) :: chl
@@ -1473,7 +1473,7 @@ function lookup_ohlmann_opacity(chl,optics) result(B)
 
   ! Make sure we are in the table
   if (chl > optics%chl_min) then
-    log10chl = min(log10(chl),optics%log10chl_max)
+    log10chl = min(log10(chl), optics%log10chl_max)
   else
     log10chl = optics%log10chl_min
   endif
@@ -1505,7 +1505,7 @@ subroutine opacity_end(CS, optics)
   if (allocated(optics%max_wavelength_band)) &
     deallocate(optics%max_wavelength_band)
   if (allocated(optics%min_wavelength_band)) &
-       deallocate(optics%min_wavelength_band)
+    deallocate(optics%min_wavelength_band)
   if (allocated(optics%a1_lut)) deallocate(optics%a1_lut)
   if (allocated(optics%a2_lut)) deallocate(optics%a2_lut)
   if (allocated(optics%b1_lut)) deallocate(optics%b1_lut)

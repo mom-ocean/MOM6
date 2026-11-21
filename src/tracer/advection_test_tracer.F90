@@ -163,7 +163,7 @@ function register_advection_test_tracer(G, GV, param_file, CS, tr_Reg, restart_C
 end function register_advection_test_tracer
 
 !>   Initializes the NTR tracer fields in tr(:,:,:,:) and it sets up the tracer output.
-subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS, &
+subroutine initialize_advection_test_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                             sponge_CSp)
   logical,                            intent(in) :: restart !< .true. if the fields have already
                                                          !! been read from a restart file.
@@ -206,30 +206,30 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS
       do k=1,nz ; do j=js,je ; do i=is,ie
         CS%tr(i,j,k,m) = 0.0
       enddo ; enddo ; enddo
-      k=1 ! Square wave
+      k = 1 ! Square wave
       do j=js,je ; do i=is,ie
         if (abs(G%geoLonT(i,j)-CS%x_origin)<0.5*CS%x_width .and. &
             abs(G%geoLatT(i,j)-CS%y_origin)<0.5*CS%y_width) CS%tr(i,j,k,m) = 1.0
       enddo ; enddo
-      k=2 ! Triangle wave
+      k = 2 ! Triangle wave
       do j=js,je ; do i=is,ie
         locx = abs(G%geoLonT(i,j)-CS%x_origin)/CS%x_width
         locy = abs(G%geoLatT(i,j)-CS%y_origin)/CS%y_width
         CS%tr(i,j,k,m) = max(0.0, 1.0-locx)*max(0.0, 1.0-locy)
       enddo ; enddo
-      k=3 ! Cosine bell
+      k = 3 ! Cosine bell
       do j=js,je ; do i=is,ie
         locx = min(1.0, abs(G%geoLonT(i,j)-CS%x_origin)/CS%x_width) * (acos(0.0)*2.)
         locy = min(1.0, abs(G%geoLatT(i,j)-CS%y_origin)/CS%y_width) * (acos(0.0)*2.)
         CS%tr(i,j,k,m) = (1.0+cos(locx))*(1.0+cos(locy))*0.25
       enddo ; enddo
-      k=4 ! Cylinder
+      k = 4 ! Cylinder
       do j=js,je ; do i=is,ie
         locx = abs(G%geoLonT(i,j)-CS%x_origin)/CS%x_width
         locy = abs(G%geoLatT(i,j)-CS%y_origin)/CS%y_width
         if ((locx**2) + (locy**2) <= 1.0) CS%tr(i,j,k,m) = 1.0
       enddo ; enddo
-      k=5 ! Cut cylinder
+      k = 5 ! Cut cylinder
       do j=js,je ; do i=is,ie
         locx = (G%geoLonT(i,j)-CS%x_origin)/CS%x_width
         locy = (G%geoLatT(i,j)-CS%y_origin)/CS%y_width

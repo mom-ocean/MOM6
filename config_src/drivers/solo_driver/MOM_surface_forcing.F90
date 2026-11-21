@@ -295,7 +295,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
       if ( CS%use_temperature ) then
         call allocate_forcing_type(G, fluxes, water=.true., heat=.true., press=.true.)
         if (CS%restorebuoy) then
-          call safe_alloc_ptr(CS%T_Restore,isd, ied, jsd, jed)
+          call safe_alloc_ptr(CS%T_Restore, isd, ied, jsd, jed)
           call safe_alloc_ptr(fluxes%heat_added, isd, ied, jsd, jed)
           call safe_alloc_ptr(CS%S_Restore, isd, ied, jsd, jed)
         endif
@@ -1575,30 +1575,30 @@ subroutine MARBL_forcing_from_data_override(fluxes, day, G, US, CS)
   type(surface_forcing_CS), pointer       :: CS     !< pointer to control structure returned by
                                                     !! a previous surface_forcing_init call
   ! Local variables
-  real, pointer, dimension(:,:) :: atm_co2_prog         =>NULL() !< Prognostic atmospheric CO2 concentration [ppm]
-  real, pointer, dimension(:,:) :: atm_co2_diag         =>NULL() !< Diagnostic atmospheric CO2 concentration [ppm]
-  real, pointer, dimension(:,:) :: atm_fine_dust_flux   =>NULL() !< Fine dust flux from atmosphere
-                                                                 !! [R Z T-1 ~> kg m-2 s-1]
-  real, pointer, dimension(:,:) :: atm_coarse_dust_flux =>NULL() !< Coarse dust flux from atmosphere
-                                                                 !! [R Z T-1 ~> kg m-2 s-1]
-  real, pointer, dimension(:,:) :: seaice_dust_flux     =>NULL() !< Dust flux from seaice
-                                                                 !! [R Z T-1 ~> kg m-2 s-1]
-  real, pointer, dimension(:,:) :: atm_bc_flux          =>NULL() !< Black carbon flux from atmosphere
-                                                                 !! [R Z T-1 ~> kg m-2 s-1]
-  real, pointer, dimension(:,:) :: seaice_bc_flux       =>NULL() !< Black carbon flux from seaice
-                                                                 !! [R Z T-1 ~> kg m-2 s-1]
-  real, pointer, dimension(:,:) :: nhx_dep              =>NULL() !< Nitrogen deposition
-                                                                 !! [R Z T-1 ~> kg m-2 s-1]
-  real, pointer, dimension(:,:) :: noy_dep              =>NULL() !< Nitrogen deposition
-                                                                 !! [R Z T-1 ~> kg m-2 s-1]
+  real, pointer, dimension(:,:) :: atm_co2_prog         => NULL() !< Prognostic atmospheric CO2 concentration [ppm]
+  real, pointer, dimension(:,:) :: atm_co2_diag         => NULL() !< Diagnostic atmospheric CO2 concentration [ppm]
+  real, pointer, dimension(:,:) :: atm_fine_dust_flux   => NULL() !< Fine dust flux from atmosphere
+                                                                  !! [R Z T-1 ~> kg m-2 s-1]
+  real, pointer, dimension(:,:) :: atm_coarse_dust_flux => NULL() !< Coarse dust flux from atmosphere
+                                                                  !! [R Z T-1 ~> kg m-2 s-1]
+  real, pointer, dimension(:,:) :: seaice_dust_flux     => NULL() !< Dust flux from seaice
+                                                                  !! [R Z T-1 ~> kg m-2 s-1]
+  real, pointer, dimension(:,:) :: atm_bc_flux          => NULL() !< Black carbon flux from atmosphere
+                                                                  !! [R Z T-1 ~> kg m-2 s-1]
+  real, pointer, dimension(:,:) :: seaice_bc_flux       => NULL() !< Black carbon flux from seaice
+                                                                  !! [R Z T-1 ~> kg m-2 s-1]
+  real, pointer, dimension(:,:) :: nhx_dep              => NULL() !< Nitrogen deposition
+                                                                  !! [R Z T-1 ~> kg m-2 s-1]
+  real, pointer, dimension(:,:) :: noy_dep              => NULL() !< Nitrogen deposition
+                                                                  !! [R Z T-1 ~> kg m-2 s-1]
   integer :: isc, iec, jsc, jec
 
   ! Necessary null pointers for arguments to convert_driver_fields_to_forcings()
   ! Since they are null, MARBL will not use multiple ice categories
-  real, pointer, dimension(:,:)   :: afracr        =>NULL()
-  real, pointer, dimension(:,:)   :: swnet_afracr  =>NULL()
-  real, pointer, dimension(:,:,:) :: swpen_ifrac_n =>NULL()
-  real, pointer, dimension(:,:,:) :: ifrac_n       =>NULL()
+  real, pointer, dimension(:,:)   :: afracr        => NULL()
+  real, pointer, dimension(:,:)   :: swnet_afracr  => NULL()
+  real, pointer, dimension(:,:,:) :: swpen_ifrac_n => NULL()
+  real, pointer, dimension(:,:,:) :: ifrac_n       => NULL()
 
   call callTree_enter("MARBL_forcing_from_data_override, MOM_surface_forcing.F90")
 
@@ -1609,16 +1609,16 @@ subroutine MARBL_forcing_from_data_override(fluxes, day, G, US, CS)
 
   ! Allocate memory for pointers
   isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
-  allocate ( atm_co2_prog   (isc:iec,jsc:jec),       &
-             atm_co2_diag   (isc:iec,jsc:jec),       &
-             atm_fine_dust_flux (isc:iec,jsc:jec),   &
-             atm_coarse_dust_flux (isc:iec,jsc:jec), &
-             seaice_dust_flux (isc:iec,jsc:jec),     &
-             atm_bc_flux (isc:iec,jsc:jec),          &
-             seaice_bc_flux (isc:iec,jsc:jec),       &
-             nhx_dep (isc:iec,jsc:jec),              &
-             noy_dep (isc:iec,jsc:jec),              &
-             source=0.0)
+  allocate(atm_co2_prog(isc:iec,jsc:jec), &
+           atm_co2_diag(isc:iec,jsc:jec), &
+           atm_fine_dust_flux(isc:iec,jsc:jec), &
+           atm_coarse_dust_flux(isc:iec,jsc:jec), &
+           seaice_dust_flux(isc:iec,jsc:jec), &
+           atm_bc_flux(isc:iec,jsc:jec), &
+           seaice_bc_flux(isc:iec,jsc:jec), &
+           nhx_dep(isc:iec,jsc:jec), &
+           noy_dep(isc:iec,jsc:jec), &
+           source=0.0)
 
 
   ! fluxes used directly as MARBL inputs
@@ -1645,15 +1645,15 @@ subroutine MARBL_forcing_from_data_override(fluxes, day, G, US, CS)
                                          afracr, swnet_afracr, ifrac_n, swpen_ifrac_n, &
                                          day, G, US, 0, 0, fluxes, CS%marbl_forcing_CSp)
 
-  deallocate ( atm_co2_prog,         &
-               atm_co2_diag,         &
-               atm_fine_dust_flux,   &
-               atm_coarse_dust_flux, &
-               seaice_dust_flux,     &
-               atm_bc_flux,          &
-               seaice_bc_flux,       &
-               nhx_dep,              &
-               noy_dep)
+  deallocate(atm_co2_prog,         &
+             atm_co2_diag,         &
+             atm_fine_dust_flux,   &
+             atm_coarse_dust_flux, &
+             seaice_dust_flux,     &
+             atm_bc_flux,          &
+             seaice_bc_flux,       &
+             nhx_dep,              &
+             noy_dep)
 
   call callTree_leave("MARBL_forcing_from_data_override")
 
@@ -1713,7 +1713,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   endif
   allocate(CS)
 
-  id_clock_forcing=cpu_clock_id('(Ocean surface forcing)', grain=CLOCK_MODULE)
+  id_clock_forcing = cpu_clock_id('(Ocean surface forcing)', grain=CLOCK_MODULE)
   call cpu_clock_begin(id_clock_forcing)
 
   CS%diag => diag
@@ -1952,13 +1952,13 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call get_param(param_file, mdl, "WIND_FILE", CS%wind_file, &
                  "The file in which the wind stresses are found in "//&
                  "variables STRESS_X and STRESS_Y.", fail_if_missing=.true.)
-    call get_param(param_file, mdl, "WINDSTRESS_X_VAR",CS%stress_x_var, &
+    call get_param(param_file, mdl, "WINDSTRESS_X_VAR", CS%stress_x_var, &
                  "The name of the x-wind stress variable in WIND_FILE.", &
                  default="STRESS_X")
     call get_param(param_file, mdl, "WINDSTRESS_Y_VAR", CS%stress_y_var, &
                  "The name of the y-wind stress variable in WIND_FILE.", &
                  default="STRESS_Y")
-    call get_param(param_file, mdl, "WIND_STAGGER",CS%wind_stagger, &
+    call get_param(param_file, mdl, "WIND_STAGGER", CS%wind_stagger, &
                  "A character indicating how the wind stress components "//&
                  "are staggered in WIND_FILE.  This may be A or C for now.", &
                  default="C")
@@ -1992,7 +1992,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "the zonal wind stress profile: "//&
                  "  C in taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L).", &
                  units="Pa", default=0.0, scale=US%Pa_to_RLZ_T2)
-    call get_param(param_file, mdl, "TAUX_N_PIS",CS%gyres_taux_n_pis, &
+    call get_param(param_file, mdl, "TAUX_N_PIS", CS%gyres_taux_n_pis, &
                  "With the gyres wind_config, the number of gyres in "//&
                  "the zonal wind stress profile: "//&
                  "  n in taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L).", &
@@ -2143,7 +2143,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call get_param(param_file, mdl, "GUST_2D_FILE", gust_file, &
                  "The file in which the wind gustiness is found in "//&
                  "variable gustiness.", fail_if_missing=.true.)
-    call safe_alloc_ptr(CS%gust,G%isd,G%ied,G%jsd,G%jed)
+    call safe_alloc_ptr(CS%gust, G%isd, G%ied, G%jsd, G%jed)
     filename = trim(CS%inputdir) // trim(gust_file)
     ! NOTE: There are certain cases where FMS is unable to read this file, so
     ! we use read_netCDF_data in place of MOM_read_data.

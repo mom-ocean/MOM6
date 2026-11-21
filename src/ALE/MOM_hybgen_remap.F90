@@ -71,8 +71,8 @@ subroutine hybgen_plm_coefs(si, dpi, slope, nk, ns, thin, PCM_lay)
         ztop = 2.0*(si(k,  i)-si(k-1,i))
         zbot = 2.0*(si(k+1,i)-si(k,  i))
         zcen = qcen*(si(k+1,i)-si(k-1,i))
-        if     (ztop*zbot > 0.0) then !ztop,zbot are the same sign
-          slope(k,i) = sign(min(abs(zcen),abs(zbot),abs(ztop)), zbot)
+        if (ztop*zbot > 0.0) then !ztop,zbot are the same sign
+          slope(k,i) = sign(min(abs(zcen), abs(zbot), abs(ztop)), zbot)
         else
           slope(k,i) = 0.0  !local extrema, so no slope
         endif
@@ -262,7 +262,7 @@ subroutine hybgen_weno_coefs(s, h_src, edges, nk, ns, thin, PCM_lay)
 !     Alan J. Wallcraft,  Naval Research Laboratory,  July 2008.
 !-----------------------------------------------------------------------
 !
-!  real, parameter :: dsmll=1.0e-8  ! This has units of [A2], and hence can not be a parameter.
+!  real, parameter :: dsmll = 1.0e-8  ! This has units of [A2], and hence can not be a parameter.
 !
   real :: curv_cell   ! An estimate of the tracer curvature centered on a cell times the grid
                       ! spacing [A H-1 ~> A m-1 or A m2 kg-1]

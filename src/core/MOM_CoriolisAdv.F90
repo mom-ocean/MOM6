@@ -288,7 +288,7 @@ subroutine CorAdCalc_block(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, nk
   real :: Heff3, Heff4  ! Temporary effective H at U or V points [H ~> m or kg m-2].
   real :: h_tiny        ! A very small thickness [H ~> m or kg m-2].
   real :: UHeff, VHeff  ! More temporary variables [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real :: QUHeff,QVHeff ! More temporary variables [H L2 T-2 ~> m3 s-2 or kg s-2].
+  real :: QUHeff, QVHeff ! More temporary variables [H L2 T-2 ~> m3 s-2 or kg s-2].
   integer :: i, j, k, n, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: Is_q, Ie_q, Js_q, Je_q  ! The scheme-dependent range of values at which vorticity is set.
   integer :: ksb, keb   ! Start and end index of current block
@@ -342,7 +342,7 @@ subroutine CorAdCalc_block(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, nk
       if (.not. OBC%segment(n)%on_pe) cycle
       I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
       if (OBC%segment(n)%is_N_or_S .and. (J >= Js_q) .and. (J <= Je_q)) then
-        do i = max(Is_q,OBC%segment(n)%HI%isd), min(Ie_q+1,OBC%segment(n)%HI%ied)
+        do i = max(Is_q, OBC%segment(n)%HI%isd), min(Ie_q+1, OBC%segment(n)%HI%ied)
           if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
             Area_h(i,j+1) = Area_h(i,j)
           else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
@@ -350,7 +350,7 @@ subroutine CorAdCalc_block(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, nk
           endif
         enddo
       elseif (OBC%segment(n)%is_E_or_W .and. (I >= Is_q) .and. (I <= Ie_q)) then
-        do j = max(Js_q,OBC%segment(n)%HI%jsd), min(Je_q+1,OBC%segment(n)%HI%jed)
+        do j = max(Js_q, OBC%segment(n)%HI%jsd), min(Je_q+1, OBC%segment(n)%HI%jed)
           if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
             Area_h(i+1,j) = Area_h(i,j)
           else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
@@ -488,7 +488,7 @@ subroutine CorAdCalc_block(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, nk
             end select
 
             ! Project thicknesses across OBC points with a no-gradient condition.
-            do i=max(Is_q,OBC%segment(n)%HI%isd), min(Ie_q+1,OBC%segment(n)%HI%ied)
+            do i=max(Is_q, OBC%segment(n)%HI%isd), min(Ie_q+1, OBC%segment(n)%HI%ied)
               if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
                 hArea_v(i,J,kk) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j,k)
               else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
@@ -497,7 +497,7 @@ subroutine CorAdCalc_block(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, nk
             enddo
 
             if (CS%Coriolis_En_Dis) then
-              do i=max(Isq,OBC%segment(n)%HI%isd), min(Ieq+1,OBC%segment(n)%HI%ied)
+              do i=max(Isq, OBC%segment(n)%HI%isd), min(Ieq+1, OBC%segment(n)%HI%ied)
                 if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
                   vh_center(i,J,kk) = (G%dx_Cv(i,J) * pbv%por_face_areaV(i,J,k)) * v(i,J,k) * h(i,j,k)
                 else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
@@ -534,7 +534,7 @@ subroutine CorAdCalc_block(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, nk
             end select
 
             ! Project thicknesses across OBC points with a no-gradient condition.
-            do j=max(Js_q,OBC%segment(n)%HI%jsd), min(Je_q+1,OBC%segment(n)%HI%jed)
+            do j = max(Js_q, OBC%segment(n)%HI%jsd), min(Je_q+1, OBC%segment(n)%HI%jed)
               if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
                 hArea_u(I,j,kk) = 0.5 * (Area_h(i,j) + Area_h(i+1,j)) * h(i,j,k)
               else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
@@ -542,7 +542,7 @@ subroutine CorAdCalc_block(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, nk
               endif
             enddo
             if (CS%Coriolis_En_Dis) then
-              do j=max(Jsq,OBC%segment(n)%HI%jsd), min(Jeq+1,OBC%segment(n)%HI%jed)
+              do j = max(Jsq, OBC%segment(n)%HI%jsd), min(Jeq+1, OBC%segment(n)%HI%jed)
                 if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
                   uh_center(I,j,kk) = (G%dy_Cu(I,j) * pbv%por_face_areaU(I,j,k)) * u(I,j,k) * h(i,j,k)
                 else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
@@ -559,7 +559,7 @@ subroutine CorAdCalc_block(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, nk
           if (.not. OBC%segment(n)%on_pe) cycle
           I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
           if (OBC%segment(n)%is_N_or_S .and. (J >= Js_q) .and. (J <= Je_q)) then
-            do I = max(Is_q,OBC%segment(n)%HI%IsdB), min(Ie_q,OBC%segment(n)%HI%IedB)
+            do I = max(Is_q, OBC%segment(n)%HI%IsdB), min(Ie_q, OBC%segment(n)%HI%IedB)
               if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
                 if (Area_h(i,j) + Area_h(i+1,j) > 0.) then
                   hArea_u(I,j+1,kk) = hArea_u(I,j,kk) &
@@ -573,7 +573,7 @@ subroutine CorAdCalc_block(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, nk
               endif
             enddo
           elseif (OBC%segment(n)%is_E_or_W .and. (I >= Is_q) .and. (I <= Ie_q)) then
-            do J = max(Js_q,OBC%segment(n)%HI%JsdB), min(Je_q,OBC%segment(n)%HI%JedB)
+            do J = max(Js_q, OBC%segment(n)%HI%JsdB), min(Je_q, OBC%segment(n)%HI%JedB)
               if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
                 if (Area_h(i,j) + Area_h(i,j+1) > 0.) then
                   hArea_v(i+1,J,kk) = hArea_v(i,J,kk) &
@@ -1423,7 +1423,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, ksb, keb, nkk, G, GV, US, CS)
       um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2 = um*um
       vp = 0.5*( v(i,J-1,k) + ABS( v(i,J-1,k) ) ) ; vp2 = vp*vp
       vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2 = vm*vm
-      KE(i,j,kk) = ( max(up2,um2) + max(vp2,vm2) ) *0.5
+      KE(i,j,kk) = ( max(up2, um2) + max(vp2, vm2) ) *0.5
     enddo ; enddo ; enddo
   elseif (CS%KE_Scheme == KE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensional Gudonov
@@ -1434,7 +1434,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, ksb, keb, nkk, G, GV, US, CS)
       um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2a = um*um*G%areaCu( I ,j)
       vp = 0.5*( v(i,J-1,k) + ABS( v(i,J-1,k) ) ) ; vp2a = vp*vp*G%areaCv(i,J-1)
       vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2a = vm*vm*G%areaCv(i, J )
-      KE(i,j,kk) = ( max(um2a,up2a) + max(vm2a,vp2a) )*0.5*G%IareaT(i,j)
+      KE(i,j,kk) = ( max(um2a, up2a) + max(vm2a, vp2a) )*0.5*G%IareaT(i,j)
     enddo ; enddo ; enddo
   elseif (CS%KE_Scheme == KE_UP3) then
     ! The following discretization of KE is based on the one-dimensional third-order
@@ -1535,7 +1535,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, ksb, keb, nkk, G, GV, US, CS)
 end subroutine gradKE
 
 !> Reconstruct the scalar (e.g., pv, vorticity) onto point i-1/2 using a third-order upwind scheme
-subroutine UP3_reconstruction(q4,u,qr)
+subroutine UP3_reconstruction(q4, u, qr)
   real, intent(in)    :: q4(4)            !< Tracer values on points i-2, i-1, i, i+1 [A ~> a]
   real, intent(in)    :: u                !< Velocity or thickness flux on point i-1/2
                                           !! [l t-1 ~> m s-1] or [l2 t-1 ~> m2 s-1]
@@ -1553,7 +1553,7 @@ end subroutine UP3_reconstruction
 
 !> Reconstruct the scalar (e.g., PV, vorticity) onto point i-1/2
 !! using a third-order upwind scheme with the Koren flux limiter
-subroutine UP3_Koren_limiter_reconstruction(q4,u,qr)
+subroutine UP3_Koren_limiter_reconstruction(q4, u, qr)
   real, intent(in)    :: q4(4)            !< Tracer values on points i-2, i-1, i, i+1 [A ~> a]
   real, intent(in)    :: u                !< Velocity or thickness flux on point i-1/2
                                           !! [L T-1 ~> m s-1] or [L2 T-1 ~> m2 s-1]
@@ -1935,8 +1935,8 @@ subroutine weno_seven_weight_0(q4, w0)
 
   ! Coefficients from Balsara and Shu (2000). The division by 1000 will be normalized out by fac_fn
   w0 = ((q4(1) * ((2.107 * q4(1) - 9.402 * q4(2)) + (7.042 * q4(3) - 1.854 * q4(4)))) + &
-     (q4(2) * ((11.003 * q4(2) - 17.246 * q4(3)) + 4.642 * q4(4)))) + &
-     ((q4(3) * (7.043 * q4(3) - 3.882 * q4(4))) + 0.547 * (q4(4) * q4(4)))
+      (q4(2) * ((11.003 * q4(2) - 17.246 * q4(3)) + 4.642 * q4(4)))) + &
+      ((q4(3) * (7.043 * q4(3) - 3.882 * q4(4))) + 0.547 * (q4(4) * q4(4)))
 
 end subroutine weno_seven_weight_0
 
@@ -1947,8 +1947,8 @@ subroutine weno_seven_weight_1(q4, w1)
 
   ! Coefficients from Balsara and Shu (2000). The division by 1000 will be normalized out by fac_fn
   w1 = ((q4(1) * ((0.547 * q4(1) - 2.522 * q4(2)) + (1.922 * q4(3) - 0.494 * q4(4)))) + &
-     (q4(2) * ((3.443 * q4(2) - 5.966 * q4(3)) + 1.602 * q4(4)))) + &
-     ((q4(3) * (2.843 * q4(3) - 1.642 * q4(4))) + 0.267 * (q4(4) * q4(4)))
+      (q4(2) * ((3.443 * q4(2) - 5.966 * q4(3)) + 1.602 * q4(4)))) + &
+      ((q4(3) * (2.843 * q4(3) - 1.642 * q4(4))) + 0.267 * (q4(4) * q4(4)))
 
 end subroutine weno_seven_weight_1
 
@@ -1959,8 +1959,8 @@ subroutine weno_seven_weight_2(q4, w2)
 
   ! Coefficients from Balsara and Shu (2000). The division by 1000 will be normalized out by fac_fn
   w2 = ((q4(1) * ((0.267 * q4(1) - 1.642 * q4(2)) + (1.602 * q4(3) - 0.494 * q4(4)))) + &
-     (q4(2) * ((2.843 * q4(2) - 5.966 * q4(3)) + 1.922 * q4(4)))) + &
-     ((q4(3) * (3.443 * q4(3) - 2.522 * q4(4))) + 0.547 * (q4(4) * q4(4)))
+      (q4(2) * ((2.843 * q4(2) - 5.966 * q4(3)) + 1.922 * q4(4)))) + &
+      ((q4(3) * (3.443 * q4(3) - 2.522 * q4(4))) + 0.547 * (q4(4) * q4(4)))
 
 end subroutine weno_seven_weight_2
 
@@ -1971,8 +1971,8 @@ subroutine weno_seven_weight_3(q4, w3)
 
   ! Coefficients from Balsara and Shu (2000). The division by 1000 will be normalized out by fac_fn
   w3 = ((q4(1) * ((0.547  * q4(1) - 3.882 * q4(2)) + (4.642 * q4(3) - 1.854 * q4(4)))) + &
-     (q4(2) * ((7.043 * q4(2) - 17.246 * q4(3)) + 7.042 * q4(4)))) + &
-     ((q4(3) * (11.003 * q4(3) - 9.402 * q4(4))) + 2.107 * (q4(4) * q4(4)))
+      (q4(2) * ((7.043 * q4(2) - 17.246 * q4(3)) + 7.042 * q4(4)))) + &
+      ((q4(3) * (11.003 * q4(3) - 9.402 * q4(4))) + 2.107 * (q4(4) * q4(4)))
 
 end subroutine weno_seven_weight_3
 
@@ -2143,7 +2143,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
                  "ARAKAWA_LAMB_BLEND Coriolis scheme.  This must be "//&
                  "greater than 2.0 (the max value for Sadourny energy).", &
                  units="nondim", default=4.0)
-    CS%wt_lin_blend = min(1.0, max(CS%wt_lin_blend,1e-16))
+    CS%wt_lin_blend = min(1.0, max(CS%wt_lin_blend, 1e-16))
     if (CS%F_eff_max_blend < 2.0) call MOM_error(WARNING, "CoriolisAdv_init: "//&
            "CORIOLIS_BLEND_F_EFF_MAX should be at least 2.")
   endif
@@ -2208,86 +2208,86 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   end select
 
   CS%id_rv = register_diag_field('ocean_model', 'RV', diag%axesBL, Time, &
-     'Relative Vorticity', 's-1', conversion=US%s_to_T)
+      'Relative Vorticity', 's-1', conversion=US%s_to_T)
 
   CS%id_PV = register_diag_field('ocean_model', 'PV', diag%axesBL, Time, &
-     'Potential Vorticity', 'm-1 s-1', conversion=GV%m_to_H*US%s_to_T)
+      'Potential Vorticity', 'm-1 s-1', conversion=GV%m_to_H*US%s_to_T)
 
   CS%id_gKEu = register_diag_field('ocean_model', 'gKEu', diag%axesCuL, Time, &
-     'Zonal Acceleration from Grad. Kinetic Energy', 'm s-2', conversion=US%L_T2_to_m_s2)
+      'Zonal Acceleration from Grad. Kinetic Energy', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   CS%id_gKEv = register_diag_field('ocean_model', 'gKEv', diag%axesCvL, Time, &
-     'Meridional Acceleration from Grad. Kinetic Energy', 'm s-2', conversion=US%L_T2_to_m_s2)
+      'Meridional Acceleration from Grad. Kinetic Energy', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   CS%id_rvxu = register_diag_field('ocean_model', 'rvxu', diag%axesCvL, Time, &
-     'Meridional Acceleration from Relative Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
+      'Meridional Acceleration from Relative Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   CS%id_rvxv = register_diag_field('ocean_model', 'rvxv', diag%axesCuL, Time, &
-     'Zonal Acceleration from Relative Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
+      'Zonal Acceleration from Relative Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   CS%id_CAuS = register_diag_field('ocean_model', 'CAu_Stokes', diag%axesCuL, Time, &
-     'Zonal Acceleration from Stokes Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
+      'Zonal Acceleration from Stokes Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
   ! add to AD
 
   CS%id_CAvS = register_diag_field('ocean_model', 'CAv_Stokes', diag%axesCvL, Time, &
-     'Meridional Acceleration from Stokes Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
+      'Meridional Acceleration from Stokes Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
   ! add to AD
 
   !CS%id_hf_gKEu = register_diag_field('ocean_model', 'hf_gKEu', diag%axesCuL, Time, &
   !   'Fractional Thickness-weighted Zonal Acceleration from Grad. Kinetic Energy', &
   !   'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   CS%id_hf_gKEu_2d = register_diag_field('ocean_model', 'hf_gKEu_2d', diag%axesCu1, Time, &
-     'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Grad. Kinetic Energy', &
-     'm s-2', conversion=US%L_T2_to_m_s2)
+      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Grad. Kinetic Energy', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
 
   !CS%id_hf_gKEv = register_diag_field('ocean_model', 'hf_gKEv', diag%axesCvL, Time, &
   !   'Fractional Thickness-weighted Meridional Acceleration from Grad. Kinetic Energy', &
   !   'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   CS%id_hf_gKEv_2d = register_diag_field('ocean_model', 'hf_gKEv_2d', diag%axesCv1, Time, &
-     'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Grad. Kinetic Energy', &
-     'm s-2', conversion=US%L_T2_to_m_s2)
+      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Grad. Kinetic Energy', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
 
   CS%id_h_gKEu = register_diag_field('ocean_model', 'h_gKEu', diag%axesCuL, Time, &
-     'Thickness Multiplied Zonal Acceleration from Grad. Kinetic Energy', &
-     'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Thickness Multiplied Zonal Acceleration from Grad. Kinetic Energy', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   CS%id_intz_gKEu_2d = register_diag_field('ocean_model', 'intz_gKEu_2d', diag%axesCu1, Time, &
-     'Depth-integral of Zonal Acceleration from Grad. Kinetic Energy', &
-     'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Depth-integral of Zonal Acceleration from Grad. Kinetic Energy', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
 
   CS%id_h_gKEv = register_diag_field('ocean_model', 'h_gKEv', diag%axesCvL, Time, &
-     'Thickness Multiplied Meridional Acceleration from Grad. Kinetic Energy', &
-     'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Thickness Multiplied Meridional Acceleration from Grad. Kinetic Energy', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   CS%id_intz_gKEv_2d = register_diag_field('ocean_model', 'intz_gKEv_2d', diag%axesCv1, Time, &
-     'Depth-integral of Meridional Acceleration from Grad. Kinetic Energy', &
-     'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Depth-integral of Meridional Acceleration from Grad. Kinetic Energy', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
 
   !CS%id_hf_rvxu = register_diag_field('ocean_model', 'hf_rvxu', diag%axesCvL, Time, &
   !   'Fractional Thickness-weighted Meridional Acceleration from Relative Vorticity', &
   !   'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   CS%id_hf_rvxu_2d = register_diag_field('ocean_model', 'hf_rvxu_2d', diag%axesCv1, Time, &
-     'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Relative Vorticity', &
-     'm s-2', conversion=US%L_T2_to_m_s2)
+      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Relative Vorticity', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
 
   !CS%id_hf_rvxv = register_diag_field('ocean_model', 'hf_rvxv', diag%axesCuL, Time, &
   !   'Fractional Thickness-weighted Zonal Acceleration from Relative Vorticity', &
   !   'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   CS%id_hf_rvxv_2d = register_diag_field('ocean_model', 'hf_rvxv_2d', diag%axesCu1, Time, &
-     'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Relative Vorticity', &
-     'm s-2', conversion=US%L_T2_to_m_s2)
+      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Relative Vorticity', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
 
   CS%id_h_rvxu = register_diag_field('ocean_model', 'h_rvxu', diag%axesCvL, Time, &
-     'Thickness Multiplied Meridional Acceleration from Relative Vorticity', &
-     'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Thickness Multiplied Meridional Acceleration from Relative Vorticity', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   CS%id_intz_rvxu_2d = register_diag_field('ocean_model', 'intz_rvxu_2d', diag%axesCv1, Time, &
-     'Depth-integral of Meridional Acceleration from Relative Vorticity', &
-     'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Depth-integral of Meridional Acceleration from Relative Vorticity', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
 
   CS%id_h_rvxv = register_diag_field('ocean_model', 'h_rvxv', diag%axesCuL, Time, &
-     'Thickness Multiplied Zonal Acceleration from Relative Vorticity', &
-     'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Thickness Multiplied Zonal Acceleration from Relative Vorticity', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   CS%id_intz_rvxv_2d = register_diag_field('ocean_model', 'intz_rvxv_2d', diag%axesCu1, Time, &
-     'Depth-integral of Fractional Thickness-weighted Zonal Acceleration from Relative Vorticity', &
-     'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Depth-integral of Fractional Thickness-weighted Zonal Acceleration from Relative Vorticity', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
 
   ! Allocate memory needed for the diagnostics that have been enabled.
   if ((CS%id_gKEu > 0) .or. (CS%id_hf_gKEu_2d > 0) .or. &

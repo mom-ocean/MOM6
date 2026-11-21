@@ -85,7 +85,7 @@ subroutine unit_scaling_init( param_file, US )
   character(len=16) :: mdl = "MOM_unit_scaling"
 
   if (associated(US)) call MOM_error(FATAL, &
-     'unit_scaling_init: called with an associated US pointer.')
+      'unit_scaling_init: called with an associated US pointer.')
   allocate(US)
 
   ! Read all relevant parameters and write them to the model log.
@@ -178,7 +178,7 @@ subroutine unit_no_scaling_init(US)
   type(unit_scale_type), pointer    :: US         !< A dimensional unit scaling type
 
   if (associated(US)) call MOM_error(FATAL, &
-     'unit_scaling_init: called with an associated US pointer.')
+      'unit_scaling_init: called with an associated US pointer.')
   allocate(US)
 
   US%Z_to_m = 1.0 ; US%m_to_Z = 1.0

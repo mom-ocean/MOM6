@@ -31,8 +31,8 @@ integer, parameter :: &
     LMASK     = 2147483647      !< least significant r bits (0x7fffffffUL)
 
 ! Private tempering parameters for the Mersenne Twister
-integer, parameter :: TMASKB= -1658038656, & !< (0x9d2c5680UL)
-                      TMASKC= -272236544     !< (0xefc60000UL)
+integer, parameter :: TMASKB = -1658038656, & !< (0x9d2c5680UL)
+                      TMASKC = -272236544     !< (0xefc60000UL)
 
 !> A private type used by the Mersenne Twistor
 type randomNumberSequence
@@ -74,13 +74,13 @@ real function random_01_CB(ctr, key)
   y = (ctr + 1) * (key + 65536)
   z = y + (key + 65536)
   x = x*x + y
-  x = ior(ishft(x,32),ishft(x,-32))
+  x = ior(ishft(x, 32), ishft(x, -32))
   x = x*x + z
-  x = ior(ishft(x,32),ishft(x,-32))
+  x = ior(ishft(x, 32), ishft(x, -32))
   x = x*x + y
-  x = ior(ishft(x,32),ishft(x,-32))
+  x = ior(ishft(x, 32), ishft(x, -32))
   x = x*x + z
-  random_01_CB = .5*(1. + .5*real(int(ishft(x,-32)))/real(2**30))
+  random_01_CB = .5*(1. + .5*real(int(ishft(x, -32)))/real(2**30))
 
 end function
 
@@ -103,7 +103,7 @@ subroutine random_2d_01(CS, HI, rand)
   type(hor_index_type), intent(in)    :: HI !< Horizontal index structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), intent(out) :: rand !< Random numbers between 0 and 1 [nondim]
   ! Local variables
-  integer :: i,j
+  integer :: i, j
 
   do j = HI%jsd,HI%jed
     do i = HI%isd,HI%ied
@@ -120,7 +120,7 @@ subroutine random_2d_norm(CS, HI, rand)
   type(hor_index_type), intent(in)    :: HI !< Horizontal index structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), intent(out) :: rand !< Random numbers between 0 and 1 [nondim]
   ! Local variables
-  integer :: i,j,n
+  integer :: i, j, n
 
   do j = HI%jsd,HI%jed
     do i = HI%isd,HI%ied
@@ -156,7 +156,7 @@ subroutine random_2d_constructor(CS, HI, Time, seed)
   type(time_type),      intent(in)    :: Time !< Current model time
   integer,              intent(in)    :: seed !< Seed for PRNG
   ! Local variables
-  integer :: i,j,sseed,tseed
+  integer :: i, j, sseed, tseed
 
   if (.not. allocated(CS%stream2d)) allocate( CS%stream2d(HI%isd:HI%ied,HI%jsd:HI%jed) )
 
@@ -177,9 +177,9 @@ end subroutine random_2d_constructor
 integer function seed_from_time(Time)
   type(time_type), intent(in)    :: Time !< Current model time
   ! Local variables
-  integer :: yr,mo,dy,hr,mn,sc,s1,s2
+  integer :: yr, mo, dy, hr, mn, sc, s1, s2
 
-  call get_date(Time,yr,mo,dy,hr,mn,sc)
+  call get_date(Time, yr, mo, dy, hr, mn, sc)
   s1 = sc + 61*(mn + 61*hr) + 379 ! Range 379 .. 89620
   ! Fun fact: 2147483647 is the eighth Mersenne prime.
   ! This is not the reason for using 2147483647 here. It is the
@@ -394,21 +394,21 @@ logical function random_unit_tests(verbose)
 
   if (verbose) write(stdunit,'(1x,"random: ",a)') '-- index-based seeds --------------------'
   ! Check index-based seed
-  i = seed_from_index(HI,1,1)
+  i = seed_from_index(HI, 1, 1)
   random_unit_tests = random_unit_tests .or. test_fn(verbose, i==1, 'seed from index (1,1)', ivalue=i)
-  j = seed_from_index(HI,ni+1,1)
+  j = seed_from_index(HI, ni+1, 1)
   random_unit_tests = random_unit_tests .or. test_fn(verbose, j==i, 'seed from index (n+1,1)', ivalue=j)
-  i = seed_from_index(HI,ni,1)
+  i = seed_from_index(HI, ni, 1)
   random_unit_tests = random_unit_tests .or. test_fn(verbose, i==6, 'seed from index (n,1)', ivalue=i)
-  j = seed_from_index(HI,0,1)
+  j = seed_from_index(HI, 0, 1)
   random_unit_tests = random_unit_tests .or. test_fn(verbose, j==i, 'seed from index (0,1)', ivalue=j)
-  i = seed_from_index(HI,1,nj)
+  i = seed_from_index(HI, 1, nj)
   random_unit_tests = random_unit_tests .or. test_fn(verbose, i==49, 'seed from index (1,n)', ivalue=i)
-  j = seed_from_index(HI,ni,nj+1)
+  j = seed_from_index(HI, ni, nj+1)
   random_unit_tests = random_unit_tests .or. test_fn(verbose, j==i, 'seed from index (n,n+1)', ivalue=j)
-  i = seed_from_index(HI,ni,nj)
+  i = seed_from_index(HI, ni, nj)
   random_unit_tests = random_unit_tests .or. test_fn(verbose, i==54, 'seed from index (n,n)', ivalue=i)
-  j = seed_from_index(HI,1,nj+1)
+  j = seed_from_index(HI, 1, nj+1)
   random_unit_tests = random_unit_tests .or. test_fn(verbose, j==i, 'seed from index (1,n+1)', ivalue=j)
 
   if (.not.random_unit_tests) write(stdunit,'(1x,a)') 'Passed unit tests'
@@ -486,7 +486,7 @@ logical function random_unit_tests(verbose)
   call random_2d_constructor(test_rng, HI, Time, 123)
   r2d(:,:) = -999. ! Use -9. to detect unset values
   call random_2d_01(test_rng, HI, r2d)
-  if (any(abs(r2d(:,:)+999.)<=0.)) random_unit_tests=.true.
+  if (any(abs(r2d(:,:)+999.) <= 0.)) random_unit_tests = .true.
   r1 = minval(r2d)
   r2 = maxval(r2d)
   random_unit_tests = random_unit_tests .or. test_fn(verbose, r1>=0., '2d all set', r1)

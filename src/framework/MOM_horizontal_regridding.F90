@@ -91,7 +91,7 @@ subroutine myStats(array, missing, G, k, mesg, unscale, full_halo)
   if (is_root_pe()) then
     write(lMesg(1:120),'(2(a,es12.4),a,I0,1x,a)') &
          'init_from_Z: min=',minA*scl,' max=',maxA*scl,' Level=',k,trim(mesg)
-    call MOM_mesg(lMesg,2)
+    call MOM_mesg(lMesg, 2)
   endif
 
 end subroutine myStats
@@ -143,8 +143,8 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug,
   real    :: ares   ! The maximum magnitude change in aout [A]
   logical :: debug_it, ans_2018
 
-  debug_it=.false.
-  if (PRESENT(debug)) debug_it=debug
+  debug_it = .false.
+  if (PRESENT(debug)) debug_it = debug
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -167,8 +167,8 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug,
 
   do while (nfill > 0.0)
 
-    call pass_var(good_,G%Domain)
-    call pass_var(aout,G%Domain)
+    call pass_var(good_, G%Domain)
+    call pass_var(aout, G%Domain)
 
     a_filled(:,:) = aout(:,:)
     good_new(:,:) = good_(:,:)
@@ -177,9 +177,9 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug,
 
       if (good_(i,j) == 1.0 .or. fill(i,j) == 0.) cycle
 
-      ge=good_(i+1,j) ; gw=good_(i-1,j)
-      gn=good_(i,j+1) ; gs=good_(i,j-1)
-      east=0.0 ; west=0.0 ; north=0.0 ; south=0.0
+      ge = good_(i+1,j) ; gw = good_(i-1,j)
+      gn = good_(i,j+1) ; gs = good_(i,j-1)
+      east = 0.0 ; west = 0.0 ; north = 0.0 ; south = 0.0
       if (ge == 1.0) east = aout(i+1,j)*ge
       if (gw == 1.0) west = aout(i-1,j)*gw
       if (gn == 1.0) north = aout(i,j+1)*gn
@@ -222,14 +222,14 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug,
 
   ! Do Laplacian smoothing for the points that have been filled in.
   do k=1,npass
-    call pass_var(aout,G%Domain)
+    call pass_var(aout, G%Domain)
 
     a_chg(:,:) = 0.0
     if (ans_2018) then
       do j=js,je ; do i=is,ie
         if (fill(i,j) == 1) then
-          east = max(good(i+1,j),fill(i+1,j)) ; west = max(good(i-1,j),fill(i-1,j))
-          north = max(good(i,j+1),fill(i,j+1)) ; south = max(good(i,j-1),fill(i,j-1))
+          east = max(good(i+1,j), fill(i+1,j)) ; west = max(good(i-1,j), fill(i-1,j))
+          north = max(good(i,j+1), fill(i,j+1)) ; south = max(good(i,j-1), fill(i,j-1))
           a_chg(i,j) = relax_coeff*(south*aout(i,j-1)+north*aout(i,j+1) + &
                                     west*aout(i-1,j)+east*aout(i+1,j) - &
                                    (south+north+west+east)*aout(i,j))
@@ -238,8 +238,8 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug,
     else
       do j=js,je ; do i=is,ie
         if (fill(i,j) == 1) then
-          ge = max(good(i+1,j),fill(i+1,j)) ; gw = max(good(i-1,j),fill(i-1,j))
-          gn = max(good(i,j+1),fill(i,j+1)) ; gs = max(good(i,j-1),fill(i,j-1))
+          ge = max(good(i+1,j), fill(i+1,j)) ; gw = max(good(i-1,j), fill(i-1,j))
+          gn = max(good(i,j+1), fill(i,j+1)) ; gs = max(good(i,j-1), fill(i,j-1))
           a_chg(i,j) = relax_coeff*( ((gs*aout(i,j-1) + gn*aout(i,j+1)) + &
                                       (gw*aout(i-1,j) + ge*aout(i+1,j))) - &
                                      ((gs + gn) + (gw + ge))*aout(i,j) )
@@ -260,7 +260,7 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug,
     if (good_(i,j) == 0.0 .and. fill_pts(i,j) == 1.0) then
       write(mesg,*) 'In fill_miss, fill, good,i,j= ',fill_pts(i,j),good_(i,j),i,j
       call MOM_error(WARNING, mesg, .true.)
-      call MOM_error(FATAL,"MOM_initialize: "// &
+      call MOM_error(FATAL, "MOM_initialize: "// &
            "fill is true and good is false after fill_miss, how did this happen? ")
     endif
   enddo ; enddo
@@ -351,7 +351,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
   integer :: isg, ieg, jsg, jeg ! global extent
   integer :: isd, ied, jsd, jed ! data domain indices
   integer :: id_clock_read
-  logical :: debug=.false.
+  logical :: debug = .false.
   real :: I_scale               ! The inverse of the scale factor for diagnostic output [a A-1 ~> 1]
   real :: dtr_iter_stop         ! The tolerance for changes in tracer concentrations between smoothing
                                 ! iterations that determines when to stop iterating [A ~> a]
@@ -401,17 +401,17 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
   if (allocated(tr_z)) deallocate(tr_z)
   if (allocated(mask_z)) deallocate(mask_z)
 
-  call get_axis_info(axes_info(1),ax_size=id)
-  call get_axis_info(axes_info(2),ax_size=jd)
-  call get_axis_info(axes_info(3),ax_size=kd)
+  call get_axis_info(axes_info(1), ax_size=id)
+  call get_axis_info(axes_info(2), ax_size=jd)
+  call get_axis_info(axes_info(3), ax_size=kd)
 
   allocate(lon_in(id), lat_in(jd), z_in(kd), z_edges_in(kd+1))
   allocate(tr_z(isd:ied,jsd:jed,kd), source=0.0)
   allocate(mask_z(isd:ied,jsd:jed,kd), source=0.0)
 
-  call get_axis_info(axes_info(1),ax_data=lon_in)
-  call get_axis_info(axes_info(2),ax_data=lat_in)
-  call get_axis_info(axes_info(3),ax_data=z_in)
+  call get_axis_info(axes_info(1), ax_data=lon_in)
+  call get_axis_info(axes_info(2), ax_data=lat_in)
+  call get_axis_info(axes_info(3), ax_data=z_in)
 
   call cpu_clock_end(id_clock_read)
 
@@ -697,7 +697,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
   integer :: isd, ied, jsd, jed ! data domain indices
   integer :: id_clock_read
   integer, dimension(4) :: fld_sz
-  logical :: debug=.false.
+  logical :: debug = .false.
   logical :: is_ongrid
   integer :: ans_date           ! The vintage of the expressions and order of arithmetic to use
   real :: I_scale               ! The inverse of the scale factor for diagnostic output [a A-1 ~> 1]

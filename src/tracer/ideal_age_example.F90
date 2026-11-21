@@ -132,7 +132,7 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "The file in which the age-tracer initial values can be "//&
                  "found, or an empty string for internal initialization.", &
                  default=" ")
-  if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
+  if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file, '/') == 0)) then
     ! Add the directory if CS%IC_file is not already a complete path.
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     CS%IC_file = trim(slasher(inputdir))//trim(CS%IC_file)
@@ -168,7 +168,7 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   if (do_ideal_age_dated) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
-    CS%tr_desc(m) = var_desc("age_dated","yr","Ideal Age Tracer with a Start Date",&
+    CS%tr_desc(m) = var_desc("age_dated", "yr", "Ideal Age Tracer with a Start Date", &
                             caller=mdl)
     CS%tracer_ages(m) = .true. ; CS%growth_rate(m) = 0.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 0.0 ; CS%tracer_start_year(m) = 0.0
@@ -250,7 +250,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS
 
   CS%Time => day
   CS%diag => diag
-  CS%nkbl = max(GV%nkml,1)
+  CS%nkbl = max(GV%nkml, 1)
 
   do m=1,CS%ntr
     call query_vardesc(CS%tr_desc(m), name=name, &
@@ -270,7 +270,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS
           if (.not.OK) then
             OK = tracer_Z_init(CS%tr(:,:,:,m), h, CS%IC_file, &
                      trim(name), G, GV, US, -1e34, 0.0) ! CS%land_val(m))
-            if (.not.OK) call MOM_error(FATAL,"initialize_ideal_age_tracer: "//&
+            if (.not.OK) call MOM_error(FATAL, "initialize_ideal_age_tracer: "//&
                     "Unable to read "//trim(name)//" from "//&
                     trim(CS%IC_file)//".")
           endif
@@ -398,7 +398,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
             endif
           enddo
 
-          k = MIN(nk+1,nz)
+          k = MIN(nk+1, nz)
 
           if (G%mask2dT(i,j) > 0.0) then
             layer_frac = BL_layers(i,j)-nk
@@ -416,7 +416,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
               CS%tr(i,j,k,m) = CS%land_val(m)
             endif
           enddo
-       enddo ; enddo
+        enddo ; enddo
 
       else  ! use real BL depth
         do j=js,je ; do i=is,ie
@@ -437,7 +437,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
           enddo
         enddo ; enddo
 
-     endif ! use real BL depth
+      endif ! use real BL depth
 
     else ! if BL residence tracer
 
@@ -452,7 +452,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
             endif
           enddo
 
-          k = MIN(nk+1,nz)
+          k = MIN(nk+1, nz)
           if (G%mask2dT(i,j) > 0.0) then
             layer_frac = BL_layers(i,j)-nk
             CS%tr(i,j,k,m) = (1.-layer_frac) * (CS%tr(i,j,k,m) + G%mask2dT(i,j)*dt &

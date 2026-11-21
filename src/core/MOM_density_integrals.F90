@@ -1474,10 +1474,10 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, n, pos, halo
 
   Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
-  halo = 0 ; if (present(halo_size)) halo = MAX(halo_size,0)
+  halo = 0 ; if (present(halo_size)) halo = MAX(halo_size, 0)
   ish = HI%isc-halo ; ieh = HI%iec+halo ; jsh = HI%jsc-halo ; jeh = HI%jec+halo
-  if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh) ; endif
-  if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh) ; endif
+  if (present(intx_dza)) then ; ish = MIN(Isq, ish) ; ieh = MAX(Ieq+1, ieh) ; endif
+  if (present(inty_dza)) then ; jsh = MIN(Jsq, jsh) ; jeh = MAX(Jeq+1, jeh) ; endif
 
   do_massWeight = .false. ; massWeight_bug = .false. ; top_massWeight = .false.
   if (present(MassWghtInterp)) then
@@ -2231,20 +2231,20 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
 
     m = m + 1
     if (m > 30) then ! Call an error, because convergence to the tolerance has not been achieved
-     write(msg,*) Pa_left,Pa,Pa_right,P_t-P_tgt,P_b-P_tgt
-     call MOM_error(FATAL, 'find_depth_of_pressure_in_cell completes too many iterations: '//msg)
+      write(msg,*) Pa_left, Pa, Pa_right, P_t-P_tgt, P_b-P_tgt
+      call MOM_error(FATAL, 'find_depth_of_pressure_in_cell completes too many iterations: '//msg)
     endif
     z_out = z_t + ( z_b - z_t ) * F_guess
     Pa = frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, F_guess, EOS, frac_dp_bugfix) - ( P_tgt - P_t )
 
     if (Pa<Pa_left) then
-      write(msg,*) Pa_left,Pa,Pa_right,P_t-P_tgt,P_b-P_tgt
+      write(msg,*) Pa_left, Pa, Pa_right, P_t-P_tgt, P_b-P_tgt
       call MOM_error(FATAL, 'find_depth_of_pressure_in_cell out of bounds negative: /n'//msg)
     elseif (Pa<0.) then
       Pa_left = Pa
       F_l = F_guess
     elseif (Pa>Pa_right) then
-      write(msg,*) Pa_left,Pa,Pa_right,P_t-P_tgt,P_b-P_tgt
+      write(msg,*) Pa_left, Pa, Pa_right, P_t-P_tgt, P_b-P_tgt
       call MOM_error(FATAL, 'find_depth_of_pressure_in_cell out of bounds positive: /n'//msg)
     elseif (Pa>0.) then
       Pa_right = Pa
@@ -2279,7 +2279,7 @@ subroutine avg_specific_vol(T, S, p_t, dp, HI, EOS, SpV_avg, halo_size)
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: jsh, jeh, j, halo
 
-  halo = 0 ; if (present(halo_size)) halo = MAX(halo_size,0)
+  halo = 0 ; if (present(halo_size)) halo = MAX(halo_size, 0)
   jsh = HI%jsc-halo ; jeh = HI%jec+halo
 
   EOSdom(:) = EOS_domain(HI, halo_size)

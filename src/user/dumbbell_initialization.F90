@@ -94,7 +94,7 @@ subroutine dumbbell_initialize_topography( D, G, param_file, max_depth )
 end subroutine dumbbell_initialize_topography
 
 !> Initializes the layer thicknesses to be uniform in the dumbbell test case
-subroutine dumbbell_initialize_thickness ( h, depth_tot, G, GV, US, param_file, just_read)
+subroutine dumbbell_initialize_thickness(h, depth_tot, G, GV, US, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
@@ -131,10 +131,10 @@ subroutine dumbbell_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
     call MOM_mesg("dumbbell_initialization.F90, dumbbell_initialize_thickness: setting thickness")
 
   if (.not.just_read) call log_version(param_file, mdl, version, "")
-  call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
+  call get_param(param_file, mdl, "MIN_THICKNESS", min_thickness, &
                 'Minimum thickness for layer', &
                  units='m', default=1.0e-3, scale=US%m_to_Z, do_not_log=just_read)
-  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
   call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, default=.false., do_not_log=.true.)
   if (.not. use_ALE) verticalCoordinate = "LAYER"
@@ -246,7 +246,7 @@ end select
 end subroutine dumbbell_initialize_thickness
 
 !> Initial values for temperature and salinity for the dumbbell test case
-subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, US, param_file, just_read)
+subroutine dumbbell_initialize_temperature_salinity(T, S, h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [C ~> degC]
@@ -360,7 +360,7 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, h_in, depth_tot, param_fil
   real :: T_surf         ! The surface temperature [C ~> degC]
   logical :: dbrotate    ! If true, rotate the domain.
 
-  call get_param(param_file, mdl,"DUMBBELL_LEN",dblen, &
+  call get_param(param_file, mdl, "DUMBBELL_LEN", dblen, &
                 'Lateral Length scale for dumbbell ', &
                  units='km', default=600., do_not_log=.true.)
   call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
@@ -385,7 +385,7 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, h_in, depth_tot, param_fil
   call get_param(param_file, mdl, "DUMBBELL_S_RANGE", S_range, &
                  'DUMBBELL salinity range (right-left)', &
                  units="ppt", default=2., scale=US%ppt_to_S, do_not_log=.true.)
-  call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
+  call get_param(param_file, mdl, "MIN_THICKNESS", min_thickness, &
                 'Minimum thickness for layer', &
                  units='m', default=1.0e-3, scale=US%m_to_Z, do_not_log=.true.)
 
@@ -469,7 +469,7 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, h_in, depth_tot, param_fil
       enddo
       eta(i,j,nz+1) = -depth_tot(i,j)
       do k=1,nz
-        S(i,j,k)= tv%S(i,j,k)
+        S(i,j,k) = tv%S(i,j,k)
       enddo
     enddo ; enddo
 

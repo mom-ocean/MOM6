@@ -54,7 +54,7 @@ end subroutine sloshing_initialize_topography
 !! same thickness but all interfaces (except bottom and sea surface) are
 !! displaced according to a half-period cosine, with maximum value on the
 !! left and minimum value on the right. This sets off a regular sloshing motion.
-subroutine sloshing_initialize_thickness ( h, depth_tot, G, GV, US, param_file, just_read)
+subroutine sloshing_initialize_thickness(h, depth_tot, G, GV, US, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
@@ -176,7 +176,7 @@ end subroutine sloshing_initialize_thickness
 !! reference surface layer salinity and temperature and a specified range.
 !! Note that the linear distribution is set up with respect to the layer
 !! number, not the physical position).
-subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, GV, US, param_file, just_read)
+subroutine sloshing_initialize_temperature_salinity(T, S, h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [C ~> degC].

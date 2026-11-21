@@ -557,10 +557,10 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, halo
 
   Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
-  halo = 0 ; if (present(halo_size)) halo = MAX(halo_size,0)
+  halo = 0 ; if (present(halo_size)) halo = MAX(halo_size, 0)
   ish = HI%isc-halo ; ieh = HI%iec+halo ; jsh = HI%jsc-halo ; jeh = HI%jec+halo
-  if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh) ; endif
-  if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh) ; endif
+  if (present(intx_dza)) then ; ish = MIN(Isq, ish) ; ieh = MAX(Ieq+1, ieh) ; endif
+  if (present(inty_dza)) then ; jsh = MIN(Jsq, jsh) ; jeh = MAX(Jeq+1, jeh) ; endif
 
   do_massWeight = .false. ; massWeight_bug = .false. ; top_massWeight = .false.
   if (present(MassWghtInterp)) then

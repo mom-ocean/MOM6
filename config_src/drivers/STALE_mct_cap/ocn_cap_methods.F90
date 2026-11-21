@@ -19,7 +19,7 @@ module ocn_cap_methods
   public :: ocn_import
   public :: ocn_export
 
-  logical, parameter :: debug=.false.
+  logical, parameter :: debug = .false.
 
 !=======================================================================
 contains

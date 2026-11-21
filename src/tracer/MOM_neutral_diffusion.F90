@@ -203,11 +203,11 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   call get_param(param_file, mdl, "KHTR_USE_EBT_STRUCT", KhTh_use_ebt_struct, &
                  "If true, uses the equivalent barotropic structure "//&
                  "as the vertical structure of the tracer diffusivity.",&
-                 default=.false.,do_not_log=.true.)
+                 default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "KHTR_USE_SQG_STRUCT", KhTh_use_sqg_struct, &
                  "If true, uses the surface geostrophic structure "//&
                  "as the vertical structure of the tracer diffusivity.",&
-                 default=.false.,do_not_log=.true.)
+                 default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "NDIFF_USE_UNMASKED_TRANSPORT_BUG", CS%use_unmasked_transport_bug, &
                  "If true, use an older form for the accumulation of neutral-diffusion "//&
                  "transports that were unmasked, as used prior to Jan 2018. This is not "//&
@@ -259,7 +259,7 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
                    "3. Full nonlinear equation of state, use regula falsi    \n"// &
                    "   for neutral position", default=3)
     if (CS%neutral_pos_method > 4 .or. CS%neutral_pos_method < 0) then
-      call MOM_error(FATAL,"Invalid option for NEUTRAL_POS_METHOD")
+      call MOM_error(FATAL, "Invalid option for NEUTRAL_POS_METHOD")
     endif
 
     call get_param(param_file, mdl, "DELTA_RHO_FORM", CS%delta_rho_form,           &
@@ -296,7 +296,7 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
     call extract_diabatic_member(diabatic_CSp, KPP_CSp=CS%KPP_CSp)
     call extract_diabatic_member(diabatic_CSp, energetic_PBL_CSp=CS%energetic_PBL_CSp)
     if ( .not. ASSOCIATED(CS%energetic_PBL_CSp) .and. .not. ASSOCIATED(CS%KPP_CSp) ) then
-      call MOM_error(FATAL,"NDIFF_INTERIOR_ONLY is true, but no valid boundary layer scheme was found")
+      call MOM_error(FATAL, "NDIFF_INTERIOR_ONLY is true, but no valid boundary layer scheme was found")
     endif
 
     if (CS%tapering) then
@@ -307,7 +307,7 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
 
   CS%KhTh_use_vert_struct = KhTh_use_ebt_struct .or. KhTh_use_sqg_struct
   if (CS%KhTh_use_vert_struct) &
-     allocate(CS%Coef_h(G%isd:G%ied,G%jsd:G%jed,SZK_(GV)+1), source=0.)
+    allocate(CS%Coef_h(G%isd:G%ied,G%jsd:G%jed,SZK_(GV)+1), source=0.)
 
   ! Store a rescaling factor for use in diagnostic messages.
   CS%R_to_kg_m3 = US%R_to_kg_m3
@@ -546,11 +546,11 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, visc, CS, p_surf)
       else
         call find_neutral_surface_positions_discontinuous(CS, GV%ke, &
             CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%ppoly_coeffs_T(i,j,:,:),           &
-            CS%ppoly_coeffs_S(i,j,:,:),CS%stable_cell(i,j,:),                                                  &
+            CS%ppoly_coeffs_S(i,j,:,:), CS%stable_cell(i,j,:),                                                  &
             CS%P_i(i+1,j,:,:), h(i+1,j,:), CS%T_i(i+1,j,:,:), CS%S_i(i+1,j,:,:), CS%ppoly_coeffs_T(i+1,j,:,:), &
             CS%ppoly_coeffs_S(i+1,j,:,:), CS%stable_cell(i+1,j,:),                                             &
             CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:),                   &
-            hard_fail_heff = CS%hard_fail_heff)
+            hard_fail_heff=CS%hard_fail_heff)
       endif
     endif
   enddo ; enddo
@@ -567,11 +567,11 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, visc, CS, p_surf)
       else
         call find_neutral_surface_positions_discontinuous(CS, GV%ke, &
             CS%P_i(i,j,:,:), h(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%ppoly_coeffs_T(i,j,:,:),           &
-            CS%ppoly_coeffs_S(i,j,:,:),CS%stable_cell(i,j,:),                                                  &
+            CS%ppoly_coeffs_S(i,j,:,:), CS%stable_cell(i,j,:),                                                  &
             CS%P_i(i,j+1,:,:), h(i,j+1,:), CS%T_i(i,j+1,:,:), CS%S_i(i,j+1,:,:), CS%ppoly_coeffs_T(i,j+1,:,:), &
             CS%ppoly_coeffs_S(i,j+1,:,:), CS%stable_cell(i,j+1,:),                                             &
             CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:),                   &
-            hard_fail_heff = CS%hard_fail_heff)
+            hard_fail_heff=CS%hard_fail_heff)
       endif
     endif
   enddo ; enddo
@@ -696,7 +696,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
         enddo
       endif
     enddo ; enddo
-    call pass_var(CS%Coef_h,G%Domain)
+    call pass_var(CS%Coef_h, G%Domain)
   endif
 
   nk = GV%ke
@@ -1214,11 +1214,11 @@ end function ppm_ave
 
 !> A true signum function that returns either -abs(a), when x<0; or abs(a) when x>0; or 0 when x=0.
 !! The returned units are the same as those of a [arbitrary].
-real function signum(a,x)
+real function signum(a, x)
   real, intent(in) :: a !< The magnitude argument in arbitrary units [arbitrary]
   real, intent(in) :: x !< The sign (or zero) argument [arbitrary]
 
-  signum = sign(a,x)
+  signum = sign(a, x)
   if (x==0.) signum = 0.
 
 end function signum
@@ -1561,8 +1561,8 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
     ! NOTE: This would be better expressed in terms of the layers thicknesses rather
     ! than as differences of position - AJA
     if (k_surface>1) then
-      hL = absolute_position(nk,ns,Pl,KoL,PoL,k_surface) - absolute_position(nk,ns,Pl,KoL,PoL,k_surface-1)
-      hR = absolute_position(nk,ns,Pr,KoR,PoR,k_surface) - absolute_position(nk,ns,Pr,KoR,PoR,k_surface-1)
+      hL = absolute_position(nk, ns, Pl, KoL, PoL, k_surface) - absolute_position(nk, ns, Pl, KoL, PoL, k_surface-1)
+      hR = absolute_position(nk, ns, Pr, KoR, PoR, k_surface) - absolute_position(nk, ns, Pr, KoR, PoR, k_surface-1)
       if ( hL + hR > 0.) then
         hEff(k_surface-1) = 2. * hL * hR / ( hL + hR ) ! Harmonic mean of layer thicknesses
       else
@@ -1831,7 +1831,7 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, &
         hR = (PoR(k_surface) - PoR(k_surface-1))*hcol_r(KoR(k_surface))
         if (hL < 0. .or. hR < 0.) then
           if (fail_heff) then
-            call MOM_error(FATAL,"Negative thicknesses in neutral diffusion")
+            call MOM_error(FATAL, "Negative thicknesses in neutral diffusion")
           else
             if (searching_left_column) then
               PoL(k_surface) = PoL(k_surface-1)
@@ -1846,10 +1846,10 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, &
         else
           hEff(k_surface-1) = 2. * ( (hL * hR) / ( hL + hR ) )! Harmonic mean
           if ( KoL(k_surface) /= KoL(k_surface-1) ) then
-            call MOM_error(FATAL,"Neutral sublayer spans multiple layers")
+            call MOM_error(FATAL, "Neutral sublayer spans multiple layers")
           endif
           if ( KoR(k_surface) /= KoR(k_surface-1) ) then
-            call MOM_error(FATAL,"Neutral sublayer spans multiple layers")
+            call MOM_error(FATAL, "Neutral sublayer spans multiple layers")
           endif
         endif
       else
@@ -1972,7 +1972,7 @@ subroutine increment_interface(nk, kl, ki, reached_bottom, searching_this_column
   elseif (ki==1) then ! At the top interface
     ki = 2 ! Next interface is same layer, but bottom interface
   else
-    call MOM_error(FATAL,"Unanticipated eventuality in increment_interface")
+    call MOM_error(FATAL, "Unanticipated eventuality in increment_interface")
   endif
 end subroutine increment_interface
 
@@ -2051,7 +2051,7 @@ function find_neutral_pos_linear( CS, z0, T_ref, S_ref, dRdT_ref, dRdS_ref, &
     z = 1.
     return
   endif
-  if ( SIGN(1.,drho_min) == SIGN(1.,drho_max) ) then
+  if ( SIGN(1., drho_min) == SIGN(1., drho_max) ) then
     call MOM_error(FATAL, "drho_min is the same sign as dhro_max")
   endif
 
@@ -2153,7 +2153,7 @@ function find_neutral_pos_full( CS, z0, T_ref, S_ref, P_ref, P_top, P_bot, ppoly
     z = 1.
     return
   endif
-  if ( SIGN(1.,drho_b) == SIGN(1.,drho_c) ) then
+  if ( SIGN(1., drho_b) == SIGN(1., drho_c) ) then
     z = z0
     return
   endif
@@ -2278,7 +2278,7 @@ function delta_rho_from_derivs( T1, S1, P1, dRdT1, dRdS1, &
 end function delta_rho_from_derivs
 
 !> Converts non-dimensional position within a layer to absolute position (for debugging)
-function absolute_position(n,ns,Pint,Karr,NParr,k_surface)
+function absolute_position(n, ns, Pint, Karr, NParr, k_surface)
   integer, intent(in) :: n            !< Number of levels
   integer, intent(in) :: ns           !< Number of neutral surfaces
   real,    intent(in) :: Pint(n+1)    !< Position of interfaces [R L2 T-2 ~> Pa] or other units
@@ -2297,7 +2297,7 @@ function absolute_position(n,ns,Pint,Karr,NParr,k_surface)
 end function absolute_position
 
 !> Converts non-dimensional positions within layers to absolute positions (for debugging)
-function absolute_positions(n,ns,Pint,Karr,NParr)
+function absolute_positions(n, ns, Pint, Karr, NParr)
   integer, intent(in) :: n         !< Number of levels
   integer, intent(in) :: ns        !< Number of neutral surfaces
   real,    intent(in) :: Pint(n+1) !< Position of interface [R L2 T-2 ~> Pa] or other units
@@ -2311,7 +2311,7 @@ function absolute_positions(n,ns,Pint,Karr,NParr)
   integer :: k_surface
 
   do k_surface = 1, ns
-    absolute_positions(k_surface) = absolute_position(n,ns,Pint,Karr,NParr,k_surface)
+    absolute_positions(k_surface) = absolute_position(n, ns, Pint, Karr, NParr, k_surface)
   enddo
 
 end function absolute_positions
@@ -2456,7 +2456,7 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
         dT_bottom = T_right_bottom - T_left_bottom
         dT_ave = 0.5 * ( dT_top + dT_bottom )
         dT_layer = T_right_layer - T_left_layer
-        if (signum(1.,dT_top) * signum(1.,dT_bottom) <= 0. .or. signum(1.,dT_ave) * signum(1.,dT_layer) <= 0.) then
+        if (signum(1., dT_top) * signum(1., dT_bottom) <= 0. .or. signum(1., dT_ave) * signum(1., dT_layer) <= 0.) then
           dT_ave = 0.
         else
           dT_ave = dT_layer
@@ -2616,70 +2616,70 @@ logical function ndiff_unit_tests_continuous(verbose)
   write(stdout,*) '==== MOM_neutral_diffusion: ndiff_unit_tests_continuous ='
 
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fv_diff(v,1.,1.,1., 0.,1.,2., 1., 'FV: Straight line on uniform grid')
+    test_fv_diff(v, 1., 1., 1.,  0., 1., 2.,  1.,  'FV: Straight line on uniform grid')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fv_diff(v,1.,1.,0., 0.,4.,8., 7., 'FV: Vanished right cell')
+    test_fv_diff(v, 1., 1., 0.,  0., 4., 8.,  7.,  'FV: Vanished right cell')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fv_diff(v,0.,1.,1., 0.,4.,8., 7., 'FV: Vanished left cell')
+    test_fv_diff(v, 0., 1., 1.,  0., 4., 8.,  7.,  'FV: Vanished left cell')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fv_diff(v,1.,2.,4., 0.,3.,9., 4., 'FV: Stretched grid')
+    test_fv_diff(v, 1., 2., 4.,  0., 3., 9.,  4.,  'FV: Stretched grid')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fv_diff(v,2.,0.,2., 0.,1.,2., 0., 'FV: Vanished middle cell')
+    test_fv_diff(v, 2., 0., 2.,  0., 1., 2.,  0.,  'FV: Vanished middle cell')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fv_diff(v,0.,1.,0., 0.,1.,2., 2., 'FV: Vanished on both sides')
+    test_fv_diff(v, 0., 1., 0.,  0., 1., 2.,  2.,  'FV: Vanished on both sides')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fv_diff(v,1.,0.,0., 0.,1.,2., 0., 'FV: Two vanished cell sides')
+    test_fv_diff(v, 1., 0., 0.,  0., 1., 2.,  0.,  'FV: Two vanished cell sides')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fv_diff(v,0.,0.,0., 0.,1.,2., 0., 'FV: All vanished cells')
+    test_fv_diff(v, 0., 0., 0.,  0., 1., 2.,  0.,  'FV: All vanished cells')
 
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fvlsq_slope(v,1.,1.,1., 0.,1.,2., 1., 'LSQ: Straight line on uniform grid')
+    test_fvlsq_slope(v, 1., 1., 1.,  0., 1., 2.,  1.,  'LSQ: Straight line on uniform grid')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fvlsq_slope(v,1.,1.,0., 0.,1.,2., 1., 'LSQ: Vanished right cell')
+    test_fvlsq_slope(v, 1., 1., 0.,  0., 1., 2.,  1.,  'LSQ: Vanished right cell')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fvlsq_slope(v,0.,1.,1., 0.,1.,2., 1., 'LSQ: Vanished left cell')
+    test_fvlsq_slope(v, 0., 1., 1.,  0., 1., 2.,  1.,  'LSQ: Vanished left cell')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fvlsq_slope(v,1.,2.,4., 0.,3.,9., 2., 'LSQ: Stretched grid')
+    test_fvlsq_slope(v, 1., 2., 4.,  0., 3., 9.,  2.,  'LSQ: Stretched grid')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fvlsq_slope(v,1.,0.,1., 0.,1.,2., 2., 'LSQ: Vanished middle cell')
+    test_fvlsq_slope(v, 1., 0., 1.,  0., 1., 2.,  2.,  'LSQ: Vanished middle cell')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fvlsq_slope(v,0.,1.,0., 0.,1.,2., 0., 'LSQ: Vanished on both sides')
+    test_fvlsq_slope(v, 0., 1., 0.,  0., 1., 2.,  0.,  'LSQ: Vanished on both sides')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fvlsq_slope(v,1.,0.,0., 0.,1.,2., 0., 'LSQ: Two vanished cell sides')
+    test_fvlsq_slope(v, 1., 0., 0.,  0., 1., 2.,  0.,  'LSQ: Two vanished cell sides')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_fvlsq_slope(v,0.,0.,0., 0.,1.,2., 0., 'LSQ: All vanished cells')
+    test_fvlsq_slope(v, 0., 0., 0.,  0., 1., 2.,  0.,  'LSQ: All vanished cells')
 
   call interface_scalar(4, (/10.,10.,10.,10./), (/24.,18.,12.,6./), Tio, 1, h_neglect)
   !ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
   !  test_data1d(5, Tio, (/27.,21.,15.,9.,3./), 'Linear profile, interface temperatures')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_data1d(v,5, Tio, (/24.,22.5,15.,7.5,6./), 'Linear profile, linear interface temperatures')
+    test_data1d(v, 5, Tio, (/24.,22.5,15.,7.5,6./), 'Linear profile, linear interface temperatures')
   call interface_scalar(4, (/10.,10.,10.,10./), (/24.,18.,12.,6./), Tio, 2, h_neglect)
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_data1d(v,5, Tio, (/24.,22.,15.,8.,6./), 'Linear profile, PPM interface temperatures')
+    test_data1d(v, 5, Tio, (/24.,22.,15.,8.,6./), 'Linear profile, PPM interface temperatures')
 
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_ifndp(v,-1.0, 0.,  1.0, 1.0, 0.5, 'Check mid-point')
+    test_ifndp(v, -1.0, 0.,  1.0, 1.0, 0.5, 'Check mid-point')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_ifndp(v, 0.0, 0.,  1.0, 1.0, 0.0, 'Check bottom')
+    test_ifndp(v,  0.0, 0.,  1.0, 1.0, 0.0, 'Check bottom')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_ifndp(v, 0.1, 0.,  1.1, 1.0, 0.0, 'Check below')
+    test_ifndp(v,  0.1, 0.,  1.1, 1.0, 0.0, 'Check below')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_ifndp(v,-1.0, 0.,  0.0, 1.0, 1.0, 'Check top')
+    test_ifndp(v, -1.0, 0.,  0.0, 1.0, 1.0, 'Check top')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_ifndp(v,-1.0, 0., -0.1, 1.0, 1.0, 'Check above')
+    test_ifndp(v, -1.0, 0., -0.1, 1.0, 1.0, 'Check above')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_ifndp(v,-1.0, 0.,  3.0, 1.0, 0.25, 'Check 1/4')
+    test_ifndp(v, -1.0, 0.,  3.0, 1.0, 0.25, 'Check 1/4')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_ifndp(v,-3.0, 0.,  1.0, 1.0, 0.75, 'Check 3/4')
+    test_ifndp(v, -3.0, 0.,  1.0, 1.0, 0.75, 'Check 3/4')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_ifndp(v, 1.0, 0.,  1.0, 1.0, 0.0, 'Check dRho=0 below')
+    test_ifndp(v,  1.0, 0.,  1.0, 1.0, 0.0, 'Check dRho=0 below')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_ifndp(v,-1.0, 0., -1.0, 1.0, 1.0, 'Check dRho=0 above')
+    test_ifndp(v, -1.0, 0., -1.0, 1.0, 1.0, 'Check dRho=0 above')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_ifndp(v, 0.0, 0.,  0.0, 1.0, 0.5, 'Check dRho=0 mid')
+    test_ifndp(v,  0.0, 0.,  0.0, 1.0, 0.5, 'Check dRho=0 mid')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
-    test_ifndp(v,-2.0, .5,  5.0, 0.5, 0.5, 'Check dP=0')
+    test_ifndp(v, -2.0, .5,  5.0, 0.5, 0.5, 'Check dP=0')
 
   ! Identical columns
   call find_neutral_surface_positions_continuous(3, &
@@ -3073,7 +3073,7 @@ logical function ndiff_unit_tests_discontinuous(verbose)
     (/ 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 5.00, 0.00 /),  & ! hEff
     'Unstable mixed layers, left cooler')
 
-  call EOS_manual_init(CS%EOS, form_of_EOS = EOS_LINEAR, dRho_dT = -1., dRho_dS = 2.)
+  call EOS_manual_init(CS%EOS, form_of_EOS=EOS_LINEAR, dRho_dT=-1., dRho_dS=2.)
   ! Tests for linearized version of searching the layer for neutral surface position
   ! EOS linear in T, uniform alpha
   CS%max_iter = 10
@@ -3324,7 +3324,7 @@ logical function test_nsp(verbose, ns, KoL, KoR, pL, pR, hEff, KoL0, KoR0, pL0, 
       endif
     enddo
   endif
-  if (test_nsp) call MOM_error(FATAL,"test_nsp failed")
+  if (test_nsp) call MOM_error(FATAL, "test_nsp failed")
 
 10 format("ks=",i3," kL=",i3," pL=",f20.16," kR=",i3," pR=",f20.16,a)
 end function test_nsp

@@ -27,8 +27,8 @@ type, public :: particles_gridded
   integer :: ieg !< End i-index of global domain
   integer :: jsg !< Start j-index of global domain
   integer :: jeg !< End j-index of global domain
-  integer :: is_offset=0 !< add to i to recover global i-index
-  integer :: js_offset=0 !< add to j to recover global j-index
+  integer :: is_offset = 0 !< add to i to recover global i-index
+  integer :: js_offset = 0 !< add to j to recover global j-index
   integer :: my_pe !< MPI PE index
   integer :: pe_N !< MPI PE index of PE to the north
   integer :: pe_S !< MPI PE index of PE to the south
@@ -58,8 +58,8 @@ type, public :: particles_gridded
   integer, dimension(:,:), allocatable :: particle_counter_grd !< Counts particles created for naming purposes
   !>@{
   !! Diagnostic handle
-  integer :: id_uo=-1, id_vo=-1, id_unused=-1
-  integer :: id_count=-1, id_chksum=-1
+  integer :: id_uo = -1, id_vo = -1, id_unused = -1
+  integer :: id_count = -1, id_chksum = -1
   !>@}
 
 end type particles_gridded
@@ -79,13 +79,13 @@ type, public :: xyt
   integer :: year  !< Year of this record
   integer :: particle_num  !< Current particle number
   integer(kind=int64) :: id = -1 !< Particle Identifier
-  type(xyt), pointer :: next=>null()  !< Pointer to the next position in the list
+  type(xyt), pointer :: next => null()  !< Pointer to the next position in the list
 end type xyt
 
 !>particle types are data structures describing a tracked particle
 type, public :: particle
-  type(particle), pointer :: prev=>null() !< Previous link in list
-  type(particle), pointer :: next=>null() !< Next link in list
+  type(particle), pointer :: prev => null() !< Previous link in list
+  type(particle), pointer :: next => null() !< Next link in list
 ! State variables (specific to the particles, needed for restarts)
   real :: lon !< Longitude of particle (degree N or unit of grid coordinate)
   real :: lat !< Latitude of particle (degree E or unit of grid coordinate)
@@ -110,19 +110,19 @@ type, public :: particle
   real :: uo                                !< zonal ocean velocity
   real :: vo                                !< meridional ocean velocity
                                                 !< by the particle (m/s)
-  type(xyt), pointer :: trajectory=>null() !< Trajectory for this particle
+  type(xyt), pointer :: trajectory => null() !< Trajectory for this particle
 end type particle
 
 
 !>A buffer structure for message passing
 type, public :: buffer
-  integer :: size=0 !< Size of buffer
+  integer :: size = 0 !< Size of buffer
   real, dimension(:,:), pointer :: data !< Buffer memory
 end type buffer
 
 !> A wrapper for the particle linked list (since an array of pointers is not allowed)
 type, public :: linked_list
-  type(particle), pointer :: first=>null() !< Pointer to the beginning of a linked list of parts
+  type(particle), pointer :: first => null() !< Pointer to the beginning of a linked list of parts
 end type linked_list
 
 
@@ -130,7 +130,7 @@ end type linked_list
 type, public :: particles !; private
   type(particles_gridded) :: grd !< Container with all gridded data
   type(linked_list), dimension(:,:), allocatable :: list !< Linked list of particles
-  type(xyt), pointer :: trajectories=>null() !< A linked list for detached segments of trajectories
+  type(xyt), pointer :: trajectories => null() !< A linked list for detached segments of trajectories
   real :: dt !< Time-step between particle calls
   integer :: current_year !< Current year (years)
   real :: current_yearday !< Current year-day, 1.00-365.99, (days)
@@ -142,25 +142,25 @@ type, public :: particles !; private
   integer :: clock, clock_mom, clock_the, clock_int, clock_cal, clock_com, clock_ini, clock_ior, clock_iow, clock_dia
   integer :: clock_trw, clock_trp
   !>@}
-  logical :: restarted=.false. !< Indicate whether we read state from a restart or not
-  logical :: Runge_not_Verlet=.True. !< True=Runge-Kutta, False=Verlet.
-  logical :: ignore_missing_restart_parts=.False. !< True allows the model to ignore particles missing in the restart.
-  logical :: halo_debugging=.False. !< Use for debugging halos (remove when its working)
-  logical :: save_short_traj=.false. !< True saves only lon,lat,time,id in particle_trajectory.nc
-  logical :: ignore_traj=.False. !< If true, then model does not write trajectory data at all
-  logical :: use_new_predictive_corrective =.False. !< Flag to use Bob's predictive corrective particle scheme
+  logical :: restarted = .false. !< Indicate whether we read state from a restart or not
+  logical :: Runge_not_Verlet = .True. !< True=Runge-Kutta, False=Verlet.
+  logical :: ignore_missing_restart_parts = .False. !< True allows the model to ignore particles missing in the restart.
+  logical :: halo_debugging = .False. !< Use for debugging halos (remove when its working)
+  logical :: save_short_traj = .false. !< True saves only lon,lat,time,id in particle_trajectory.nc
+  logical :: ignore_traj = .False. !< If true, then model does not write trajectory data at all
+  logical :: use_new_predictive_corrective = .False. !< Flag to use Bob's predictive corrective particle scheme
   !Added by Alon
   integer(kind=int64) :: debug_particle_with_id = -1 !< If positive, monitors a part with this id
-  type(buffer), pointer :: obuffer_n=>null() !< Buffer for outgoing parts to the north
-  type(buffer), pointer :: ibuffer_n=>null() !< Buffer for incoming parts from the north
-  type(buffer), pointer :: obuffer_s=>null() !< Buffer for outgoing parts to the south
-  type(buffer), pointer :: ibuffer_s=>null() !< Buffer for incoming parts from the south
-  type(buffer), pointer :: obuffer_e=>null() !< Buffer for outgoing parts to the east
-  type(buffer), pointer :: ibuffer_e=>null() !< Buffer for incoming parts from the east
-  type(buffer), pointer :: obuffer_w=>null() !< Buffer for outgoing parts to the west
-  type(buffer), pointer :: ibuffer_w=>null() !< Buffer for incoming parts from the west
-  type(buffer), pointer :: obuffer_io=>null() !< Buffer for outgoing parts during i/o
-  type(buffer), pointer :: ibuffer_io=>null() !< Buffer for incoming parts during i/o
+  type(buffer), pointer :: obuffer_n => null() !< Buffer for outgoing parts to the north
+  type(buffer), pointer :: ibuffer_n => null() !< Buffer for incoming parts from the north
+  type(buffer), pointer :: obuffer_s => null() !< Buffer for outgoing parts to the south
+  type(buffer), pointer :: ibuffer_s => null() !< Buffer for incoming parts from the south
+  type(buffer), pointer :: obuffer_e => null() !< Buffer for outgoing parts to the east
+  type(buffer), pointer :: ibuffer_e => null() !< Buffer for incoming parts from the east
+  type(buffer), pointer :: obuffer_w => null() !< Buffer for outgoing parts to the west
+  type(buffer), pointer :: ibuffer_w => null() !< Buffer for incoming parts from the west
+  type(buffer), pointer :: obuffer_io => null() !< Buffer for outgoing parts during i/o
+  type(buffer), pointer :: ibuffer_io => null() !< Buffer for incoming parts during i/o
 end type particles
 
 

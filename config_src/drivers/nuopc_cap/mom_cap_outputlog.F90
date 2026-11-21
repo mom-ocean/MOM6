@@ -141,16 +141,16 @@ subroutine outputlog_init(gcomp, mclock, rc)
   character(len=3)        :: chour
   character(len=256)      :: msgString
   character(len=256)      :: value
-  character(len=256)      :: subname='MOM_cap:(outputlog_init)'
+  character(len=256)      :: subname = 'MOM_cap:(outputlog_init)'
   !----------------------------------------------------------------------------
 
   rc = ESMF_SUCCESS
   call ESMF_GridCompGet(gcomp, vm=vm, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
 
   call NUOPC_CompAttributeGet(gcomp, name="mom6_restart_dir", value=value, &
        isPresent=isPresent, isSet=isSet, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
   if (isPresent .and. isSet) then
     restartdir = trim(value)
   else
@@ -164,7 +164,7 @@ subroutine outputlog_init(gcomp, mclock, rc)
 
   call NUOPC_CompAttributeGet(gcomp, name="mom6_output_dir", value=value, &
        isPresent=isPresent, isSet=isSet, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
   if (isPresent .and. isSet) then
     outputdir = trim(value)
   else
@@ -178,7 +178,7 @@ subroutine outputlog_init(gcomp, mclock, rc)
 
   call NUOPC_CompAttributeGet(gcomp, name="mom6_output_fh", value=value, &
        isPresent=isPresent, isSet=isSet, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
   if (isPresent .and. isSet) then
     if (len_trim(value) == 1) then
       output_fh = '0'//trim(value)
@@ -194,19 +194,19 @@ subroutine outputlog_init(gcomp, mclock, rc)
   debug = .false.
   call NUOPC_CompAttributeGet(gcomp, name="debug_outputlog", value=value, &
        isPresent=isPresent, isSet=isSet, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  if (isPresent .and. isSet) debug=(trim(value)=="true")
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
+  if (isPresent .and. isSet) debug = (trim(value) == "true")
   if (debug) call ESMF_LogWrite('MOM_cap:MOM6 output debug ON', ESMF_LOGMSG_INFO)
 
   call ESMF_ClockGet(mclock, currTime=mcurrTime, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
   call ESMF_TimeIntervalSet(tincrement, m=1, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
 
   ! get start hour time offset (ie, fhrot)
   call ESMF_TimeGet(mcurrTime, yy=year, mm=month, dd=day, h=hour, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  if (mod(hour,6) /= 0) then
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
+  if (mod(hour, 6) /= 0) then
     toffset = hour - 6
   else
     toffset = 0
@@ -236,22 +236,22 @@ subroutine outputlog_init(gcomp, mclock, rc)
       alarmoffset = 0*tincrement
     endif
 
-    call AlarmInit(mclock,                  &
-         alarm     = olog(n)%alarm,         &
-         option    = 'nhours',              &
-         opt_n     = olog(n)%opt_n,         &
-         opt_ymd   = -999,                  &
-         RefTime   = mcurrTime+alarmoffset, &
-         alarmname = olog(n)%alarm_name, rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call AlarmInit(mclock, &
+         alarm=olog(n)%alarm, &
+         option='nhours', &
+         opt_n=olog(n)%opt_n, &
+         opt_ymd=-999, &
+         RefTime=mcurrTime+alarmoffset, &
+         alarmname=olog(n)%alarm_name, rc=rc)
+    if (ChkErr(rc, __LINE__, u_FILE_u)) return
 
     call ESMF_AlarmSet(olog(n)%alarm, clock=mclock, rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (ChkErr(rc, __LINE__, u_FILE_u)) return
     write(msgString,'(A)')trim(subname)//' Output alarm '//trim(olog(n)%alarm_name)//' Created & Set'
     call ESMF_LogWrite(trim(msgString), ESMF_LOGMSG_INFO)
     if (debug .and. is_root_pe()) then
       call ESMF_TimeIntervalPrint(olog(n)%filename_fhoffset, options="string", rc=rc)
-      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      if (ChkErr(rc, __LINE__, u_FILE_u)) return
     endif
   enddo
 end subroutine outputlog_init
@@ -275,17 +275,17 @@ subroutine outputlog_run(mclock, atStopTime, rc)
   character(len=40)  :: importexport
   character(len=16)  :: timestr
   character(len=256) :: fname
-  character(len=256) :: subname='MOM_cap:(outputlog_run)'
+  character(len=256) :: subname = 'MOM_cap:(outputlog_run)'
   !----------------------------------------------------------------------------
 
   rc = ESMF_SUCCESS
 
   call ESMF_ClockGet(mclock, startTime=startTime, currTime=currTime, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
   call ESMF_ClockGetNextTime(mclock, nextTime, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
   importexport = get_importexport(currTime, nextTime, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
 
   lstop = .false.
   if (present(atStopTime)) then
@@ -300,16 +300,16 @@ subroutine outputlog_run(mclock, atStopTime, rc)
     write(chour,'(I2.2,A)')freq(n),'h'
     if (chour(1:2) == output_fh(1:2)) then
       call ESMF_ClockGetAlarm(mclock, alarmname=trim(olog(n)%alarm_name), alarm=olog(n)%alarm, rc=rc)
-      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      if (ChkErr(rc, __LINE__, u_FILE_u)) return
       ! when the alarm rings, set file check on next advance and construct the filename
       if (ESMF_AlarmIsRinging(olog(n)%alarm, rc=rc)) then
-        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+        if (ChkErr(rc, __LINE__, u_FILE_u)) return
         call ESMF_AlarmRingerOff(olog(n)%alarm, rc=rc )
-        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+        if (ChkErr(rc, __LINE__, u_FILE_u)) return
         olog(n)%chkfile_nextAdvance = .true.
 
         timestr = get_timestr(nextTime-olog(n)%filename_fhoffset, rc=rc)
-        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+        if (ChkErr(rc, __LINE__, u_FILE_u)) return
         write(olog(n)%filename,'(A)')trim(outputdir)//'ocn_'//trim(timestr)//'.nc'
 
         fname = trim(olog(n)%filename)
@@ -320,9 +320,9 @@ subroutine outputlog_run(mclock, atStopTime, rc)
             inquire(file=fname, size=fsize(1))
           endif
           call ESMF_VMBroadCast(vm, nlen, 1, 0, rc=rc)
-          if (ChkErr(rc,__LINE__,u_FILE_u)) return
+          if (ChkErr(rc, __LINE__, u_FILE_u)) return
           call ESMF_VMBroadCast(vm, fsize, 1, 0, rc=rc)
-          if (ChkErr(rc,__LINE__,u_FILE_u)) return
+          if (ChkErr(rc, __LINE__, u_FILE_u)) return
           olog(n)%createsize = fsize(1)
 
           if (nlen(1) == 0) then
@@ -341,7 +341,7 @@ subroutine outputlog_run(mclock, atStopTime, rc)
       if (olog(n)%chkfile_nextAdvance) then
         fname = trim(olog(n)%filename)
         filecomplete = file_is_complete(fname, olog(n)%use_filesize, olog(n)%createsize, rc)
-        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+        if (ChkErr(rc, __LINE__, u_FILE_u)) return
 
         if (filecomplete) then
           olog(n)%chkfile_nextAdvance = .false.
@@ -349,26 +349,26 @@ subroutine outputlog_run(mclock, atStopTime, rc)
           if (is_root_pe()) then
             call log_restart_fh(currTime-olog(n)%fhoffset, startTime, 'mom6.'//chour, prefixtime=.true., &
                  lastrestart=olog(n)%time_lastrestart, lastoutput=olog(n)%filename, rc=rc)
-            if (ChkErr(rc,__LINE__,u_FILE_u)) return
+            if (ChkErr(rc, __LINE__, u_FILE_u)) return
           endif
         endif
       endif
-      if (debug .and. is_root_pe()) call debug_info(trim(subname)//'  ',trim(olog(n)%filename), &
+      if (debug .and. is_root_pe()) call debug_info(trim(subname)//'  ', trim(olog(n)%filename), &
            olog(n)%chkfile_nextAdvance, olog(n)%createsize, importexport)
 
       if (lstop) then
         ! use prevRing in place of currTime to allow for stopping between averaging intervals
         ! prevring == currTime if stopping on intervals
         call ESMF_AlarmGet(olog(n)%alarm, prevRingTime=prevring, rc=rc)
-        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+        if (ChkErr(rc, __LINE__, u_FILE_u)) return
 
         timestr = get_timestr(prevring-30*freq(n)*tincrement, rc=rc)
-        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+        if (ChkErr(rc, __LINE__, u_FILE_u)) return
         write(olog(n)%filename,'(A)')trim(outputdir)//'ocn_'//trim(timestr)//'.nc'
 
         fname = trim(olog(n)%filename)
         filecomplete = file_is_complete(fname, olog(n)%use_filesize, olog(n)%createsize, rc)
-        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+        if (ChkErr(rc, __LINE__, u_FILE_u)) return
 
         if (filecomplete) then
           olog(n)%chkfile_nextAdvance = .false.
@@ -376,10 +376,10 @@ subroutine outputlog_run(mclock, atStopTime, rc)
           if (is_root_pe()) then
             call log_restart_fh(prevring, startTime, 'mom6.lstop.'//chour, prefixtime=.true., &
                  lastrestart=olog(n)%time_lastrestart, lastoutput=olog(n)%filename, rc=rc)
-            if (ChkErr(rc,__LINE__,u_FILE_u)) return
+            if (ChkErr(rc, __LINE__, u_FILE_u)) return
           endif
         endif
-        if (debug .and. is_root_pe()) call debug_info(trim(subname)//' lstop ',trim(olog(n)%filename), &
+        if (debug .and. is_root_pe()) call debug_info(trim(subname)//' lstop ', trim(olog(n)%filename), &
              olog(n)%chkfile_nextAdvance, olog(n)%createsize, importexport)
 
       endif ! lstop
@@ -406,20 +406,20 @@ subroutine outputlog_restart(mclock, num_rest_files, rc)
   character(len=40)    :: importexport
   logical, allocatable :: allDone(:)
   character(len=8)     :: suffix
-  character(len=256)   :: subname='MOM_cap:(outputlog_restart)'
+  character(len=256)   :: subname = 'MOM_cap:(outputlog_restart)'
   !----------------------------------------------------------------------------
 
   rc = ESMF_SUCCESS
 
   call ESMF_ClockGet(mclock, startTime=startTime, currTime=currTime, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
   call ESMF_ClockGetNextTime(mclock, nextTime, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
   importexport = get_importexport(currTime, nextTime, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
 
   call ESMF_TimeGet(nextTime, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc )
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
   write(timestr,'(I4.4,2(I2.2),A,3(I2.2))') year, month, day,".", hour, minute, seconds
 
   allocate(allDone(1:num_rest_files))
@@ -446,7 +446,7 @@ subroutine outputlog_restart(mclock, num_rest_files, rc)
         nlen(1) = get_unlimited_len(trim(fname))
       endif
       call ESMF_VMBroadCast(vm, nlen, 1, 0, rc=rc)
-      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      if (ChkErr(rc, __LINE__, u_FILE_u)) return
 
       if (nlen(1) > 0) allDone(n) = .true.
       if (debug .and. is_root_pe()) then
@@ -463,7 +463,7 @@ subroutine outputlog_restart(mclock, num_rest_files, rc)
     lastrestart = nextTime
     if (is_root_pe()) then
       call log_restart_fh(nextTime, startTime, 'mom6.res', prefixtime=.true., rc=rc)
-      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      if (ChkErr(rc, __LINE__, u_FILE_u)) return
     endif
   endif
 end subroutine outputlog_restart
@@ -497,9 +497,9 @@ logical function file_is_complete(fname, chk4size, createsize, rc) result(fileco
       inquire(file=fname, size=fsize(1))
     endif
     call ESMF_VMBroadCast(vm, nlen, 1, 0, rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (ChkErr(rc, __LINE__, u_FILE_u)) return
     call ESMF_VMBroadCast(vm, fsize, 1, 0, rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (ChkErr(rc, __LINE__, u_FILE_u)) return
   endif
 
   if (chk4size) then
@@ -541,7 +541,7 @@ character(len=16) function get_timestr(MyTime, rc) result(timestr)
   rc = ESMF_SUCCESS
 
   call ESMF_TimeGet(MyTime, yy=year, mm=month, dd=day, h=hour, m=minute, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
   write(timestr,'(I4.4,4(A,I2.2))')year,'_',month,'_',day,'_',hour,'_',minute
 end function get_timestr
 
@@ -562,9 +562,9 @@ character(len=40) function get_importexport(currTime, nextTime, rc) result(impor
   rc = ESMF_SUCCESS
 
   call ESMF_TimeGet(currTime, timestring=import_timestr, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
   call ESMF_TimeGet(nextTime, timestring=export_timestr, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (ChkErr(rc, __LINE__, u_FILE_u)) return
   importexport = trim(import_timestr)//'  '//trim(export_timestr)
 end function get_importexport
 

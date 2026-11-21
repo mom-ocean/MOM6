@@ -86,7 +86,7 @@ subroutine init_3d_coord_hycom(CS, G, nk, coordinateResolution, target_density, 
   real, dimension(SZI_(G),SZJ_(G),nk+1), intent(in) :: target_density !< Interface target densities [R ~> kg m-3]
   type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
   ! Local variables
-  integer   :: i,j,k
+  integer   :: i, j, k
 
   if (associated(CS)) call MOM_error(FATAL, "init_3d_coord_hycom: CS already associated!")
 
@@ -302,7 +302,7 @@ subroutine build_hycom1_target_anomaly(CS, remapCS, eqn_of_state, nz, ix, jy, de
   real,        optional, intent(in)  :: h_neglect_edge !< A negligibly small width for the purpose of
                                                 !! edge value calculation [H ~> m or kg m-2]
   ! Local variables
-  integer   :: degree,k
+  integer   :: degree, k
   real, dimension(nz)   :: rho_col ! Layer densities in a column [R ~> kg m-3]
   real, dimension(nz,2) :: ppoly_E ! Polynomial edge values [R ~> kg m-3]
   real, dimension(nz,2) :: ppoly_S ! Polynomial edge slopes [R H-1]

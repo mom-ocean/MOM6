@@ -46,8 +46,8 @@ type, public :: oil_tracer_CS ; private
   logical :: Z_IC_file         !< If true, the IC_file is in Z-space.  The default is false.
   real :: oil_source_longitude !< Latitude of source location (geographic) [degrees_N]
   real :: oil_source_latitude  !< Longitude of source location (geographic) [degrees_E]
-  integer :: oil_source_i=-999 !< Local i of source location (computational index location)
-  integer :: oil_source_j=-999 !< Local j of source location (computational index location)
+  integer :: oil_source_i = -999 !< Local i of source location (computational index location)
+  integer :: oil_source_j = -999 !< Local j of source location (computational index location)
   real :: oil_source_rate     !< Rate of oil injection [kg T-1 ~> kg s-1]
   real :: oil_start_year      !< The time at which the oil source starts [years]
   real :: oil_end_year        !< The time at which the oil source ends [years]
@@ -111,7 +111,7 @@ function register_oil_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
                  "The file in which the oil tracer initial values can be "//&
                  "found, or an empty string for internal initialization.", &
                  default=" ")
-  if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
+  if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file, '/') == 0)) then
     ! Add the directory if CS%IC_file is not already a complete path.
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     CS%IC_file = trim(slasher(inputdir))//trim(CS%IC_file)
@@ -240,8 +240,8 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
         CS%oil_source_longitude>=G%geoLonBu(I-1,J) .and. &
         CS%oil_source_latitude<G%geoLatBu(I,J) .and. &
         CS%oil_source_latitude>=G%geoLatBu(I,J-1) ) then
-      CS%oil_source_i=i
-      CS%oil_source_j=j
+      CS%oil_source_i = i
+      CS%oil_source_j = j
     endif
   enddo ; enddo
 
@@ -264,7 +264,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
           if (.not.OK) then
             OK = tracer_Z_init(CS%tr(:,:,:,m), h, CS%IC_file, &
                      trim(name), G, GV, US, -1e34, 0.0) ! CS%land_val(m))
-            if (.not.OK) call MOM_error(FATAL,"initialize_oil_tracer: "//&
+            if (.not.OK) call MOM_error(FATAL, "initialize_oil_tracer: "//&
                     "Unable to read "//trim(name)//" from "//&
                     trim(CS%IC_file)//".")
           endif
@@ -362,12 +362,12 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
       !CS%tr(i,j,k,m) = CS%tr(i,j,k,m) - dt*CS%oil_decay_rate(m)*CS%tr(i,j,k,m) ! Simple
       !CS%tr(i,j,k,m) = CS%tr(i,j,k,m) - min(dt*CS%oil_decay_rate(m),1.)*CS%tr(i,j,k,m) ! Safer
       if (CS%oil_decay_rate(m)>0.) then
-        CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1. - dt*CS%oil_decay_rate(m),0.)*CS%tr(i,j,k,m) ! Safest
+        CS%tr(i,j,k,m) = G%mask2dT(i,j) * max(1. - dt*CS%oil_decay_rate(m), 0.) * CS%tr(i,j,k,m) ! Safest
       elseif (CS%oil_decay_rate(m)<0.) then
         decay_timescale = (12.0 * (3.0**(-(tv%T(i,j,k)-20.0*US%degC_to_C)/10.0*US%degC_to_C))) * &
                           (86400.0*US%s_to_T) ! Timescale [T ~> s]
         ldecay = 1. / decay_timescale ! Rate [T-1 ~> s-1]
-        CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1. - dt*ldecay,0.)*CS%tr(i,j,k,m)
+        CS%tr(i,j,k,m) = G%mask2dT(i,j) * max(1. - dt*ldecay, 0.) * CS%tr(i,j,k,m)
       endif
     enddo ; enddo ; enddo
   enddo
@@ -380,12 +380,12 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
     vol_scale = GV%H_to_m * US%L_to_m**2
     do k=nz, 2, -1
       h_total = h_total + h_new(i,j,k)
-      if (h_total < 10.*GV%m_to_H) k_max=k-1 ! Find bottom most interface that is 10 m above bottom
+      if (h_total < 10.*GV%m_to_H) k_max = k-1 ! Find bottom most interface that is 10 m above bottom
     enddo
     do m=1,CS%ntr
       k = CS%oil_source_k(m)
       if (k>0) then
-        k = min(k,k_max) ! Only insert k or first layer with interface 10 m above bottom
+        k = min(k, k_max) ! Only insert k or first layer with interface 10 m above bottom
         CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt / &
                 (vol_scale * (h_new(i,j,k)+GV%H_subroundoff) * G%areaT(i,j) )
       elseif (k<0) then

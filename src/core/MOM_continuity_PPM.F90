@@ -166,7 +166,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   if (.not.CS%initialized) call MOM_error(FATAL, &
          "MOM_continuity_PPM: Module must be initialized before it is used.")
 
-  x_first = (MOD(G%first_direction,2) == 0)
+  x_first = (MOD(G%first_direction, 2) == 0)
 
   if (present(visc_rem_u) .neqv. present(visc_rem_v)) call MOM_error(FATAL, &
       "MOM_continuity_PPM: Either both visc_rem_u and visc_rem_v or neither "// &
@@ -806,11 +806,11 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                 dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
               else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
 
-              du_lim = 0.499*((dx_W*I_dt - u(I,j,k)) + MIN(0.0,u(I-1,j,k)))
+              du_lim = 0.499*((dx_W*I_dt - u(I,j,k)) + MIN(0.0, u(I-1,j,k)))
               if (du_max_CFL(II,jj) * visc_rem(II,jj,k) > du_lim) &
                 du_max_CFL(II,jj) = du_lim / visc_rem(II,jj,k)
 
-              du_lim = 0.499*((-dx_E*I_dt - u(I,j,k)) + MAX(0.0,u(I+1,j,k)))
+              du_lim = 0.499*((-dx_E*I_dt - u(I,j,k)) + MAX(0.0, u(I+1,j,k)))
               if (du_min_CFL(II,jj) * visc_rem(II,jj,k) < du_lim) &
                 du_min_CFL(II,jj) = du_lim / visc_rem(II,jj,k)
             enddo ; enddo
@@ -846,9 +846,9 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
               else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
 
               du_max_CFL(II,jj) = MIN(du_max_CFL(II,jj), 0.499 * &
-                          ((dx_W*I_dt - u(I,j,k)) + MIN(0.0,u(I-1,j,k))) )
+                          ((dx_W*I_dt - u(I,j,k)) + MIN(0.0, u(I-1,j,k))) )
               du_min_CFL(II,jj) = MAX(du_min_CFL(II,jj), 0.499 * &
-                          ((-dx_E*I_dt - u(I,j,k)) + MAX(0.0,u(I+1,j,k))) )
+                          ((-dx_E*I_dt - u(I,j,k)) + MAX(0.0, u(I+1,j,k))) )
             enddo ; enddo
           enddo
         else
@@ -869,8 +869,8 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
         endif
       endif
       do jj=1,jje ; do II=1,IIe
-        du_max_CFL(II,jj) = max(du_max_CFL(II,jj),0.0)
-        du_min_CFL(II,jj) = min(du_min_CFL(II,jj),0.0)
+        du_max_CFL(II,jj) = max(du_max_CFL(II,jj), 0.0)
+        du_min_CFL(II,jj) = min(du_min_CFL(II,jj), 0.0)
       enddo ; enddo
 
       any_simple_OBC = .false.
@@ -1472,7 +1472,7 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
       j = jsb + jj - 1
 
       if (do_ij(II,jj)) then
-        if ((dt * min(G%IareaT(i,j),G%IareaT(i+1,j))*abs(uh_err(II,jj)) > tol_eta) .or. &
+        if ((dt * min(G%IareaT(i,j), G%IareaT(i+1,j))*abs(uh_err(II,jj)) > tol_eta) .or. &
             (CS%better_iter .and. ((abs(uh_err(II,jj)) > tol_vel * duhdu_tot(II,jj)) .or. &
                                    (abs(uh_err(II,jj)) > uh_err_best(II,jj))) )) then
         !   Use Newton's method, provided it stays bounded.  Otherwise bisect
@@ -1649,8 +1649,8 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
     I = IsbB + II - 1
     j = jsb + jj - 1
     du_CFL(II,jj) = (CFL_min * Idt) * G%dxCu(I,j)
-    duR(II,jj) = min(0.0,du0(II,jj) - du_CFL(II,jj))
-    duL(II,jj) = max(0.0,du0(II,jj) + du_CFL(II,jj))
+    duR(II,jj) = min(0.0, du0(II,jj) - du_CFL(II,jj))
+    duL(II,jj) = max(0.0, du0(II,jj) + du_CFL(II,jj))
     FAmt_L(II,jj) = 0.0 ; FAmt_R(II,jj) = 0.0 ; FAmt_0(II,jj) = 0.0
     uhtot_L(II,jj) = 0.0 ; uhtot_R(II,jj) = 0.0
   enddo ; enddo
@@ -1994,11 +1994,11 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                 dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(i,J), 1000.0*G%dyT(i,j))
                 dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(i,J), 1000.0*G%dyT(i,j+1))
               else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
-              dv_lim = 0.499*((dy_S*I_dt - v(i,J,k)) + MIN(0.0,v(i,J-1,k)))
+              dv_lim = 0.499*((dy_S*I_dt - v(i,J,k)) + MIN(0.0, v(i,J-1,k)))
               if (dv_max_CFL(ii,JJ) * visc_rem(ii,JJ,k) > dv_lim) &
                 dv_max_CFL(ii,JJ) = dv_lim / visc_rem(ii,JJ,k)
 
-              dv_lim = 0.499*((-dy_N*CFL_dt - v(i,J,k)) + MAX(0.0,v(i,J+1,k)))
+              dv_lim = 0.499*((-dy_N*CFL_dt - v(i,J,k)) + MAX(0.0, v(i,J+1,k)))
               if (dv_min_CFL(ii,JJ) * visc_rem(ii,JJ,k) < dv_lim) &
                 dv_min_CFL(ii,JJ) = dv_lim / visc_rem(ii,JJ,k)
             enddo
@@ -2034,9 +2034,9 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                 dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(i,J), 1000.0*G%dyT(i,j+1))
               else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
               dv_max_CFL(ii,JJ) = min(dv_max_CFL(ii,JJ), 0.499 * &
-                          ((dy_S*I_dt - v(i,J,k)) + MIN(0.0,v(i,J-1,k))) )
+                          ((dy_S*I_dt - v(i,J,k)) + MIN(0.0, v(i,J-1,k))) )
               dv_min_CFL(ii,JJ) = max(dv_min_CFL(ii,JJ), 0.499 * &
-                          ((-dy_N*I_dt - v(i,J,k)) + MAX(0.0,v(i,J+1,k))) )
+                          ((-dy_N*I_dt - v(i,J,k)) + MAX(0.0, v(i,J+1,k))) )
             enddo ; enddo
           enddo
         else
@@ -2056,8 +2056,8 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         endif
       endif
       do JJ=1,JJe ; do ii=1,iie
-        dv_max_CFL(ii,JJ) = max(dv_max_CFL(ii,JJ),0.0)
-        dv_min_CFL(ii,JJ) = min(dv_min_CFL(ii,JJ),0.0)
+        dv_max_CFL(ii,JJ) = max(dv_max_CFL(ii,JJ), 0.0)
+        dv_min_CFL(ii,JJ) = min(dv_min_CFL(ii,JJ), 0.0)
       enddo ; enddo
 
       any_simple_OBC = .false.
@@ -2527,7 +2527,7 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
       J = JsbB + JJ - 1
 
       if (do_ij(ii,JJ)) then
-        if ((dt * min(G%IareaT(i,j),G%IareaT(i,j+1))*abs(vh_err(ii,JJ)) > tol_eta) .or. &
+        if ((dt * min(G%IareaT(i,j), G%IareaT(i,j+1))*abs(vh_err(ii,JJ)) > tol_eta) .or. &
             (CS%better_iter .and. ((abs(vh_err(ii,JJ)) > tol_vel * dvhdv_tot(ii,JJ)) .or. &
                                    (abs(vh_err(ii,JJ)) > vh_err_best(ii,JJ))) )) then
           !   Use Newton's method, provided it stays bounded.  Otherwise bisect
@@ -2705,8 +2705,8 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
     i = isb + ii - 1
     J = JsbB + JJ - 1
     dv_CFL(ii,JJ) = (CFL_min * Idt) * G%dyCv(i,J)
-    dvR(ii,JJ) = min(0.0,dv0(ii,JJ) - dv_CFL(ii,JJ))
-    dvL(ii,JJ) = max(0.0,dv0(ii,JJ) + dv_CFL(ii,JJ))
+    dvR(ii,JJ) = min(0.0, dv0(ii,JJ) - dv_CFL(ii,JJ))
+    dvL(ii,JJ) = max(0.0, dv0(ii,JJ) + dv_CFL(ii,JJ))
     FAmt_L(ii,JJ) = 0.0 ; FAmt_R(ii,JJ) = 0.0 ; FAmt_0(ii,JJ) = 0.0
     vhtot_L(ii,JJ) = 0.0 ; vhtot_R(ii,JJ) = 0.0
   enddo ; enddo
@@ -2872,14 +2872,14 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, nkk, h_min, monotonic
   if ((isl-stencil < G%isd) .or. (iel+stencil > G%ied)) then
     write(mesg,'("In MOM_continuity_PPM, PPM_reconstruction_x called with a ", &
                & "x-halo that needs to be increased by ",I0,".")') &
-               stencil + max(G%isd-isl,iel-G%ied)
-    call MOM_error(FATAL,mesg)
+               stencil + max(G%isd-isl, iel-G%ied)
+    call MOM_error(FATAL, mesg)
   endif
   if ((jsl < G%jsd) .or. (jel > G%jed)) then
     write(mesg,'("In MOM_continuity_PPM, PPM_reconstruction_x called with a ", &
                & "y-halo that needs to be increased by ",I0,".")') &
-               max(G%jsd-jsl,jel-G%jed)
-    call MOM_error(FATAL,mesg)
+               max(G%jsd-jsl, jel-G%jed)
+    call MOM_error(FATAL, mesg)
   endif
 
   do ksb=1,nz,nkk
@@ -2907,7 +2907,7 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, nkk, h_min, monotonic
           ! Monotonic constraint, see Eq. B2 in Lin 1994, MWR (132)
           dMx = max(h_in(i+1,j,k), h_in(i-1,j,k), h_in(i,j,k)) - h_in(i,j,k)
           dMn = h_in(i,j,k) - min(h_in(i+1,j,k), h_in(i-1,j,k), h_in(i,j,k))
-          slp(i,j,kk) = sign(1.,slp(i,j,kk)) * min(abs(slp(i,j,kk)), 2. * min(dMx, dMn))
+          slp(i,j,kk) = sign(1., slp(i,j,kk)) * min(abs(slp(i,j,kk)), 2. * min(dMx, dMn))
                   ! * (G%mask2dT(i-1,j) * G%mask2dT(i,j) * G%mask2dT(i+1,j))
         endif
       enddo ; enddo ; enddo
@@ -2917,7 +2917,7 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, nkk, h_min, monotonic
           segment => OBC%segment(n)
           if (.not. segment%on_pe) cycle
           if (segment%is_E_or_W) then
-            I=segment%HI%IsdB
+            I = segment%HI%IsdB
             do kk=1,kke ; do j=segment%HI%jsd,segment%HI%jed
               slp(i+1,j,kk) = 0.0
               slp(i,j,kk) = 0.0
@@ -2948,7 +2948,7 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, nkk, h_min, monotonic
         segment => OBC%segment(n)
         if (.not. segment%on_pe) cycle
         if (segment%direction == OBC_DIRECTION_E) then
-          I=segment%HI%IsdB
+          I = segment%HI%IsdB
           if (associated(segment%h_Reg)) then
             do kk=1,kke ; do j=segment%HI%jsd,segment%HI%jed
               k = ksb + kk - 1
@@ -2969,7 +2969,7 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, nkk, h_min, monotonic
             enddo ; enddo
           endif
         elseif (segment%direction == OBC_DIRECTION_W) then
-          I=segment%HI%IsdB
+          I = segment%HI%IsdB
           if (associated(segment%h_Reg)) then
             do kk=1,kke ; do j=segment%HI%jsd,segment%HI%jed
               k = ksb + kk - 1
@@ -3050,14 +3050,14 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, nkk, h_min, monotonic
   if ((isl < G%isd) .or. (iel > G%ied)) then
     write(mesg,'("In MOM_continuity_PPM, PPM_reconstruction_y called with a ", &
                & "x-halo that needs to be increased by ",I0,".")') &
-               max(G%isd-isl,iel-G%ied)
-    call MOM_error(FATAL,mesg)
+               max(G%isd-isl, iel-G%ied)
+    call MOM_error(FATAL, mesg)
   endif
   if ((jsl-stencil < G%jsd) .or. (jel+stencil > G%jed)) then
     write(mesg,'("In MOM_continuity_PPM, PPM_reconstruction_y called with a ", &
                  & "y-halo that needs to be increased by ",I0,".")') &
-                 stencil + max(G%jsd-jsl,jel-G%jed)
-    call MOM_error(FATAL,mesg)
+                 stencil + max(G%jsd-jsl, jel-G%jed)
+    call MOM_error(FATAL, mesg)
   endif
 
   do ksb=1,nz,nkk
@@ -3085,7 +3085,7 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, nkk, h_min, monotonic
           ! Monotonic constraint, see Eq. B2 in Lin 1994, MWR (132)
           dMx = max(h_in(i,j+1,k), h_in(i,j-1,k), h_in(i,j,k)) - h_in(i,j,k)
           dMn = h_in(i,j,k) - min(h_in(i,j+1,k), h_in(i,j-1,k), h_in(i,j,k))
-          slp(i,j,kk) = sign(1.,slp(i,j,kk)) * min(abs(slp(i,j,kk)), 2. * min(dMx, dMn))
+          slp(i,j,kk) = sign(1., slp(i,j,kk)) * min(abs(slp(i,j,kk)), 2. * min(dMx, dMn))
                   ! * (G%mask2dT(i,j-1) * G%mask2dT(i,j) * G%mask2dT(i,j+1))
         endif
       enddo ; enddo ; enddo
@@ -3095,7 +3095,7 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, nkk, h_min, monotonic
           segment => OBC%segment(n)
           if (.not. segment%on_pe) cycle
           if (segment%is_N_or_S) then
-            J=segment%HI%JsdB
+            J = segment%HI%JsdB
             do kk=1,kke ; do i=segment%HI%isd,segment%HI%ied
               slp(i,j+1,kk) = 0.0
               slp(i,j,kk) = 0.0
@@ -3124,7 +3124,7 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, nkk, h_min, monotonic
         segment => OBC%segment(n)
         if (.not. segment%on_pe) cycle
         if (segment%direction == OBC_DIRECTION_N) then
-          J=segment%HI%JsdB
+          J = segment%HI%JsdB
           if (associated(segment%h_Reg)) then
             do kk=1,kke ; do i=segment%HI%isd,segment%HI%ied
               k = ksb + kk - 1
@@ -3145,7 +3145,7 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, nkk, h_min, monotonic
             enddo ; enddo
           endif
         elseif (segment%direction == OBC_DIRECTION_S) then
-          J=segment%HI%JsdB
+          J = segment%HI%JsdB
           if (associated(segment%h_Reg)) then
             do kk=1,kke ; do i=segment%HI%isd,segment%HI%ied
               k = ksb + kk - 1

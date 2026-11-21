@@ -72,8 +72,8 @@ function register_shelfwave_OBC(param_file, CS, G, US, OBC_Reg)
   call register_OBC(casename, param_file, OBC_Reg)
   call get_param(param_file, mdl, "F_0", f0, &
                  default=0.0, units="s-1", scale=US%T_to_s, do_not_log=.true.)
-  call get_param(param_file, mdl,"SHELFWAVE_X_WAVELENGTH", Lx, &
-                 "Length scale of shelfwave in x-direction.",&
+  call get_param(param_file, mdl, "SHELFWAVE_X_WAVELENGTH", Lx, &
+                 "Length scale of shelfwave in x-direction.", &
                  units=G%x_ax_unit_short, default=100.)
   call get_param(param_file, mdl, "SHELFWAVE_Y_LENGTH_SCALE", Ly, &
                  "Length scale of exponential dropoff of topography in the y-direction.", &
@@ -123,9 +123,9 @@ subroutine shelfwave_initialize_topography( D, G, param_file, max_depth, US )
   real      :: H0   ! The minimum depth of the ocean [Z ~> m]
   integer   :: i, j
 
-  call get_param(param_file, mdl,"SHELFWAVE_Y_LENGTH_SCALE", Ly, &
+  call get_param(param_file, mdl, "SHELFWAVE_Y_LENGTH_SCALE", Ly, &
                  units=G%y_ax_unit_short, default=50., do_not_log=.true.)
-  call get_param(param_file, mdl,"MINIMUM_DEPTH", H0, &
+  call get_param(param_file, mdl, "MINIMUM_DEPTH", H0, &
                  units="m", default=10., scale=US%m_to_Z, do_not_log=.true.)
 
   rLy = 0. ; if (Ly>0.) rLy = 1. / Ly

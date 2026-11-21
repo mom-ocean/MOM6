@@ -939,7 +939,7 @@ logical function check_column_integral(nk, field, known_answer)
   ! Reintegrate and sum roundoff errors
   do k=2,nk
     u_sum = u_sum + field(k)
-    error = error + EPSILON(u_sum)*MAX(ABS(u_sum),ABS(field(k)))
+    error = error + EPSILON(u_sum) * MAX(ABS(u_sum), ABS(field(k)))
   enddo
 
   ! Assign expected answer to either the optional input or 0
@@ -987,7 +987,7 @@ logical function check_column_integrals(nk_1, field_1, nk_2, field_2, missing_va
   do k=2,nk_1
     if (field_1(k) /= misval) then
       u1_sum = u1_sum + field_1(k)
-      error1 = error1 + EPSILON(u1_sum)*MAX(ABS(u1_sum),ABS(field_1(k)))
+      error1 = error1 + EPSILON(u1_sum) * MAX(ABS(u1_sum), ABS(field_1(k)))
     endif
   enddo
 
@@ -998,7 +998,7 @@ logical function check_column_integrals(nk_1, field_1, nk_2, field_2, missing_va
   do k=2,nk_2
     if (field_2(k) /= misval) then
       u2_sum = u2_sum + field_2(k)
-      error2 = error2 + EPSILON(u2_sum)*MAX(ABS(u2_sum),ABS(field_2(k)))
+      error2 = error2 + EPSILON(u2_sum) * MAX(ABS(u2_sum), ABS(field_2(k)))
     endif
   enddo
 

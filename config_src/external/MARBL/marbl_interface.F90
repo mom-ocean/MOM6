@@ -135,12 +135,12 @@ contains
     !> Dummy version of MARBL's add_output_for_GCM() function
     subroutine add_output_for_GCM(self, num_elements, field_name, output_id, field_source, num_levels)
 
-        class (marbl_interface_class), intent(inout) :: self
+        class(marbl_interface_class),  intent(inout) :: self
         integer,                       intent(in)    :: num_elements
         character(len=*),              intent(in)    :: field_name
         integer,                       intent(out)   :: output_id
         character(len=*),              intent(out)   :: field_source
-        integer,             optional, intent(in) :: num_levels
+        integer,             optional, intent(in)    :: num_levels
 
         output_id = 0
         field_source = ""

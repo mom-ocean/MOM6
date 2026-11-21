@@ -466,10 +466,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         call post_data(CS%id_bigtemp_layer_ave, temp_layer_ave, CS%diag)
       endif
       if (CS%id_tosq > 0) then
-         do k=1,nz ; do j=js,je ; do i=is,ie
-           work_3d(i,j,k) = work_3d(i,j,k)*work_3d(i,j,k)
-         enddo ; enddo ; enddo
-         call post_data(CS%id_tosq, work_3d, CS%diag)
+        do k=1,nz ; do j=js,je ; do i=is,ie
+          work_3d(i,j,k) = work_3d(i,j,k)*work_3d(i,j,k)
+        enddo ; enddo ; enddo
+        call post_data(CS%id_tosq, work_3d, CS%diag)
       endif
     endif
   else
@@ -889,8 +889,8 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
 
 !   Uncomment this as a code check
 !    if ((R_in < Rlist(k_lower)) .or. (R_in >= Rlist(k_upper)) .or. (k_upper-k_lower /= 1)) &
-!      write (*,*) "Error: ",R_in," is not between R(",k_lower,") = ", &
-!        Rlist(k_lower)," and R(",k_upper,") = ",Rlist(k_upper),"."
+!      write(*,*) "Error: ",R_in," is not between R(",k_lower,") = ", &
+!          Rlist(k_lower)," and R(",k_upper,") = ",Rlist(k_upper),"."
     k = k_lower
     wt = (Rlist(k_upper) - R_in) / (Rlist(k_upper) - Rlist(k_lower))
     wt_p = 1.0 - wt
@@ -1537,7 +1537,7 @@ subroutine register_time_deriv(lb, f_ptr, deriv_ptr, CS)
          "register_time_deriv: Module must be initialized before it is used.")
 
   if (CS%num_time_deriv >= MAX_FIELDS_) then
-    call MOM_error(WARNING,"MOM_diagnostics:  Attempted to register more than " // &
+    call MOM_error(WARNING, "MOM_diagnostics:  Attempted to register more than " // &
                    "MAX_FIELDS_ diagnostic time derivatives via register_time_deriv.")
     return
   endif
@@ -1999,11 +1999,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
           Time, 'Salinity', 'psu', conversion=US%S_to_ppt, cmor_field_name='so')
     endif
 
-    CS%id_tob = register_diag_field('ocean_model','tob', diag%axesT1, Time, &
+    CS%id_tob = register_diag_field('ocean_model', 'tob', diag%axesT1, Time, &
         long_name='Sea Water Potential Temperature at Sea Floor', &
         standard_name='sea_water_potential_temperature_at_sea_floor', &
         units='degC', conversion=US%C_to_degC)
-    CS%id_sob = register_diag_field('ocean_model','sob',diag%axesT1, Time, &
+    CS%id_sob = register_diag_field('ocean_model', 'sob', diag%axesT1, Time, &
         long_name='Sea Water Salinity at Sea Floor', &
         standard_name='sea_water_salinity_at_sea_floor', &
         units='psu', conversion=US%S_to_ppt)
@@ -2316,8 +2316,8 @@ subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
       long_name='Total volume of liquid ocean', units='m3', conversion=US%Z_to_m*US%L_to_m**2, &
       standard_name='sea_water_volume')
   IDs%id_zos = register_diag_field('ocean_model', 'zos', diag%axesT1, Time, &
-      standard_name = 'sea_surface_height_above_geoid', &
-      long_name= 'Sea surface height above geoid', units='m', conversion=US%Z_to_m)
+      standard_name='sea_surface_height_above_geoid', &
+      long_name='Sea surface height above geoid', units='m', conversion=US%Z_to_m)
   IDs%id_zossq = register_diag_field('ocean_model', 'zossq', diag%axesT1, Time, &
       standard_name='square_of_sea_surface_height_above_geoid', &
       long_name='Square of sea surface height above geoid', units='m2', conversion=US%Z_to_m**2)
@@ -2424,10 +2424,10 @@ subroutine register_transport_diags(Time, G, GV, US, IDs, diag)
       diag%axesCv1, Time, 'Ocean Mass Y Transport Vertical Sum', &
       'kg s-1', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2, &
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
-  IDs%id_dynamics_h = register_diag_field('ocean_model','dynamics_h', &
+  IDs%id_dynamics_h = register_diag_field('ocean_model', 'dynamics_h', &
       diag%axesTl, Time, 'Layer thicknesses prior to horizontal dynamics', &
       thickness_units, conversion=GV%H_to_MKS, v_extensive=.true.)
-  IDs%id_dynamics_h_tendency = register_diag_field('ocean_model','dynamics_h_tendency', &
+  IDs%id_dynamics_h_tendency = register_diag_field('ocean_model', 'dynamics_h_tendency', &
       diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
       trim(thickness_units)//" s-1", conversion=GV%H_to_MKS*US%s_to_T, v_extensive=.true.)
 
@@ -2592,7 +2592,7 @@ subroutine write_static_fields(G, GV, US, tv, diag)
   if (id > 0) call post_data(id, G%mask2dT, diag, .true.)
 
 
-  id = register_static_field('ocean_model','Rho_0', diag%axesNull, &
+  id = register_static_field('ocean_model', 'Rho_0', diag%axesNull, &
        'mean ocean density used with the Boussinesq approximation', &
        'kg m-3', conversion=US%R_to_kg_m3, cmor_field_name='rhozero', &
        cmor_standard_name='reference_sea_water_density_for_boussinesq_approximation', &
@@ -2601,7 +2601,7 @@ subroutine write_static_fields(G, GV, US, tv, diag)
 
   use_temperature = associated(tv%T)
   if (use_temperature) then
-    id = register_static_field('ocean_model','C_p', diag%axesNull, &
+    id = register_static_field('ocean_model', 'C_p', diag%axesNull, &
          'heat capacity of sea water', 'J kg-1 K-1', conversion=US%Q_to_J_kg*US%degC_to_C, &
          cmor_field_name='cpocean', &
          cmor_standard_name='specific_heat_capacity_of_sea_water', &
@@ -2653,26 +2653,26 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, GV, CS)
 
   ! Allocate memory for other dependent diagnostics.
   if (CS%id_KE_adv > 0) then
-    call safe_alloc_ptr(ADp%gradKEu,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(ADp%gradKEv,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%gradKEu, IsdB, IedB, jsd, jed, nz)
+    call safe_alloc_ptr(ADp%gradKEv, isd, ied, JsdB, JedB, nz)
   endif
   if (CS%id_KE_visc > 0) then
-    call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%du_dt_visc, IsdB, IedB, jsd, jed, nz)
+    call safe_alloc_ptr(ADp%dv_dt_visc, isd, ied, JsdB, JedB, nz)
   endif
   if (CS%id_KE_visc_gl90 > 0) then
-    call safe_alloc_ptr(ADp%du_dt_visc_gl90,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(ADp%dv_dt_visc_gl90,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%du_dt_visc_gl90, IsdB, IedB, jsd, jed, nz)
+    call safe_alloc_ptr(ADp%dv_dt_visc_gl90, isd, ied, JsdB, JedB, nz)
   endif
   if (CS%id_KE_stress > 0) then
-    call safe_alloc_ptr(ADp%du_dt_str,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(ADp%dv_dt_str,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%du_dt_str, IsdB, IedB, jsd, jed, nz)
+    call safe_alloc_ptr(ADp%dv_dt_str, isd, ied, JsdB, JedB, nz)
   endif
 
   if (CS%id_KE_dia > 0) then
-    call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
+    call safe_alloc_ptr(ADp%du_dt_dia, IsdB, IedB, jsd, jed, nz)
+    call safe_alloc_ptr(ADp%dv_dt_dia, isd, ied, JsdB, JedB, nz)
+    call safe_alloc_ptr(CDp%diapyc_vel, isd, ied, jsd, jed, nz+1)
   endif
 
   if ((CS%id_PE_to_KE_btbc > 0) .or. (CS%id_KE_BT_PF > 0)) then
@@ -2707,16 +2707,16 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, GV, CS)
                    (CS%id_KE_Coradv_btbc > 0) .or. (CS%id_KE_BT_CF > 0) .or. (CS%id_KE_BT_WD > 0) .or. &
                    (CS%id_KE_SAL > 0) .or. (CS%id_KE_TIDES > 0))
 
-  if (CS%id_h_du_dt > 0) call safe_alloc_ptr(ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
-  if (CS%id_h_dv_dt > 0) call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
+  if (CS%id_h_du_dt > 0) call safe_alloc_ptr(ADp%diag_hu, IsdB, IedB, jsd, jed, nz)
+  if (CS%id_h_dv_dt > 0) call safe_alloc_ptr(ADp%diag_hv, isd, ied, JsdB, JedB, nz)
 
-  if (CS%id_hf_du_dt_2d > 0) call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
-  if (CS%id_hf_dv_dt_2d > 0) call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
-  ! if (CS%id_hf_du_dt > 0) call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
-  ! if (CS%id_hf_dv_dt > 0) call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+  if (CS%id_hf_du_dt_2d > 0) call safe_alloc_ptr(ADp%diag_hfrac_u, IsdB, IedB, jsd, jed, nz)
+  if (CS%id_hf_dv_dt_2d > 0) call safe_alloc_ptr(ADp%diag_hfrac_v, isd, ied, JsdB, JedB, nz)
+  ! if (CS%id_hf_du_dt > 0) call safe_alloc_ptr(ADp%diag_hfrac_u, IsdB, IedB, jsd, jed, nz)
+  ! if (CS%id_hf_dv_dt > 0) call safe_alloc_ptr(ADp%diag_hfrac_v, isd, ied, JsdB, JedB, nz)
 
-  if (CS%id_uhGM_Rlay > 0) call safe_alloc_ptr(CDp%uhGM,IsdB,IedB,jsd,jed,nz)
-  if (CS%id_vhGM_Rlay > 0) call safe_alloc_ptr(CDp%vhGM,isd,ied,JsdB,JedB,nz)
+  if (CS%id_uhGM_Rlay > 0) call safe_alloc_ptr(CDp%uhGM, IsdB, IedB, jsd, jed, nz)
+  if (CS%id_vhGM_Rlay > 0) call safe_alloc_ptr(CDp%vhGM, isd, ied, JsdB, JedB, nz)
 
 end subroutine set_dependent_diagnostics
 

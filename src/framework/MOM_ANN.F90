@@ -120,7 +120,7 @@ subroutine ANN_init(CS, NNfile)
     write(layer_num_str, '(I0)') i-1
     fieldname = trim('A') // trim(layer_num_str)
     call MOM_read_data(NNfile, fieldname, CS%layers(i)%A, &
-                        (/1,1,1,1/),(/CS%layers(i)%output_width,CS%layers(i)%input_width,1,1/))
+                        (/1,1,1,1/), (/CS%layers(i)%output_width,CS%layers(i)%input_width,1,1/))
 
     ! Reading bias b
     fieldname = trim('b') // trim(layer_num_str)
@@ -176,11 +176,11 @@ subroutine ANN_allocate(CS, num_layers, layer_sizes)
     allocate( CS%layers(l)%b(CS%layers(l)%output_width) )
 
     CS%parameters = CS%parameters &
-       + CS%layer_sizes(l) * CS%layer_sizes(l+1) & ! For weights
-       + CS%layer_sizes(l+1) ! For bias
+        + CS%layer_sizes(l) * CS%layer_sizes(l+1) & ! For weights
+        + CS%layer_sizes(l+1) ! For bias
   enddo
   CS%parameters = CS%parameters &
-     + 2 * CS%layer_sizes(CS%num_layers) ! For output normalization
+      + 2 * CS%layer_sizes(CS%num_layers) ! For output normalization
 
 end subroutine ANN_allocate
 
@@ -332,7 +332,7 @@ subroutine ANN_apply_vector_oi(x, y, CS)
     call layer_apply_oi(x_1, x_2, CS%layers(i))
     call layer_apply_oi(x_2, x_1, CS%layers(i+1))
   enddo
-  if (mod(CS%num_layers,2)==0) then
+  if (mod(CS%num_layers, 2) == 0) then
     call layer_apply_oi(x_1, x_2, CS%layers(CS%num_layers-1))
     ! Un-normalize output
     do o = 1, CS%layer_sizes(CS%num_layers)
@@ -402,7 +402,7 @@ subroutine ANN_apply_array_sio(nij, x, y, CS)
     call layer_apply_sio(nij, x_1, x_2, CS%layers(l))
     call layer_apply_sio(nij, x_2, x_1, CS%layers(l+1))
   enddo
-  if (mod(CS%num_layers,2)==0) then
+  if (mod(CS%num_layers, 2) == 0) then
     call layer_apply_sio(nij, x_1, x_2, CS%layers(CS%num_layers-1))
     ! Un-normalize output
     do o = 1, CS%layer_sizes(CS%num_layers)
@@ -568,7 +568,7 @@ logical function ANN_unit_tests(verbose)
   ! Identity ANN for one input
   allocate( y(1) )
   call ANN_allocate(ANN, 2, [1,1])
-  call set_layer(ANN, 1, reshape([1.],[1,1]), [0.], .false.)
+  call set_layer(ANN, 1, reshape([1.], [1,1]), [0.], .false.)
   call ANN_apply([1.], y, ANN)
   call test%real_scalar(y(1), 1., 'Scalar identity')
   deallocate( y )
@@ -658,7 +658,7 @@ logical function ANN_unit_tests(verbose)
                                   0.,0.,1.,0., &
                                   0.,0.,0.,1.], [4,4]), [1.,1.,1.,1.], .true.)
   call set_layer(ANN, 2, reshape([1.,1.,1.,1.], [1,4]), [3.], .false.)
-  call set_layer(ANN, 3, reshape([1.],[1,1]), [0.], .false.)
+  call set_layer(ANN, 3, reshape([1.], [1,1]), [0.], .false.)
   call set_input_normalization(ANN, means=[4.,4.,4.,4.], norms=[0.5,0.5,0.5,0.5])
   call set_output_normalization(ANN, norms=[2.], means=[-10.])
   call ANN_apply_vector_orig([0.,2.,4.,6.], y, ANN)
@@ -671,7 +671,7 @@ logical function ANN_unit_tests(verbose)
 
   allocate( y2(1,2) )
   ! as above with v5 of ANN_apply applied to 2d inputs, x(space,feature)
-  call ANN_apply_array_sio(2, reshape([0.,1.,2.,3.,4.,5.,6.,7.],[2,4]), y2, ANN)
+  call ANN_apply_array_sio(2, reshape([0.,1.,2.,3.,4.,5.,6.,7.], [2,4]), y2, ANN)
   call test%real_arr(2, y2, [2.,5.], 'Rectifier+summation+bias+norms 4-layer array v2')
   deallocate( y2 )
 
@@ -697,8 +697,8 @@ logical function ANN_unit_tests(verbose)
       x2(i,:) = x(:)
     enddo
     call ANN_apply_array_sio(20, x2, y2, ANN)
-    rand_res = rand_res .or. maxval( abs( maxval(y2(:,:),1) - y_good(:) ) ) > 0. ! Check results from array v2 = v1
-    rand_res = rand_res .or. maxval( abs( minval(y2(:,:),1) - y_good(:) ) ) > 0. ! Check results from array v2 = v1
+    rand_res = rand_res .or. maxval( abs( maxval(y2(:,:), 1) - y_good(:) ) ) > 0. ! Check results from array v2 = v1
+    rand_res = rand_res .or. maxval( abs( minval(y2(:,:), 1) - y_good(:) ) ) > 0. ! Check results from array v2 = v1
     deallocate( x, y, y_good, x2, y2 )
     call ANN_end(ANN)
   enddo

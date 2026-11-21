@@ -734,7 +734,7 @@ subroutine set_up_ALE_sponge_field_fixed(sp_val, G, GV, f_ptr, CS,  &
     write(mesg,'("Increase MAX_FIELDS_ to at least ",I0," in MOM_memory.h or decrease &
            &the number of fields to be damped in the call to &
            &initialize_ALE_sponge." )') CS%fldno
-    call MOM_error(FATAL,"set_up_ALE_sponge_field: "//mesg)
+    call MOM_error(FATAL, "set_up_ALE_sponge_field: "//mesg)
   endif
 
   ! stores the reference profile
@@ -799,7 +799,7 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
   if (CS%fldno > MAX_FIELDS_) then
     write(mesg, '("Increase MAX_FIELDS_ to at least ",I0," in MOM_memory.h or decrease "//&
         &"the number of fields to be damped in the call to initialize_ALE_sponge." )') CS%fldno
-    call MOM_error(FATAL,"set_up_ALE_sponge_field: "//mesg)
+    call MOM_error(FATAL, "set_up_ALE_sponge_field: "//mesg)
   endif
   ! get a unique time interp id for this field. If sponge data is on-grid, then setup
   ! to only read on the computational domain
@@ -897,7 +897,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   integer, dimension(4) :: fld_sz
   if (.not.associated(CS)) return
 
-  override =.true.
+  override = .true.
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   isdB = G%isdB ; iedB = G%iedB ; jsdB = G%jsdB ; jedB = G%jedB
@@ -1093,7 +1093,7 @@ subroutine apply_ALE_sponge(h, tv, dt, G, GV, US, CS, Time)
 
       allocate(mask_u(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
       do j=G%jsc,G%jec ; do I=G%iscB,G%iecB
-        mask_u(I,j,1:nz_data) = min(mask_z(i,j,1:nz_data),mask_z(i+1,j,1:nz_data))
+        mask_u(I,j,1:nz_data) = min(mask_z(i,j,1:nz_data), mask_z(i+1,j,1:nz_data))
       enddo ; enddo
 
       allocate( dz_src(nz_data) )
@@ -1140,7 +1140,7 @@ subroutine apply_ALE_sponge(h, tv, dt, G, GV, US, CS, Time)
 
       allocate(mask_v(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
       do J=G%jscB,G%jecB ; do i=G%isc,G%iec
-        mask_v(i,J,1:nz_data) = min(mask_z(i,j,1:nz_data),mask_z(i,j+1,1:nz_data))
+        mask_v(i,J,1:nz_data) = min(mask_z(i,j,1:nz_data), mask_z(i,j+1,1:nz_data))
       enddo ; enddo
 
       allocate( dz_src(nz_data) )

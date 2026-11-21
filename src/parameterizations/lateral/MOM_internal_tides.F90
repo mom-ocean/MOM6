@@ -442,7 +442,7 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
                    ! It can be 1 point smaller if teleport is not used.
   endif
 
-  call pass_var(cn,G%Domain)
+  call pass_var(cn, G%Domain)
 
   if (CS%debug) then
     call hchksum(cn(:,:,1), "CN mode 1", G%HI, haloshift=0, unscale=US%L_to_m*US%s_to_T)
@@ -507,7 +507,7 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
     endif
   endif ! add tke forcing
 
-  if (CS%init_forcing_only) CS%add_tke_forcing=.false.
+  if (CS%init_forcing_only) CS%add_tke_forcing = .false.
 
   if (CS%debug) then
     call hchksum(CS%En(:,:,:,1,1), "EnergyIntTides af input", G%HI, haloshift=0, unscale=HZ2_T2_to_J_m2)
@@ -851,8 +851,8 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
         ! Calculate wavenumber magnitude
         freq2 = CS%frequency(fr)**2
 
-        f2 = (0.25*(G%CoriolisBu(I,J) + G%CoriolisBu(max(I-1,1),max(J-1,1)) + &
-                    G%CoriolisBu(I,max(J-1,1)) + G%CoriolisBu(max(I-1,1),J)))**2
+        f2 = (0.25*(G%CoriolisBu(I,J) + G%CoriolisBu(max(I-1, 1),max(J-1, 1)) + &
+                    G%CoriolisBu(I,max(J-1, 1)) + G%CoriolisBu(max(I-1, 1),J)))**2
         Kmag2 = (freq2 - f2) / ((cn(i,j,m)**2) + (cn_subRO**2))
 
 
@@ -1072,7 +1072,7 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
 
   if (query_averaging_enabled(CS%diag)) then
     ! Output internal wave modal wave speeds
-    if (CS%id_cg1 > 0) call post_data(CS%id_cg1, cn(:,:,1),CS%diag)
+    if (CS%id_cg1 > 0) call post_data(CS%id_cg1, cn(:,:,1), CS%diag)
     do m=1,CS%nMode ; if (CS%id_cn(m) > 0) call post_data(CS%id_cn(m), cn(:,:,m), CS%diag) ; enddo
 
     ! Output two-dimensional diagnostics
@@ -1266,9 +1266,9 @@ subroutine sum_En(G, GV, US, CS, En, label)
   CS%En_sum = En_sum
   !En_sum_diff = En_sum - CS%En_sum
   !if (CS%En_sum /= 0.0) then
-  !  En_sum_pdiff= (En_sum_diff/CS%En_sum)*100.0
+  !  En_sum_pdiff = (En_sum_diff/CS%En_sum)*100.0
   !else
-  !  En_sum_pdiff= 0.0
+  !  En_sum_pdiff = 0.0
   !endif
   !! Print to screen
   !if (is_root_pe()) then
@@ -1505,7 +1505,7 @@ subroutine get_lowmode_diffusivity(G, GV, h, tv, US, h_bot, k_bot, j, N2_lay, N2
   logical :: non_Bous ! fully Non-Boussinesq
   integer :: i, k, is, ie, nz
 
-  is=G%isc ; ie=G%iec ; nz=GV%ke
+  is = G%isc ; ie = G%iec ; nz = GV%ke
 
   non_Bous = .not.(GV%Boussinesq .or. GV%semi_Boussinesq)
 
@@ -1640,39 +1640,39 @@ subroutine get_lowmode_diffusivity(G, GV, h, tv, US, h_bot, k_bot, j, N2_lay, N2
     ! verif integrals
     if (CS%debug) then
       if (G%mask2dT(i,j) > 0.0) then
-         verif_N = 0.0
-         verif_N2 = 0.0
-         verif_bbl = 0.0
-         verif_stl1 = 0.0
-         verif_stl2 = 0.0
-         do k=1,nz
-           verif_N = verif_N + (profile_N(k) * h(i,j,k))
-           verif_N2 = verif_N2 + (profile_N2(k) * h(i,j,k))
-           verif_bbl = verif_bbl + (profile_BBL(k) * h(i,j,k))
-           verif_stl1 = verif_stl1 + (profile_StLaurent(k) * h(i,j,k))
-           verif_stl2 = verif_stl2 + (profile_StLaurent_slope(k) * h(i,j,k))
-         enddo
+        verif_N = 0.0
+        verif_N2 = 0.0
+        verif_bbl = 0.0
+        verif_stl1 = 0.0
+        verif_stl2 = 0.0
+        do k=1,nz
+          verif_N = verif_N + (profile_N(k) * h(i,j,k))
+          verif_N2 = verif_N2 + (profile_N2(k) * h(i,j,k))
+          verif_bbl = verif_bbl + (profile_BBL(k) * h(i,j,k))
+          verif_stl1 = verif_stl1 + (profile_StLaurent(k) * h(i,j,k))
+          verif_stl2 = verif_stl2 + (profile_StLaurent_slope(k) * h(i,j,k))
+        enddo
 
-         if (abs(verif_N -1.0) > threshold_verif) then
-           write(stdout,'(I0,", ",I0,F18.10)') i, j, verif_N
-           call MOM_error(FATAL, "mismatch integral for N profile")
-         endif
-         if (abs(verif_N2 -1.0) > threshold_verif) then
-           write(stdout,'(I0,", ",I0,F18.10)') i, j, verif_N2
-           call MOM_error(FATAL, "mismatch integral for N2 profile")
-         endif
-         if (abs(verif_bbl -1.0) > threshold_verif) then
-           write(stdout,'(I0,", ",I0,F18.10)') i, j, verif_bbl
-           call MOM_error(FATAL, "mismatch integral for bbl profile")
-         endif
-         if (abs(verif_stl1 -1.0) > threshold_verif) then
-           write(stdout,'(I0,", ",I0,F18.10)') i, j, verif_stl1
-           call MOM_error(FATAL, "mismatch integral for stl1 profile")
-         endif
-         if (abs(verif_stl2 -1.0) > threshold_verif) then
-           write(stdout,'(I0,", ",I0,F18.10)') i, j, verif_stl2
-           call MOM_error(FATAL, "mismatch integral for stl2 profile")
-         endif
+        if (abs(verif_N -1.0) > threshold_verif) then
+          write(stdout,'(I0,", ",I0,F18.10)') i, j, verif_N
+          call MOM_error(FATAL, "mismatch integral for N profile")
+        endif
+        if (abs(verif_N2 -1.0) > threshold_verif) then
+          write(stdout,'(I0,", ",I0,F18.10)') i, j, verif_N2
+          call MOM_error(FATAL, "mismatch integral for N2 profile")
+        endif
+        if (abs(verif_bbl -1.0) > threshold_verif) then
+          write(stdout,'(I0,", ",I0,F18.10)') i, j, verif_bbl
+          call MOM_error(FATAL, "mismatch integral for bbl profile")
+        endif
+        if (abs(verif_stl1 -1.0) > threshold_verif) then
+          write(stdout,'(I0,", ",I0,F18.10)') i, j, verif_stl1
+          call MOM_error(FATAL, "mismatch integral for stl1 profile")
+        endif
+        if (abs(verif_stl2 -1.0) > threshold_verif) then
+          write(stdout,'(I0,", ",I0,F18.10)') i, j, verif_stl2
+          call MOM_error(FATAL, "mismatch integral for stl2 profile")
+        endif
 
       endif
     endif
@@ -1977,7 +1977,7 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
     else
       ! Use PPM
       do i=is,ie
-        call PPM_angular_advect(En2d(i,:),CFL_ang(i,j,:),Flux_E(i,:),NAngle,dt,stencil)
+        call PPM_angular_advect(En2d(i,:), CFL_ang(i,j,:), Flux_E(i,:), NAngle, dt, stencil)
       enddo
     endif
 
@@ -2034,9 +2034,9 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
       Em = En2d(a-1)*I_Angle_size
       ! Calculate and bound edge values of energy density.
       aL = ( 5.*Ec + ( 2.*Em - Ep ) ) * oneSixth ! H3 estimate
-      aL = max( min(Ec,Em), aL) ; aL = min( max(Ec,Em), aL) ! Bound
+      aL = max( min(Ec, Em), aL) ; aL = min( max(Ec, Em), aL) ! Bound
       aR = ( 5.*Ec + ( 2.*Ep - Em ) ) * oneSixth ! H3 estimate
-      aR = max( min(Ec,Ep), aR) ; aR = min( max(Ec,Ep), aR) ! Bound
+      aR = max( min(Ec, Ep), aR) ; aR = min( max(Ec, Ep), aR) ! Bound
       dA = aR - aL
       if ((Ep-Ec)*(Ec-Em) <= 0.) then
         aL = Ec ; aR = Ec    ! use PCM for local extremum
@@ -2060,9 +2060,9 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
       Em = En2d(a)  *I_Angle_size
       ! Calculate and bound edge values of energy density.
       aL = ( 5.*Ec + ( 2.*Em - Ep ) ) * oneSixth ! H3 estimate
-      aL = max( min(Ec,Em), aL) ; aL = min( max(Ec,Em), aL) ! Bound
+      aL = max( min(Ec, Em), aL) ; aL = min( max(Ec, Em), aL) ! Bound
       aR = ( 5.*Ec + ( 2.*Ep - Em ) ) * oneSixth ! H3 estimate
-      aR = max( min(Ec,Ep), aR) ; aR = min( max(Ec,Ep), aR) ! Bound
+      aR = max( min(Ec, Ep), aR) ; aR = min( max(Ec, Ep), aR) ! Bound
       dA = aR - aL
       if ((Ep-Ec)*(Ec-Em) <= 0.) then
         aL = Ec ; aR = Ec    ! use PCM for local extremum
@@ -2620,7 +2620,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
   ! Check to make sure no energy gets onto land (only run for debugging)
   ! do a=1,NAngle ; do j=jsc,jec ; do i=isc,iec
   !   if (En(i,j,a) > 0.001 .and. G%mask2dT(i,j) == 0) then
-  !     write (mesg,*) 'En=', HZ2_T2_to_J_m2*En(i,j,a), 'a=', a, 'ig_g=',i+G%idg_offset, 'jg_g=',j+G%jdg_offset
+  !     write(mesg,*) 'En=', HZ2_T2_to_J_m2*En(i,j,a), 'a=', a, 'ig_g=', i+G%idg_offset, 'jg_g=', j+G%jdg_offset
   !     call MOM_error(FATAL, "reflect: Energy detected out of bounds: "//trim(mesg), .true.)
   !   endif
   ! enddo ; enddo ; enddo
@@ -2678,7 +2678,7 @@ subroutine turning_latitude(En, NAngle, freq2, CS, G, LB)
   ! init local arrays
   angle_c(:,:) = CS%nullangle
   angle_wall = 0
-  angle_wall0 =0
+  angle_wall0 = 0
   angle_r = 0
   angle_r0 = 0
   angle_to_wall = 0
@@ -2842,9 +2842,9 @@ subroutine teleport(En, NAngle, CS, G, LB)
               cos_normal = cos(angle_wall + 0.25*TwoPi)
               sin_normal = sin(angle_wall + 0.25*TwoPi)
               ! find preferred zonal offset based on shelf/ridge angle
-              ios = int(sign(1.,cos_normal))
+              ios = int(sign(1., cos_normal))
               ! find preferred meridional offset based on shelf/ridge angle
-              jos = int(sign(1.,sin_normal))
+              jos = int(sign(1., sin_normal))
               ! find receptive ocean cell in direction of offset
               if (.not. pref_cell(i+ios,j+jos)) then
                 En(i,j,a) = En(i,j,a) - En_tele
@@ -3018,14 +3018,14 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd, adv_limiter)
   if ((isl-stencil < G%isd) .or. (iel+stencil > G%ied)) then
     write(mesg,'("In MOM_internal_tides, PPM_reconstruction_x called with a ", &
                & "x-halo that needs to be increased by ",I0,".")') &
-               stencil + max(G%isd-isl,iel-G%ied)
-    call MOM_error(FATAL,mesg)
+               stencil + max(G%isd-isl, iel-G%ied)
+    call MOM_error(FATAL, mesg)
   endif
   if ((jsl < G%jsd) .or. (jel > G%jed)) then
     write(mesg,'("In MOM_internal_tides, PPM_reconstruction_x called with a ", &
                & "y-halo that needs to be increased by ",I0,".")') &
-               max(G%jsd-jsl,jel-G%jed)
-    call MOM_error(FATAL,mesg)
+               max(G%jsd-jsl, jel-G%jed)
+    call MOM_error(FATAL, mesg)
   endif
 
   if (simple_2nd) then
@@ -3045,7 +3045,7 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd, adv_limiter)
         ! Monotonic constraint, see Eq. B2 in Lin 1994, MWR (132)
         dMx = max(h_in(i+1,j), h_in(i-1,j), h_in(i,j)) - h_in(i,j)
         dMn = h_in(i,j) - min(h_in(i+1,j), h_in(i-1,j), h_in(i,j))
-        slp(i,j) = sign(1.,slp(i,j)) * min(abs(slp(i,j)), 2. * min(dMx, dMn))
+        slp(i,j) = sign(1., slp(i,j)) * min(abs(slp(i,j)), 2. * min(dMx, dMn))
                 ! * (G%mask2dT(i-1,j) * G%mask2dT(i,j) * G%mask2dT(i+1,j))
       endif
     enddo ; enddo
@@ -3105,14 +3105,14 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd, adv_limiter)
   if ((isl < G%isd) .or. (iel > G%ied)) then
     write(mesg,'("In MOM_internal_tides, PPM_reconstruction_y called with a ", &
                & "x-halo that needs to be increased by ",I0,".")') &
-               max(G%isd-isl,iel-G%ied)
-    call MOM_error(FATAL,mesg)
+               max(G%isd-isl, iel-G%ied)
+    call MOM_error(FATAL, mesg)
   endif
   if ((jsl-stencil < G%jsd) .or. (jel+stencil > G%jed)) then
     write(mesg,'("In MOM_internal_tides, PPM_reconstruction_y called with a ", &
                  & "y-halo that needs to be increased by ",I0,".")') &
-                 stencil + max(G%jsd-jsl,jel-G%jed)
-    call MOM_error(FATAL,mesg)
+                 stencil + max(G%jsd-jsl, jel-G%jed)
+    call MOM_error(FATAL, mesg)
   endif
 
   if (simple_2nd) then
@@ -3132,7 +3132,7 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd, adv_limiter)
         ! Monotonic constraint, see Eq. B2 in Lin 1994, MWR (132)
         dMx = max(h_in(i,j+1), h_in(i,j-1), h_in(i,j)) - h_in(i,j)
         dMn = h_in(i,j) - min(h_in(i,j+1), h_in(i,j-1), h_in(i,j))
-        slp(i,j) = sign(1.,slp(i,j)) * min(abs(slp(i,j)), 2. * min(dMx, dMn))
+        slp(i,j) = sign(1., slp(i,j)) * min(abs(slp(i,j)), 2. * min(dMx, dMn))
                 ! * (G%mask2dT(i,j-1) * G%mask2dT(i,j) * G%mask2dT(i,j+1))
       endif
     enddo ; enddo
@@ -3290,8 +3290,8 @@ subroutine register_int_tide_restarts(G, GV, US, param_file, CS, restart_CS)
   units = "J m-2"
   if (Boussinesq) units = "m3 s-2"
 
-  allocate (angles(num_angle))
-  allocate (freqs(num_freq))
+  allocate(angles(num_angle))
+  allocate(freqs(num_freq))
 
   do a=1,num_angle ; angles(a) = a ; enddo
   do fr=1,num_freq ; freqs(fr) = fr ; enddo
@@ -3886,7 +3886,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   do m=1,CS%nMode
     write(var_name, '("cn_mode",i1)') m
     write(var_descript, '("Baroclinic (eigen) speed of mode ",i1)') m
-    CS%id_cn(m) = register_diag_field('ocean_model',var_name, diag%axesT1, &
+    CS%id_cn(m) = register_diag_field('ocean_model', var_name, diag%axesT1, &
                  Time, var_descript, 'm s-1', conversion=US%L_T_to_m_s)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
   enddo

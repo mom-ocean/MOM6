@@ -401,7 +401,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       if (CS%visc_drag) &
         call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI, &
                       unscale=GV%H_to_mks*US%s_to_T, scalar_pair=.true.)
-      call hchksum(mass, 'MEKE mass',G%HI,haloshift=1, unscale=US%RZ_to_kg_m2)
+      call hchksum(mass, 'MEKE mass', G%HI, haloshift=1, unscale=US%RZ_to_kg_m2)
       call hchksum(drag_rate_visc, 'MEKE drag_rate_visc', G%HI, unscale=GV%H_to_mks*US%s_to_T)
       call hchksum(bottomFac2, 'MEKE bottomFac2', G%HI)
       call hchksum(barotrFac2, 'MEKE barotrFac2', G%HI)
@@ -691,10 +691,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
           Kh_here = max(0., CS%MEKE_Kh) + &
               CS%KhMEKE_Fac*0.5*(MEKE%Kh(i,j)+MEKE%Kh(i+1,j))
         if (allocated(MEKE%Kh_diff)) &
-          Kh_here = max(0.,CS%MEKE_Kh) + &
+          Kh_here = max(0., CS%MEKE_Kh) + &
               CS%KhMEKE_Fac*0.5*(MEKE%Kh_diff(i,j)+MEKE%Kh_diff(i+1,j))
         Inv_Kh_max = 2.0*sdt * ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
-                     max(G%IareaT(i,j),G%IareaT(i+1,j)))
+                     max(G%IareaT(i,j), G%IareaT(i+1,j)))
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
         Kh_u(I,j) = Kh_here
 
@@ -706,10 +706,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       !$OMP parallel do default(shared) firstprivate(Kh_here) private(Inv_Kh_max)
       do J=js-1,je ; do i=is,ie
         if (allocated(MEKE%Kh)) &
-          Kh_here = max(0.,CS%MEKE_Kh) + CS%KhMEKE_Fac * 0.5*(MEKE%Kh(i,j)+MEKE%Kh(i,j+1))
+          Kh_here = max(0., CS%MEKE_Kh) + CS%KhMEKE_Fac * 0.5*(MEKE%Kh(i,j)+MEKE%Kh(i,j+1))
         if (allocated(MEKE%Kh_diff)) &
-          Kh_here = max(0.,CS%MEKE_Kh) + CS%KhMEKE_Fac * 0.5*(MEKE%Kh_diff(i,j)+MEKE%Kh_diff(i,j+1))
-        Inv_Kh_max = 2.0*sdt * ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * max(G%IareaT(i,j),G%IareaT(i,j+1)))
+          Kh_here = max(0., CS%MEKE_Kh) + CS%KhMEKE_Fac * 0.5*(MEKE%Kh_diff(i,j)+MEKE%Kh_diff(i,j+1))
+        Inv_Kh_max = 2.0*sdt * ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * max(G%IareaT(i,j), G%IareaT(i,j+1)))
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
         Kh_v(i,J) = Kh_here
 
@@ -867,7 +867,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     call ML_MEKE_calculate_features(G, GV, US, CS, MEKE%Rd_dx_h, u, v, tv, h, dt, features_array)
     call predict_MEKE(G, US, CS, SIZE(h), Time, features_array, MEKE%MEKE)
   case default
-    call MOM_error(FATAL,"Invalid method specified for calculating EKE")
+    call MOM_error(FATAL, "Invalid method specified for calculating EKE")
   end select
 
   if (CS%MEKE_positive) then
@@ -889,7 +889,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
           !$OMP parallel do default(shared)
           do j=js,je ; do i=is,ie
             MEKE%Kh(i,j) = (CS%MEKE_KhCoeff * &
-                       sqrt(2.*max(0.,barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j)) ) * &
+                       sqrt(2.*max(0., barotrFac2(i,j)*MEKE%MEKE(i,j))*G%areaT(i,j)) ) * &
                        min(MEKE%Rd_dx_h(i,j), 1.0)
           enddo ; enddo
         else
@@ -912,13 +912,13 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   ! Calculate viscosity for the main model to use
   if (CS%viscosity_coeff_Ku /=0.) then
     do j=js,je ; do i=is,ie
-      MEKE%Ku(i,j) = CS%viscosity_coeff_Ku * sqrt(2.*max(0.,MEKE%MEKE(i,j))) * LmixScale(i,j)
+      MEKE%Ku(i,j) = CS%viscosity_coeff_Ku * sqrt(2.*max(0., MEKE%MEKE(i,j))) * LmixScale(i,j)
     enddo ; enddo
   endif
 
   if (CS%viscosity_coeff_Au /=0.) then
     do j=js,je ; do i=is,ie
-      MEKE%Au(i,j) = CS%viscosity_coeff_Au * sqrt(2.*max(0.,MEKE%MEKE(i,j))) * LmixScale(i,j)**3
+      MEKE%Au(i,j) = CS%viscosity_coeff_Au * sqrt(2.*max(0., MEKE%MEKE(i,j))) * LmixScale(i,j)**3
     enddo ; enddo
   endif
 
@@ -1307,12 +1307,12 @@ subroutine MEKE_lengthScales_0d(CS, US, area, beta, depth_tot, Rd_dx, SN, EKE, &
     endif
     if (CS%use_min_lscale) then
       LmixScale = CS%lscale_maxval
-      if (CS%aDeform*Ldeform > 0.) LmixScale = min(LmixScale,CS%aDeform*Ldeform)
-      if (CS%aFrict *Lfrict  > 0.) LmixScale = min(LmixScale,CS%aFrict *Lfrict)
-      if (CS%aRhines*Lrhines > 0.) LmixScale = min(LmixScale,CS%aRhines*Lrhines)
-      if (CS%aEady  *Leady   > 0.) LmixScale = min(LmixScale,CS%aEady  *Leady)
-      if (CS%aGrid  *Lgrid   > 0.) LmixScale = min(LmixScale,CS%aGrid  *Lgrid)
-      if (CS%Lfixed          > 0.) LmixScale = min(LmixScale,CS%Lfixed)
+      if (CS%aDeform*Ldeform > 0.) LmixScale = min(LmixScale, CS%aDeform*Ldeform)
+      if (CS%aFrict *Lfrict  > 0.) LmixScale = min(LmixScale, CS%aFrict *Lfrict)
+      if (CS%aRhines*Lrhines > 0.) LmixScale = min(LmixScale, CS%aRhines*Lrhines)
+      if (CS%aEady  *Leady   > 0.) LmixScale = min(LmixScale, CS%aEady  *Leady)
+      if (CS%aGrid  *Lgrid   > 0.) LmixScale = min(LmixScale, CS%aGrid  *Lgrid)
+      if (CS%Lfixed          > 0.) LmixScale = min(LmixScale, CS%Lfixed)
     else
       LmixScale = 0.
       if (CS%aDeform*Ldeform > 0.) LmixScale = LmixScale + 1./(CS%aDeform*Ldeform)
@@ -1624,34 +1624,34 @@ logical function MEKE_init(Time, G, GV, US, param_file, diag, dbcomms_CS, CS, ME
 ! Register fields for output from this module.
   CS%diag => diag
   CS%id_MEKE = register_diag_field('ocean_model', 'MEKE', diag%axesT1, Time, &
-     'Mesoscale Eddy Kinetic Energy', 'm2 s-2', conversion=US%L_T_to_m_s**2)
+      'Mesoscale Eddy Kinetic Energy', 'm2 s-2', conversion=US%L_T_to_m_s**2)
   if (.not. allocated(MEKE%MEKE)) CS%id_MEKE = -1
   CS%id_Kh = register_diag_field('ocean_model', 'MEKE_KH', diag%axesT1, Time, &
-     'MEKE derived diffusivity', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
+      'MEKE derived diffusivity', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
   if (.not. allocated(MEKE%Kh)) CS%id_Kh = -1
   CS%id_Ku = register_diag_field('ocean_model', 'MEKE_KU', diag%axesT1, Time, &
-     'MEKE derived lateral viscosity', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
+      'MEKE derived lateral viscosity', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
   if (.not. allocated(MEKE%Ku)) CS%id_Ku = -1
   CS%id_Au = register_diag_field('ocean_model', 'MEKE_AU', diag%axesT1, Time, &
-     'MEKE derived lateral biharmonic viscosity', 'm4 s-1', conversion=US%L_to_m**4*US%s_to_T)
+      'MEKE derived lateral biharmonic viscosity', 'm4 s-1', conversion=US%L_to_m**4*US%s_to_T)
   if (.not. allocated(MEKE%Au)) CS%id_Au = -1
   CS%id_Ue = register_diag_field('ocean_model', 'MEKE_Ue', diag%axesT1, Time, &
-     'MEKE derived eddy-velocity scale', 'm s-1', conversion=US%L_T_to_m_s)
+      'MEKE derived eddy-velocity scale', 'm s-1', conversion=US%L_T_to_m_s)
   if (.not. allocated(MEKE%MEKE)) CS%id_Ue = -1
   CS%id_Ub = register_diag_field('ocean_model', 'MEKE_Ub', diag%axesT1, Time, &
-     'MEKE derived bottom eddy-velocity scale', 'm s-1', conversion=US%L_T_to_m_s)
+      'MEKE derived bottom eddy-velocity scale', 'm s-1', conversion=US%L_T_to_m_s)
   if (.not. allocated(MEKE%MEKE)) CS%id_Ub = -1
   CS%id_Ut = register_diag_field('ocean_model', 'MEKE_Ut', diag%axesT1, Time, &
-     'MEKE derived barotropic eddy-velocity scale', 'm s-1', conversion=US%L_T_to_m_s)
+      'MEKE derived barotropic eddy-velocity scale', 'm s-1', conversion=US%L_T_to_m_s)
   if (.not. allocated(MEKE%MEKE)) CS%id_Ut = -1
   CS%id_src = register_diag_field('ocean_model', 'MEKE_src', diag%axesT1, Time, &
-     'MEKE energy source', 'm2 s-3', conversion=(US%L_T_to_m_s**2)*US%s_to_T)
+      'MEKE energy source', 'm2 s-3', conversion=(US%L_T_to_m_s**2)*US%s_to_T)
 
   CS%id_src_adv = register_diag_field('ocean_model', 'MEKE_src_adv', diag%axesT1, Time, &
-     'MEKE energy source from the horizontal advection of MEKE', 'm2 s-3', conversion=(US%L_T_to_m_s**2)*US%s_to_T)
+      'MEKE energy source from the horizontal advection of MEKE', 'm2 s-3', conversion=(US%L_T_to_m_s**2)*US%s_to_T)
 
   CS%id_src_btm_drag = register_diag_field('ocean_model', 'MEKE_src_btm_drag', diag%axesT1, Time, &
-     'MEKE energy source from the bottom drag acting on MEKE', 'm2 s-3', conversion=(US%L_T_to_m_s**2)*US%s_to_T)
+      'MEKE energy source from the bottom drag acting on MEKE', 'm2 s-3', conversion=(US%L_T_to_m_s**2)*US%s_to_T)
 
   if (CS%MEKE_K4 >= 0.) &
     CS%id_src_mom_K4 = register_diag_field('ocean_model', 'MEKE_src_mom_K4', &
@@ -1674,44 +1674,44 @@ logical function MEKE_init(Time, G, GV, US, param_file, diag, dbcomms_CS, CS, ME
         'm2 s-3', conversion=(US%L_T_to_m_s**2)*US%s_to_T)
 
   CS%id_decay = register_diag_field('ocean_model', 'MEKE_decay', diag%axesT1, Time, &
-     'MEKE decay rate', 's-1', conversion=US%s_to_T)
+      'MEKE decay rate', 's-1', conversion=US%s_to_T)
   CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', diag%axesT1, Time, &
-     'MEKE energy available from thickness mixing', &
-     'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
+      'MEKE energy available from thickness mixing', &
+      'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
   if (.not. allocated(MEKE%GM_src)) CS%id_GM_src = -1
-  CS%id_mom_src = register_diag_field('ocean_model', 'MEKE_mom_src',diag%axesT1, Time, &
-     'MEKE energy available from momentum', &
-     'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
+  CS%id_mom_src = register_diag_field('ocean_model', 'MEKE_mom_src', diag%axesT1, Time, &
+      'MEKE energy available from momentum', &
+      'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
   if (.not. allocated(MEKE%mom_src)) CS%id_mom_src = -1
-  CS%id_mom_src_bh = register_diag_field('ocean_model', 'MEKE_mom_src_bh',diag%axesT1, Time, &
-     'MEKE energy available from the biharmonic dissipation of momentum', &
-     'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
+  CS%id_mom_src_bh = register_diag_field('ocean_model', 'MEKE_mom_src_bh', diag%axesT1, Time, &
+      'MEKE energy available from the biharmonic dissipation of momentum', &
+      'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
   if (.not. allocated(MEKE%mom_src_bh)) CS%id_mom_src_bh = -1
-  CS%id_GME_snk = register_diag_field('ocean_model', 'MEKE_GME_snk',diag%axesT1, Time, &
-     'MEKE energy lost to GME backscatter', &
-     'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
+  CS%id_GME_snk = register_diag_field('ocean_model', 'MEKE_GME_snk', diag%axesT1, Time, &
+      'MEKE energy lost to GME backscatter', &
+      'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
   if (.not. allocated(MEKE%GME_snk)) CS%id_GME_snk = -1
   CS%id_Le = register_diag_field('ocean_model', 'MEKE_Le', diag%axesT1, Time, &
-     'Eddy mixing length used in the MEKE derived eddy diffusivity', 'm', conversion=US%L_to_m)
+      'Eddy mixing length used in the MEKE derived eddy diffusivity', 'm', conversion=US%L_to_m)
   CS%id_Lrhines = register_diag_field('ocean_model', 'MEKE_Lrhines', diag%axesT1, Time, &
-     'Rhines length scale used in the MEKE derived eddy diffusivity', 'm', conversion=US%L_to_m)
+      'Rhines length scale used in the MEKE derived eddy diffusivity', 'm', conversion=US%L_to_m)
   CS%id_Leady = register_diag_field('ocean_model', 'MEKE_Leady', diag%axesT1, Time, &
-     'Eady length scale used in the MEKE derived eddy diffusivity', 'm', conversion=US%L_to_m)
+      'Eady length scale used in the MEKE derived eddy diffusivity', 'm', conversion=US%L_to_m)
   CS%id_gamma_b = register_diag_field('ocean_model', 'MEKE_gamma_b', diag%axesT1, Time, &
-     'Ratio of bottom-projected eddy velocity to column-mean eddy velocity', 'nondim')
+      'Ratio of bottom-projected eddy velocity to column-mean eddy velocity', 'nondim')
   CS%id_gamma_t = register_diag_field('ocean_model', 'MEKE_gamma_t', diag%axesT1, Time, &
-     'Ratio of barotropic eddy velocity to column-mean eddy velocity', 'nondim')
+      'Ratio of barotropic eddy velocity to column-mean eddy velocity', 'nondim')
 
   if (CS%kh_flux_enabled) then
     CS%id_KhMEKE_u = register_diag_field('ocean_model', 'KHMEKE_u', diag%axesCu1, Time, &
-     'Zonal diffusivity of MEKE', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
+        'Zonal diffusivity of MEKE', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
     CS%id_KhMEKE_v = register_diag_field('ocean_model', 'KHMEKE_v', diag%axesCv1, Time, &
-     'Meridional diffusivity of MEKE', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
+        'Meridional diffusivity of MEKE', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
   endif
 
   if (CS%MEKE_equilibrium_restoring) then
     CS%id_MEKE_equilibrium = register_diag_field('ocean_model', 'MEKE_equilibrium', diag%axesT1, Time, &
-     'Equilibrated Mesoscale Eddy Kinetic Energy', 'm2 s-2', conversion=US%L_T_to_m_s**2)
+        'Equilibrated Mesoscale Eddy Kinetic Energy', 'm2 s-2', conversion=US%L_T_to_m_s**2)
   endif
 
   CS%id_clock_pass = cpu_clock_id('(Ocean continuity halo updates)', grain=CLOCK_ROUTINE)
@@ -1783,14 +1783,14 @@ subroutine ML_MEKE_init(diag, G, US, Time, param_file, dbcomms_CS, CS)
   call get_param(param_file, mdl, "EKE_BACKEND", backend, &
                  "The computational backend to use for EKE inference (CPU or GPU)", default="GPU")
   call get_param(param_file, mdl, "EKE_MODEL", model_filename, &
-                 "Filename of the a saved pyTorch model to use", fail_if_missing = .true.)
+                 "Filename of the a saved pyTorch model to use", fail_if_missing=.true.)
   call get_param(param_file, mdl, "EKE_MAX", CS%eke_max, &
                  "Maximum value of EKE allowed when inferring EKE", &
                  units="m2 s-2", default=2., scale=US%m_s_to_L_T**2)
 
   ! Set the machine learning model
   if (dbcomms_CS%colocated) then
-    if (modulo(PE_here(),dbcomms_CS%colocated_stride) == 0) then
+    if (modulo(PE_here(), dbcomms_CS%colocated_stride) == 0) then
       db_return_code = CS%client%set_model_from_file(CS%model_key, trim(inputdir)//trim(model_filename), &
                                                   "TORCH", backend, batch_size=batch_size)
     endif
@@ -1815,15 +1815,15 @@ subroutine ML_MEKE_init(diag, G, US, Time, param_file, dbcomms_CS, CS)
 
   ! Diagnostics for ML_MEKE
   CS%id_mke = register_diag_field('ocean_model', 'MEKE_MKE', diag%axesT1, Time, &
-     'Surface mean (resolved) kinetic energy used in MEKE', 'm2 s-2', conversion=US%L_T_to_m_s**2)
-  CS%id_slope_z= register_diag_field('ocean_model', 'MEKE_slope_z', diag%axesT1, Time, &
-     'Vertically averaged isopyncal slope magnitude used in MEKE', 'nondim', conversion=US%Z_to_L)
-  CS%id_slope_x= register_diag_field('ocean_model', 'MEKE_slope_x', diag%axesCui, Time, &
-     'Isopycnal slope in the x-direction used in MEKE', 'nondim', conversion=US%Z_to_L)
-  CS%id_slope_y= register_diag_field('ocean_model', 'MEKE_slope_y', diag%axesCvi, Time, &
-     'Isopycnal slope in the y-direction used in MEKE', 'nondim', conversion=US%Z_to_L)
+      'Surface mean (resolved) kinetic energy used in MEKE', 'm2 s-2', conversion=US%L_T_to_m_s**2)
+  CS%id_slope_z = register_diag_field('ocean_model', 'MEKE_slope_z', diag%axesT1, Time, &
+      'Vertically averaged isopyncal slope magnitude used in MEKE', 'nondim', conversion=US%Z_to_L)
+  CS%id_slope_x = register_diag_field('ocean_model', 'MEKE_slope_x', diag%axesCui, Time, &
+      'Isopycnal slope in the x-direction used in MEKE', 'nondim', conversion=US%Z_to_L)
+  CS%id_slope_y = register_diag_field('ocean_model', 'MEKE_slope_y', diag%axesCvi, Time, &
+      'Isopycnal slope in the y-direction used in MEKE', 'nondim', conversion=US%Z_to_L)
   CS%id_rv = register_diag_field('ocean_model', 'MEKE_RV', diag%axesT1, Time, &
-     'Surface relative vorticity used in MEKE', 's-1', conversion=US%s_to_T)
+      'Surface relative vorticity used in MEKE', 's-1', conversion=US%s_to_T)
 
 end subroutine ML_MEKE_init
 
@@ -1933,10 +1933,10 @@ subroutine ML_MEKE_calculate_features(G, GV, US, CS, Rd_dx_h, u, v, tv, h, dt, f
 
 
   ! Construct the feature array
-  features_array(:,mke_idx) = pack(mke,.true.)
-  features_array(:,slope_z_idx) = pack(slope_z,.true.)
-  features_array(:,rd_dx_z_idx) = pack(Rd_dx_h,.true.)
-  features_array(:,rv_idx) = pack(rv_z_t,.true.)
+  features_array(:,mke_idx) = pack(mke, .true.)
+  features_array(:,slope_z_idx) = pack(slope_z, .true.)
+  features_array(:,rd_dx_z_idx) = pack(Rd_dx_h, .true.)
+  features_array(:,rv_idx) = pack(rv_z_t, .true.)
 
   if (CS%id_rv>0) call post_data(CS%id_rv, rv_z, CS%diag)
   if (CS%id_mke>0) call post_data(CS%id_mke, mke, CS%diag)
@@ -2054,18 +2054,18 @@ subroutine MEKE_alloc_register_restart(HI, US, param_file, MEKE, restart_CS)
   integer :: isd, ied, jsd, jed
 
 ! Determine whether this module will be used
-  useMEKE = .false. ; call read_param(param_file,"USE_MEKE",useMEKE)
+  useMEKE = .false. ; call read_param(param_file, "USE_MEKE", useMEKE)
 
 ! Read these parameters to determine what should be in the restarts
-  MEKE_GMcoeff = -1. ; call read_param(param_file,"MEKE_GMCOEFF",MEKE_GMcoeff)
-  MEKE_FrCoeff = -1. ; call read_param(param_file,"MEKE_FRCOEFF",MEKE_FrCoeff)
-  MEKE_bhFrCoeff = -1. ; call read_param(param_file,"MEKE_bhFRCOEFF",MEKE_bhFrCoeff)
-  MEKE_GMEcoeff = -1. ; call read_param(param_file,"MEKE_GMECOEFF",MEKE_GMEcoeff)
-  MEKE_KhCoeff = 1. ; call read_param(param_file,"MEKE_KHCOEFF",MEKE_KhCoeff)
-  MEKE_viscCoeff_Ku = 0. ; call read_param(param_file,"MEKE_VISCOSITY_COEFF_KU",MEKE_viscCoeff_Ku)
-  MEKE_viscCoeff_Au = 0. ; call read_param(param_file,"MEKE_VISCOSITY_COEFF_AU",MEKE_viscCoeff_Au)
-  Use_KH_in_MEKE = .false. ; call read_param(param_file,"USE_KH_IN_MEKE", Use_KH_in_MEKE)
-  sqg_use_MEKE = .false. ; call read_param(param_file,"SQG_USE_MEKE", sqg_use_MEKE)
+  MEKE_GMcoeff = -1. ; call read_param(param_file, "MEKE_GMCOEFF", MEKE_GMcoeff)
+  MEKE_FrCoeff = -1. ; call read_param(param_file, "MEKE_FRCOEFF", MEKE_FrCoeff)
+  MEKE_bhFrCoeff = -1. ; call read_param(param_file, "MEKE_bhFRCOEFF", MEKE_bhFrCoeff)
+  MEKE_GMEcoeff = -1. ; call read_param(param_file, "MEKE_GMECOEFF", MEKE_GMEcoeff)
+  MEKE_KhCoeff = 1. ; call read_param(param_file, "MEKE_KHCOEFF", MEKE_KhCoeff)
+  MEKE_viscCoeff_Ku = 0. ; call read_param(param_file, "MEKE_VISCOSITY_COEFF_KU", MEKE_viscCoeff_Ku)
+  MEKE_viscCoeff_Au = 0. ; call read_param(param_file, "MEKE_VISCOSITY_COEFF_AU", MEKE_viscCoeff_Au)
+  Use_KH_in_MEKE = .false. ; call read_param(param_file, "USE_KH_IN_MEKE", Use_KH_in_MEKE)
+  sqg_use_MEKE = .false. ; call read_param(param_file, "SQG_USE_MEKE", sqg_use_MEKE)
 
   if (.not. useMEKE) return
 

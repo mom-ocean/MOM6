@@ -260,7 +260,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   convert = new_sim  ! Thicknesses are initialized in height units in most cases.
   if (from_Z_file) then
     ! Initialize thickness and T/S from z-coordinate data in a file.
-    if (.NOT.use_temperature) call MOM_error(FATAL,"MOM_initialize_state : "//&
+    if (.NOT.use_temperature) call MOM_error(FATAL, "MOM_initialize_state : "//&
        "use_temperature must be true if INIT_LAYERS_FROM_Z_FILE is true")
 
     call MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, &
@@ -330,7 +330,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                 just_read=just_read)
       case ("benchmark"); call benchmark_initialize_thickness(dz, depth_tot, G, GV, US, PF, &
                                    tv%eqn_of_state, tv%P_Ref, just_read=just_read)
-      case ("Neverworld","Neverland"); call Neverworld_initialize_thickness(dz, depth_tot, &
+      case ("Neverworld", "Neverland"); call Neverworld_initialize_thickness(dz, depth_tot, &
                                    G, GV, US, PF, tv%P_Ref)
       case ("search"); call initialize_thickness_search()
       case ("circle_obcs"); call circle_obcs_initialize_thickness(dz, depth_tot, G, GV, US, PF, &
@@ -423,7 +423,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                     tv%S, dz, G, GV, US, PF, just_read=just_read)
         case ("rossby_front")
           if (convert .and. .not.just_read) call dz_to_thickness(dz, tv, h, G, GV, US)
-          call Rossby_front_initialize_temperature_salinity ( tv%T, tv%S, h, &
+          call Rossby_front_initialize_temperature_salinity( tv%T, tv%S, h, &
                                         G, GV, US, PF, just_read=just_read)
         case ("SCM_CVMix_tests"); call SCM_CVMix_tests_TS_init(tv%T, tv%S, dz, &
                                            G, GV, US, PF, just_read=just_read)
@@ -431,7 +431,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                  dz, just_read=just_read)
         case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, GV, PF, &
                                 just_read=just_read)
-        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
+        case default ; call MOM_error(FATAL, "MOM_initialize_state: "//&
                "Unrecognized Temp & salt configuration "//trim(config))
       end select
     endif
@@ -994,7 +994,7 @@ subroutine initialize_thickness_uniform(h, depth_tot, G, GV, param_file, just_re
 
   call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
 
-  if (G%max_depth<=0.) call MOM_error(FATAL,"initialize_thickness_uniform: "// &
+  if (G%max_depth<=0.) call MOM_error(FATAL, "initialize_thickness_uniform: "// &
       "MAXIMUM_DEPTH has a nonsensical value! Was it set?")
 
   do k=1,nz
@@ -1161,7 +1161,7 @@ end subroutine initialize_thickness_param
 
 !> Search density space for location of layers (not implemented!)
 subroutine initialize_thickness_search
-  call MOM_error(FATAL,"  MOM_state_initialization.F90, initialize_thickness_search: NOT IMPLEMENTED")
+  call MOM_error(FATAL, "  MOM_state_initialization.F90, initialize_thickness_search: NOT IMPLEMENTED")
 end subroutine initialize_thickness_search
 
 !> Depress the sea-surface based on an initial condition file
@@ -1449,7 +1449,7 @@ subroutine calc_sfc_displacement(PF, G, GV, US, mass_shelf, tv, h)
     endif
   enddo ; enddo
   call MOM_mesg("Calling depress_surface ")
-  call depress_surface(h, G, GV, US, PF, tv, just_read=.false.,z_top_shelf=z_top_shelf)
+  call depress_surface(h, G, GV, US, PF, tv, just_read=.false., z_top_shelf=z_top_shelf)
   call MOM_mesg("Finishing calling depress_surface ")
 end subroutine calc_sfc_displacement
 
@@ -1728,13 +1728,13 @@ subroutine initialize_velocity_circular(u, v, G, GV, US, param_file, just_read)
   dpi = acos(0.0)*2.0 ! pi
 
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    psi1 = my_psi(I,j)
-    psi2 = my_psi(I,j-1)
+    psi1 = my_psi(I, j)
+    psi2 = my_psi(I, j-1)
     u(I,j,k) = (psi1 - psi2) / G%dy_Cu(I,j) ! *(circular_max_u*G%len_lon/(2.0*dpi))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    psi1 = my_psi(i,J)
-    psi2 = my_psi(i-1,J)
+    psi1 = my_psi(i, J)
+    psi2 = my_psi(i-1, J)
     v(i,J,k) = (psi2 - psi1) / G%dx_Cv(i,J) ! *(circular_max_u*G%len_lon/(2.0*dpi))
   enddo ; enddo ; enddo
 
@@ -1801,7 +1801,7 @@ subroutine initialize_temp_salt_from_file(T, S, G, GV, US, param_file, just_read
   if (just_read) return ! All run-time parameters have been read, so return.
 
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
-     " initialize_temp_salt_from_file: Unable to open "//trim(filename))
+      " initialize_temp_salt_from_file: Unable to open "//trim(filename))
 
   ! Read the temperatures and salinities from netcdf files.
   call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain, scale=US%degC_to_C)
@@ -1811,7 +1811,7 @@ subroutine initialize_temp_salt_from_file(T, S, G, GV, US, param_file, just_read
     salt_filename = trim(inputdir)//trim(salt_file)
   endif
   if (.not.file_exists(salt_filename, G%Domain)) call MOM_error(FATAL, &
-     " initialize_temp_salt_from_file: Unable to open "//trim(salt_filename))
+      " initialize_temp_salt_from_file: Unable to open "//trim(salt_filename))
 
   call MOM_read_data(salt_filename, salt_var, S(:,:,:), G%Domain, scale=US%ppt_to_S)
 
@@ -1856,8 +1856,8 @@ subroutine initialize_temp_salt_from_profile(T, S, G, GV, US, param_file, just_r
   inputdir = slasher(inputdir)
   filename = trim(inputdir)//trim(ts_file)
   call log_param(param_file, mdl, "INPUTDIR/TS_FILE", filename)
-   if (.not.file_exists(filename)) call MOM_error(FATAL, &
-     " initialize_temp_salt_from_profile: Unable to open "//trim(filename))
+  if (.not.file_exists(filename)) call MOM_error(FATAL, &
+      " initialize_temp_salt_from_profile: Unable to open "//trim(filename))
 
   ! Read the temperatures and salinities from a netcdf file.
   call MOM_read_data(filename, temp_var, T0(:), scale=US%degC_to_C)
@@ -2046,10 +2046,10 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
   real, allocatable, dimension(:,:,:) :: eta ! The target interface heights [Z ~> m].
   real, allocatable, dimension(:,:,:) :: dz  ! The target interface thicknesses in height units [Z ~> m]
 
-  real, dimension (SZI_(G),SZJ_(G),SZK_(GV)) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     tmp, &    ! A temporary array for temperatures [C ~> degC] or other tracers.
     tmp2      ! A temporary array for salinities [S ~> ppt]
-  real, dimension (SZI_(G),SZJ_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G)) :: &
     tmp_2d    ! A temporary array for mixed layer densities [R ~> kg m-3]
   real, allocatable, dimension(:,:,:) :: tmp_T ! A temporary array for reading sponge target temperatures
                                     ! on the vertical grid of the input file  [C ~> degC]
@@ -2159,10 +2159,10 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
       if (.not.file_exists(filename, G%Domain)) &
         call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
 
-      call MOM_read_vector(filename, Idamp_u_var,Idamp_v_var,Idamp_u(:,:),Idamp_v(:,:), G%Domain, scale=US%T_to_s)
+      call MOM_read_vector(filename, Idamp_u_var, Idamp_v_var, Idamp_u(:,:), Idamp_v(:,:), G%Domain, scale=US%T_to_s)
     else
       !      call MOM_error(FATAL, "Must provide SPONGE_IDAMP_U_var and SPONGE_IDAMP_V_var")
-      call pass_var(Idamp,G%Domain)
+      call pass_var(Idamp, G%Domain)
       do j=G%jsc,G%jec
         do i=G%iscB,G%iecB
           Idamp_u(I,j) = 0.5*(Idamp(i,j)+Idamp(i+1,j))
@@ -2245,9 +2245,9 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
 
   if  (use_ALE) then ! ALE mode
     if (.not. time_space_interp_sponge) then
-      call field_size(filename,eta_var,siz,no_domain=.true.)
+      call field_size(filename, eta_var, siz, no_domain=.true.)
       if (siz(1) /= G%ieg-G%isg+1 .or. siz(2) /= G%jeg-G%jsg+1) &
-        call MOM_error(FATAL,"initialize_sponge_file: Array size mismatch for sponge data.")
+        call MOM_error(FATAL, "initialize_sponge_file: Array size mismatch for sponge data.")
       nz_data = siz(3)-1
       allocate(eta(isd:ied,jsd:jed,nz_data+1))
       allocate(dz(isd:ied,jsd:jed,nz_data))
@@ -2297,7 +2297,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
         allocate(tmp_v(isd:ied,G%JsdB:G%JedB,nz_data))
         call MOM_read_vector(filename, u_var, v_var, tmp_u(:,:,:), tmp_v(:,:,:), G%Domain, scale=US%m_s_to_L_T)
         call set_up_ALE_sponge_vel_field(tmp_u, tmp_v, G, GV, u, v, ALE_CSp)
-        deallocate(tmp_u,tmp_v)
+        deallocate(tmp_u, tmp_v)
       endif
     else
       ! Initialize sponges without supplying sponge grid
@@ -2324,7 +2324,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
     endif
   endif
 
-  if (sponge_uv .and. .not. use_ALE) call MOM_error(FATAL,'initialize_sponges_file: '// &
+  if (sponge_uv .and. .not. use_ALE) call MOM_error(FATAL, 'initialize_sponges_file: '// &
                        'UV damping to target values only available in ALE mode')
 
 
@@ -2445,9 +2445,9 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
   if (.not.file_exists(filename, G%Domain)) &
     call MOM_error(FATAL, " initialize_oda_incupd: Unable to open "//trim(filename))
 
-  call field_size(filename,h_var,siz,no_domain=.true.)
+  call field_size(filename, h_var, siz, no_domain=.true.)
   if (siz(1) /= G%ieg-G%isg+1 .or. siz(2) /= G%jeg-G%jsg+1) &
-         call MOM_error(FATAL,"initialize_oda_incupd_file: Array size mismatch for oda data.")
+    call MOM_error(FATAL, "initialize_oda_incupd_file: Array size mismatch for oda data.")
   nz_data = siz(3)
   ! get h increments
   allocate(hoda(isd:ied,jsd:jed,nz_data))
@@ -2593,7 +2593,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                          ! correct_thickness is false [Z ~> m]
   character(len=40) :: potemp_var, salin_var
 
-  integer, parameter :: niter=10   ! number of iterations for t/s adjustment to layer density
+  integer, parameter :: niter = 10 ! number of iterations for t/s adjustment to layer density
   logical            :: adjust_temperature = .true.  ! fit t/s to target densities
   real    :: temp_land_fill  ! A temperature value to use for land points [C ~> degC]
   real    :: salt_land_fill  ! A salinity value to use for land points [C ~> degC]
@@ -2661,7 +2661,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
 
-  PI_180=atan(1.0)/45.
+  PI_180 = atan(1.0)/45.
 
   if (.not.just_read) call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
   if (.not.just_read) call log_version(PF, mdl, version, "")
@@ -2981,7 +2981,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
 
     ! Next find interface positions using local arrays
     ! nlevs contains the number of valid data points in each column
-    nlevs = int(sum(mask_z,dim=3))
+    nlevs = int(sum(mask_z, dim=3))
 
     ! Rb contains the layer interface densities
     allocate(Rb(nz+1))
@@ -3186,7 +3186,7 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, Z_bot, zi, G, GV, US, nlevs, n
     if (nkml > 0) then ; do K=2,nkml+1
       zi_(K) = max(hml*((1.0-real(K))/real(nkml)), Z_bot(i,j))
     enddo ; endif
-    do K=nz,max(nkml+2,2),-1
+    do K = nz, max(nkml+2, 2), -1
       if (zi_(K) < zi_(K+1) + eps_Z) zi_(K) = zi_(K+1) + eps_Z
       if (zi_(K) > -1.0*hml)  zi_(K) = max(-1.0*hml, Z_bot(i,j))
     enddo
@@ -3206,7 +3206,7 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   type(thermo_var_ptrs),     intent(in)    :: tv   !< Thermodynamics structure.
 
   ! Local variables
-  integer, parameter :: nk=5
+  integer, parameter :: nk = 5
   real, dimension(nk) :: T, T_t, T_b ! Temperatures [C ~> degC]
   real, dimension(nk) :: S, S_t, S_b ! Salinities [S ~> ppt]
   real, dimension(nk) :: rho ! Layer density [R ~> kg m-3]

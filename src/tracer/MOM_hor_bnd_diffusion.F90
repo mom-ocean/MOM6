@@ -126,7 +126,7 @@ logical function hor_bnd_diffusion_init(Time, G, GV, US, param_file, diag, diaba
 
   CS%surface_boundary_scheme = -1
   if ( .not. ASSOCIATED(CS%energetic_PBL_CSp) .and. .not. ASSOCIATED(CS%KPP_CSp) ) then
-    call MOM_error(FATAL,"Horizontal boundary diffusion is true, but no valid boundary layer scheme was found")
+    call MOM_error(FATAL, "Horizontal boundary diffusion is true, but no valid boundary layer scheme was found")
   endif
 
   ! Read all relevant parameters and write them to the model log.
@@ -253,10 +253,10 @@ subroutine hor_bnd_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, visc, CS)
     do j=G%jsc,G%jec
       do i=G%isc-1,G%iec
         if (G%mask2dCu(I,j)>0.) then
-           call fluxes_layer_method(SURFACE, GV%ke, hbl(I,j), hbl(I+1,j),  &
-            h(I,j,:), h(I+1,j,:), tracer%t(I,j,:), tracer%t(I+1,j,:), &
-            Coef_x(I,j,:), uFlx(I,j,:), G%areaT(I,j), G%areaT(I+1,j), CS%hbd_u_kmax(I,j), &
-            CS%hbd_grd_u(I,j,:), CS)
+          call fluxes_layer_method(SURFACE, GV%ke, hbl(I,j), hbl(I+1,j),  &
+              h(I,j,:), h(I+1,j,:), tracer%t(I,j,:), tracer%t(I+1,j,:), &
+              Coef_x(I,j,:), uFlx(I,j,:), G%areaT(I,j), G%areaT(I+1,j), CS%hbd_u_kmax(I,j), &
+              CS%hbd_grd_u(I,j,:), CS)
         endif
       enddo
     enddo
@@ -264,9 +264,9 @@ subroutine hor_bnd_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, visc, CS)
       do i=G%isc,G%iec
         if (G%mask2dCv(i,J)>0.) then
           call fluxes_layer_method(SURFACE, GV%ke, hbl(i,J), hbl(i,J+1),  &
-            h(i,J,:), h(i,J+1,:), tracer%t(i,J,:), tracer%t(i,J+1,:), &
-            Coef_y(i,J,:), vFlx(i,J,:), G%areaT(i,J), G%areaT(i,J+1), CS%hbd_v_kmax(i,J), &
-            CS%hbd_grd_v(i,J,:), CS)
+              h(i,J,:), h(i,J+1,:), tracer%t(i,J,:), tracer%t(i,J+1,:), &
+              Coef_y(i,J,:), vFlx(i,J,:), G%areaT(i,J), G%areaT(i,J+1), CS%hbd_v_kmax(i,J), &
+              CS%hbd_grd_v(i,J,:), CS)
         endif
       enddo
     enddo
@@ -380,7 +380,7 @@ subroutine hbd_grid(boundary, G, GV, hbl, h, CS)
         nk = SIZE(dz_top)
         if (nk > CS%hbd_nk) then
           write(*,*)'nk, CS%hbd_nk', nk, CS%hbd_nk
-          call MOM_error(FATAL,"Houston, we've had a problem in hbd_grid, u-points (nk cannot be > CS%hbd_nk)")
+          call MOM_error(FATAL, "Houston, we've had a problem in hbd_grid, u-points (nk cannot be > CS%hbd_nk)")
         endif
 
         CS%hbd_u_kmax(I,j) = nk
@@ -403,7 +403,7 @@ subroutine hbd_grid(boundary, G, GV, hbl, h, CS)
         nk = SIZE(dz_top)
         if (nk > CS%hbd_nk) then
           write(*,*)'nk, CS%hbd_nk', nk, CS%hbd_nk
-          call MOM_error(FATAL,"Houston, we've had a problem in hbd_grid, v-points (nk cannot be > CS%hbd_nk)")
+          call MOM_error(FATAL, "Houston, we've had a problem in hbd_grid, v-points (nk cannot be > CS%hbd_nk)")
         endif
 
         CS%hbd_v_kmax(i,J) = nk
@@ -421,7 +421,7 @@ end subroutine hbd_grid
 
 !> Calculate the harmonic mean of two quantities [arbitrary]
 !! See \ref section_harmonic_mean.
-real function harmonic_mean(h1,h2)
+real function harmonic_mean(h1, h2)
   real :: h1 !< Scalar quantity [arbitrary]
   real :: h2 !< Scalar quantity [arbitrary]
   if (h1 + h2 == 0.) then
@@ -499,7 +499,7 @@ subroutine unique(val, n, val_unique, val_max)
     limit = .true.
     if (val_max > MAXVAL(val)) then
       if (is_root_pe()) write(*,*)'val_max, MAXVAL(val)',val_max, MAXVAL(val)
-      call MOM_error(FATAL,"Houston, we've had a problem in unique (val_max cannot be > MAXVAL(val))")
+      call MOM_error(FATAL, "Houston, we've had a problem in unique (val_max cannot be > MAXVAL(val))")
     endif
   endif
 
@@ -605,12 +605,12 @@ subroutine flux_limiter(F_layer, area_L, area_R, phi_L, phi_R, h_L, h_R)
   !
   F_max = -0.2 * ((area_R*(phi_R*h_R))-(area_L*(phi_L*h_L)))
 
-  if ( SIGN(1.,F_layer) == SIGN(1., F_max)) then
+  if ( SIGN(1., F_layer) == SIGN(1., F_max)) then
     ! Apply flux limiter calculated above
     if (F_max >= 0.) then
-      F_layer = MIN(F_layer,F_max)
+      F_layer = MIN(F_layer, F_max)
     else
-      F_layer = MAX(F_layer,F_max)
+      F_layer = MAX(F_layer, F_max)
     endif
   else
     F_layer = 0.0
@@ -679,7 +679,7 @@ subroutine boundary_k_range(boundary, nk, h, hbl, k_top, zeta_top, k_bot, zeta_b
       endif
     enddo
   else
-    call MOM_error(FATAL,"Houston, we've had a problem in boundary_k_range")
+    call MOM_error(FATAL, "Houston, we've had a problem in boundary_k_range")
   endif
 
 end subroutine boundary_k_range
@@ -816,7 +816,7 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   do k = 1,ke
     ! apply flux_limiter
     if (CS%limiter .and. F_layer(k) /= 0.) then
-       call flux_limiter(F_layer(k), area_L, area_R, phi_L(k), phi_R(k), h_L(k), h_R(k))
+      call flux_limiter(F_layer(k), area_L, area_R, phi_L(k), phi_R(k), h_L(k), h_R(k))
     endif
 
     ! if tracer point is below htot_max, set flux to zero
@@ -858,11 +858,11 @@ logical function near_boundary_unit_tests( verbose )
 
   allocate(CS)
   ! fill required fields in CS
-  CS%linear=.false.
+  CS%linear = .false.
   CS%H_subroundoff = 1.0E-20
-  CS%debug=.false.
-  CS%limiter=.false.
-  CS%limiter_remap=.false.
+  CS%debug = .false.
+  CS%limiter = .false.
+  CS%limiter_remap = .false.
   CS%hbd_nk = 2 + (2*2)
   call initialize_remapping( CS%remap_CS, 'PLM', boundary_extrapolation=.true., &
                              om4_remap_via_sub_cells=.true., & ! ### see fail below when using fixed remapping alg.
@@ -1162,7 +1162,7 @@ subroutine hbd_grid_test(boundary, hbl_L, hbl_R, h_L, h_R, CS)
   nk = SIZE(dz_top)
   if (nk > CS%hbd_nk) then
     write(*,*)'nk, CS%hbd_nk', nk, CS%hbd_nk
-    call MOM_error(FATAL,"Houston, we've had a problem in hbd_grid_test, (nk cannot be > CS%hbd_nk)")
+    call MOM_error(FATAL, "Houston, we've had a problem in hbd_grid_test, (nk cannot be > CS%hbd_nk)")
   endif
 
   CS%hbd_u_kmax(1,1) = nk

@@ -100,7 +100,7 @@ subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, US, param_file,
   enddo ; enddo
 
   ! Perturb base state by circular anomaly in center
-  k=nz
+  k = nz
   latC = G%south_lat + 0.5*G%len_lat
   lonC = G%west_lon + 0.5*G%len_lon + xOffset
   do j=js,je ; do i=is,ie
