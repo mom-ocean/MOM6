@@ -62,7 +62,7 @@ type, public :: wave_parameters_CS ; private
   logical, public :: Stokes_VF = .false.    !< True if Stokes vortex force is used
   logical, public :: Passive_Stokes_VF = .false. !< Computes Stokes VF, but doesn't affect dynamics
   logical, public :: Stokes_PGF = .false.   !< True if Stokes shear pressure Gradient force is used
-  logical, public :: robust_Stokes_PGF = .false.  !< If true, use expressions to calculate the
+  logical, public :: robust_Stokes_PGF = .true.  !< If true, use expressions to calculate the
                                             !! Stokes-induced pressure gradient anomalies that are
                                             !! more accurate in the limit of thin layers.
   logical, public :: Passive_Stokes_PGF = .false. !< Keeps Stokes_PGF on, but doesn't affect dynamics
@@ -171,8 +171,6 @@ type, public :: wave_parameters_CS ; private
   real :: LA_FracHBL         !< Fraction of OSBL for averaging Langmuir number [nondim]
   real :: LA_HBL_min         !< Minimum boundary layer depth for averaging Langmuir number [Z ~> m]
   logical :: LA_Misalignment = .false. !< Flag to use misalignment in Langmuir number
-  logical :: LA_misalign_bug = .false. !< Flag to use code with a sign error when calculating the
-                       !! misalignment between the shear and waves in the Langmuir number calculation.
   real :: g_Earth      !< The gravitational acceleration, equivalent to GV%g_Earth but with
                        !! different dimensional rescaling appropriate for deep-water gravity
                        !! waves [Z T-2 ~> m s-2]
@@ -395,8 +393,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
   call get_param(param_file, mdl, "ROBUST_STOKES_PGF", CS%robust_Stokes_PGF, &
        "If true, use expressions to calculate the Stokes-induced pressure gradient "//&
        "anomalies that are more accurate in the limit of thin layers.", &
-       default=.false., do_not_log=.not.CS%Stokes_PGF)
-       !### Change the default for ROBUST_STOKES_PGF to True.
+       default=.true., do_not_log=.not.CS%Stokes_PGF)
   call get_param(param_file, mdl, "PASSIVE_STOKES_PGF", CS%Passive_Stokes_PGF, &
        "Flag to make Stokes-induced pressure gradient anomaly diagnostic only.", &
        default=.false.)
@@ -544,10 +541,6 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
   call get_param(param_file, mdl, "LA_MISALIGNMENT", CS%LA_Misalignment, &
          "Flag (logical) if using misalignment between shear and waves in LA", &
          default=.false.)
-  call get_param(param_file, mdl, "LA_MISALIGNMENT_BUG", CS%LA_misalign_bug, &
-         "If true, use a code with a sign error when calculating the misalignment between "//&
-         "the shear and waves when LA_MISALIGNMENT is true.", &
-         default=.false., do_not_log=.not.CS%LA_Misalignment)
   call get_param(param_file, mdl, "MIN_LANGMUIR", CS%La_min,    &
          "A minimum value for all Langmuir numbers that is not physical, "//&
          "but is likely only encountered when the wind is very small and "//&
@@ -1243,17 +1236,9 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, dz, Waves, &
       MidPoint = Bottom + 0.5*dz(k)
       Bottom = Bottom + dz(k)
 
-      if (Waves%LA_Misalign_bug) then
-        ! Given the sign convention that Dpt_LASL is negative, the next line has a bug.
-        if (MidPoint > Dpt_LASL .and. k > 1 .and. ContinueLoop) then
-          ShearDirection = atan2(V_H(1)-V_H(k), U_H(1)-U_H(k))
-          ContinueLoop = .false.
-        endif
-      else ! This version avoids the bug in the version above.
-        if (MidPoint > abs(Dpt_LASL) .and. (k > 1) .and. ContinueLoop) then
-          ShearDirection = atan2(V_H(1)-V_H(k), U_H(1)-U_H(k))
-          ContinueLoop = .false.
-        endif
+      if (MidPoint > abs(Dpt_LASL) .and. (k > 1) .and. ContinueLoop) then
+        ShearDirection = atan2(V_H(1)-V_H(k), U_H(1)-U_H(k))
+        ContinueLoop = .false.
       endif
     enddo
   endif

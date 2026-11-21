@@ -133,11 +133,6 @@ type, public :: EOS_type ; private
   logical :: TFreeze_S_is_pracS =.true. !< True if the freezing point expression is formulated from practical salinity
   logical :: TFreeze_T_is_potT = .true. !< True if the freezing point expression yields a potential temperature
 
-  logical :: use_Wright_2nd_deriv_bug = .false.  !< If true, use a separate subroutine that
-                           !! retains a buggy version of the calculations of the second
-                           !! derivative of density with temperature and with temperature and
-                           !! pressure.  This bug is corrected in the default version.
-
 ! Unit conversion factors (normally used for dimensional testing but could also allow for
 ! change of units of arguments to functions)
   real :: m_to_Z = 1.      !< A constant that translates distances in meters to the units of depth [Z m-1 ~> 1]
@@ -1634,13 +1629,6 @@ subroutine EOS_init(param_file, EOS, US, use_conT_absS)
     call EOS_manual_init(EOS, form_of_EOS=EOS_LINEAR, Rho_T0_S0=EOS%Rho_T0_S0, &
                          dRho_dT=EOS%dRho_dT, dRho_dS=EOS%dRho_dS, dRho_dp=EOS%dRho_dp)
   endif
-  if (EOS%form_of_EOS == EOS_WRIGHT) then
-    call get_param(param_file, mdl, "USE_WRIGHT_2ND_DERIV_BUG", EOS%use_Wright_2nd_deriv_bug, &
-                 "If true, use a bug in the calculation of the second derivatives of density "//&
-                 "with temperature and with temperature and pressure that causes some terms "//&
-                 "to be only 2/3 of what they should be.", default=.false.)
-    call EOS_manual_init(EOS, form_of_EOS=EOS_WRIGHT, use_Wright_2nd_deriv_bug=EOS%use_Wright_2nd_deriv_bug)
-  endif
 
   if (present(use_conT_absS)) then
     EOS%use_conT_absS = use_conT_absS
@@ -1733,8 +1721,7 @@ end subroutine EOS_init
 
 !> Manually initialized an EOS type (intended for unit testing of routines which need a specific EOS)
 subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Compressible, &
-                           Rho_T0_S0, drho_dT, dRho_dS, dRho_dp, TFr_S0_P0, dTFr_dS, dTFr_dp, &
-                           use_Wright_2nd_deriv_bug)
+                           Rho_T0_S0, drho_dT, dRho_dS, dRho_dp, TFr_S0_P0, dTFr_dS, dTFr_dp)
   type(EOS_type),    intent(inout) :: EOS !< Equation of state structure
   integer, optional, intent(in) :: form_of_EOS !< A coded integer indicating the equation of state to use.
   integer, optional, intent(in) :: form_of_TFreeze !< A coded integer indicating the expression for
@@ -1754,7 +1741,6 @@ subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Co
                                              !! in [degC ppt-1]
   real   , optional, intent(in) :: dTFr_dp   !< The derivative of freezing point with pressure
                                              !! in [degC Pa-1]
-  logical, optional, intent(in) :: use_Wright_2nd_deriv_bug !< Allow the Wright 2nd deriv bug
 
   if (present(form_of_EOS)) then
     EOS%form_of_EOS     = form_of_EOS
@@ -1782,8 +1768,6 @@ subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Co
     select type (t => EOS%type)
       type is (linear_EOS)
         call t%set_params_linear(Rho_T0_S0, dRho_dT, dRho_dS, dRho_dp)
-      type is (buggy_Wright_EOS)
-        call t%set_params_buggy_Wright(use_Wright_2nd_deriv_bug)
     end select
   endif
   if (present(form_of_TFreeze))  EOS%form_of_TFreeze = form_of_TFreeze
@@ -1796,7 +1780,6 @@ subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Co
   if (present(TFr_S0_P0      ))  EOS%TFr_S0_P0       = TFr_S0_P0
   if (present(dTFr_dS        ))  EOS%dTFr_dS         = dTFr_dS
   if (present(dTFr_dp        ))  EOS%dTFr_dp         = dTFr_dp
-  if (present(use_Wright_2nd_deriv_bug)) EOS%use_Wright_2nd_deriv_bug = use_Wright_2nd_deriv_bug
 
 end subroutine EOS_manual_init
 
@@ -2073,13 +2056,11 @@ logical function EOS_unit_tests(verbose)
   ! if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT_REDUCED EOS has failed some self-consistency tests.")
   ! EOS_unit_tests = EOS_unit_tests .or. fail
 
-  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT, use_Wright_2nd_deriv_bug=.true.)
+  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT)
   fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "WRIGHT", &
                               rho_check=1027.54303596346*EOS_tmp%kg_m3_to_R, avg_Sv_check=.true.)
-  ! These last test is a known failure and since MPI is not necessarily initializaed when running these tests
-  ! we need to avoid flagging the fails.
-  !if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT EOS has failed some self-consistency tests.")
-  !EOS_unit_tests = EOS_unit_tests .or. fail
+  if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT EOS has failed some self-consistency tests.")
+  EOS_unit_tests = EOS_unit_tests .or. fail
 
   call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_ROQUET_RHO)
   fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "ROQUET_RHO", &

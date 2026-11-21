@@ -164,7 +164,7 @@ subroutine ZB2020_init(Time, G, GV, US, param_file, diag, CS, use_ZB2020)
 
   call get_param(param_file, mdl, "ZB_SCALING", CS%amplitude, &
                  "The nondimensional scaling factor in ZB model, " //&
-                 "typically 0.5-2.5", units="nondim", default=0.5)
+                 "typically 0.5-2.5", units="nondim", default=1.0)
 
   call get_param(param_file, mdl, "ZB_TRACE_MODE", CS%ZB_type, &
                  "Select how to compute the trace part of ZB model:\n" //&

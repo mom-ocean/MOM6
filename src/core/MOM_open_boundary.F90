@@ -757,14 +757,14 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   call get_param(param_file, mdl, "EXTERIOR_OBC_BUG", OBC%exterior_OBC_bug, &
                  "If true, recover a bug in barotropic solver and other routines when "//&
                  "boundary contitions interior to the domain are used.", &
-                 default=enable_bugs)
+                 default=.false.)
   call get_param(param_file, mdl, "OBC_HOR_INDEXING_BUG", OBC%hor_index_bug, &
                  "If true, recover set of a horizontal indexing bugs in the OBC code.", &
-                 default=enable_bugs)
+                 default=.false.)
   call get_param(param_file, mdl, "OBC_RESERVOIR_INIT_BUG", OBC%reservoir_init_bug, &
                  "If true, set the OBC tracer reservoirs at the startup of a new run from the "//&
                  "interior tracer concentrations regardless of properties that may be explicitly "//&
-                 "specified for the reservoir concentrations.", default=enable_bugs, do_not_log=.true.)
+                 "specified for the reservoir concentrations.", default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "OBC_TEMP_SALT_NEEDED_BUG", OBC%ts_needed_bug, &
                  "If true, recover a bug that OBC temperature and salinity can be ignored "//&
                  "even if they are registered tracers in the rest of the model.", default=enable_bugs)
@@ -1562,19 +1562,19 @@ subroutine initialize_obc_tides(OBC, US, param_file)
 
   call get_param(param_file, mdl, "TIDE_USE_EQ_PHASE", OBC%add_eq_phase, &
       "If true, add the equilibrium phase argument to the specified tidal phases.", &
-      old_name="OBC_TIDE_ADD_EQ_PHASE", default=.false., do_not_log=tides)
+      default=.false., do_not_log=tides)
 
   call get_param(param_file, mdl, "TIDE_ADD_NODAL", OBC%add_nodal_terms, &
       "If true, include 18.6 year nodal modulation in the boundary tidal forcing.", &
-      old_name="OBC_TIDE_ADD_NODAL", default=.false., do_not_log=tides)
+      default=.false., do_not_log=tides)
 
   call get_param(param_file, mdl, "TIDE_REF_DATE", tide_ref_date, &
       "Reference date to use for tidal calculations and equilibrium phase.", &
-      old_name="OBC_TIDE_REF_DATE", defaults=(/0, 0, 0/), do_not_log=tides)
+      defaults=(/0, 0, 0/), do_not_log=tides)
 
   call get_param(param_file, mdl, "TIDE_NODAL_REF_DATE", nodal_ref_date, &
       "Fixed reference date to use for nodal modulation of boundary tides.", &
-      old_name="OBC_TIDE_NODAL_REF_DATE", defaults=(/0, 0, 0/), do_not_log=tides)
+      defaults=(/0, 0, 0/), do_not_log=tides)
 
   allocate(OBC%tide_names(OBC%n_tide_constituents))
   read(tide_constituent_str, *) OBC%tide_names

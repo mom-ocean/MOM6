@@ -384,11 +384,11 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
   call get_param(param_file, mdl, "TIDE_REF_DATE", tide_ref_date, &
                  "Year,month,day to use as reference date for tidal forcing. "//&
                  "If not specified, defaults to 0.", &
-                 old_name="OBC_TIDE_REF_DATE", defaults=(/0, 0, 0/))
+                 defaults=(/0, 0, 0/))
 
   call get_param(param_file, mdl, "TIDE_USE_EQ_PHASE", CS%use_eq_phase, &
                  "Correct phases by calculating equilibrium phase arguments for TIDE_REF_DATE. ", &
-                 old_name="OBC_TIDE_ADD_EQ_PHASE", default=.false., fail_if_missing=.false.)
+                 default=.false.)
 
   if (sum(tide_ref_date) == 0) then  ! tide_ref_date defaults to 0.
     CS%time_ref = set_date(1, 1, 1, 0, 0, 0)
@@ -529,10 +529,10 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
 
   call get_param(param_file, mdl, "TIDE_ADD_NODAL", add_nodal_terms, &
                  "If true, include 18.6 year nodal modulation in the astronomical tidal forcing.", &
-                 old_name="OBC_TIDE_ADD_NODAL", default=.false.)
+                 default=.false.)
   call get_param(param_file, mdl, "TIDE_NODAL_REF_DATE", nodal_ref_date, &
                  "Fixed reference date to use for nodal modulation of astronomical tidal forcing.", &
-                 old_name="OBC_TIDE_REF_DATE", fail_if_missing=.false., defaults=(/0, 0, 0/))
+                 defaults=(/0, 0, 0/))
 
   ! If the nodal correction is based on a different time, initialize that.
   ! Otherwise, it can use N from the time reference.

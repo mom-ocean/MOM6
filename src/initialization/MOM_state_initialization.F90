@@ -116,7 +116,7 @@ contains
 subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                 restart_CS, ALE_CSp, tracer_Reg, sponge_CSp, &
                                 ALE_sponge_CSp, oda_incupd_CSp, OBC_for_remap, &
-                                Time_in, frac_shelf_h, mass_shelf, OBC_for_bug)
+                                Time_in, frac_shelf_h, mass_shelf)
   type(ocean_grid_type),      intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),      intent(in)    :: US   !< A dimensional unit scaling type
@@ -152,9 +152,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   real, dimension(SZI_(G),SZJ_(G)), &
                      optional, intent(in)   :: mass_shelf      !< The mass per unit area of the overlying
                                                                !! ice shelf [R Z ~> kg m-2]
-  type(ocean_OBC_type), optional, pointer   :: OBC_for_bug  !< An open boundary condition control structure
-                                                    !! that might be used to store OBC temperatures and
-                                                    !! salinities if OBC_RESERVOIR_INIT_BUG is true.
   ! Local variables
   real :: depth_tot(SZI_(G),SZJ_(G))   ! The nominal total depth of the ocean [Z ~> m]
   real :: dz(SZI_(G),SZJ_(G),SZK_(GV)) ! The layer thicknesses in geopotential (z) units [Z ~> m]
@@ -166,8 +163,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   logical :: new_sim, rotate_index
   logical :: use_temperature, use_sponge, use_oda_incupd
   logical :: verify_restart_time
-  logical :: OBC_TS_reservoir_init_bug  ! If true, set the OBC temperature and salinity reservoirs
-                         ! at the startup of a new run from initial values that are set before remapping.
   logical :: use_EOS     ! If true, density is calculated from T & S using an equation of state.
   logical :: depress_sfc ! If true, remove the mass that would be displaced
                          ! by a large surface pressure by squeezing the column.
@@ -437,23 +432,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     endif
   endif  ! not from_Z_file.
 
-  if (present(OBC_for_bug)) then ; if (use_temperature .and. associated(OBC_for_bug)) then
-    call get_param(PF, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
-                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
-    ! Log this parameter later with the other OBC parameters.
-    call get_param(PF, mdl, "OBC_TS_RESERVOIR_INIT_BUG", OBC_TS_reservoir_init_bug, &
-                 "If true, set the OBC temperature and salinity reservoirs at the startup of a "//&
-                 "new run from initial values that are set before remapping.", &
-                 default=enable_bugs, do_not_log=.true.)
-    if (OBC_TS_reservoir_init_bug) then
-      ! These calls should be moved down to join the OBC code, but doing so changes answers because
-      ! the temperatures and salinities can change due to the remapping and reading from the restarts.
-      call pass_var(tv%T, G%Domain, complete=.false.)
-      call pass_var(tv%S, G%Domain, complete=.true.)
-      call fill_temp_salt_segments(G, GV, US, OBC_for_bug, tv)
-    endif
-  endif ; endif
-
   ! Convert thicknesses from geometric distances in depth units to thickness units or mass-per-unit-area.
   if (new_sim .and. convert) call dz_to_thickness(dz, tv, h, G, GV, US)
 
@@ -669,8 +647,6 @@ subroutine MOM_initialize_OBCs(h, tv, OBC, Time, G, GV, US, PF, restart_CS, trac
   logical :: debug      ! If true, write debugging output.
   logical :: debug_obc  ! If true, do additional calls resetting values to help debug the correctness
                         ! of the open boundary condition code.
-  logical :: OBC_TS_reservoir_init_bug  ! If true, set the OBC temperature and salinity reservoirs
-                        ! at the startup of a new run from initial values that are set before remapping.
   logical :: OBC_reservoir_init_bug  ! If true, set the OBC tracer reservoirs at the startup of a new
                         ! run from the interior tracer concentrations regardless of properties that
                         ! may be explicitly specified for the reservoir concentrations.
@@ -684,10 +660,7 @@ subroutine MOM_initialize_OBCs(h, tv, OBC, Time, G, GV, US, PF, restart_CS, trac
                  do_not_log=.true., old_name="DEBUG_OBC", debuggingParam=.true.)
     call get_param(PF, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
                  default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
-    call get_param(PF, mdl, "OBC_TS_RESERVOIR_INIT_BUG", OBC_TS_reservoir_init_bug, &
-                 "If true, set the OBC temperature and salinity reservoirs at the startup of a "//&
-                 "new run from initial values that are set before remapping.", default=enable_bugs)
-    if (associated(tv%T) .and. (.not.OBC_TS_reservoir_init_bug)) then
+    if (associated(tv%T)) then
       ! Store the updated temperatures and salinities at the open boundaries, noting that they may
       ! still be updated by the calls in the next 50 lines, so the code setting the tracer
       ! reservoir values will come later in the calling routine.
@@ -696,7 +669,7 @@ subroutine MOM_initialize_OBCs(h, tv, OBC, Time, G, GV, US, PF, restart_CS, trac
     call get_param(PF, mdl, "OBC_RESERVOIR_INIT_BUG", OBC_reservoir_init_bug, &
                  "If true, set the OBC tracer reservoirs at the startup of a new run from the "//&
                  "interior tracer concentrations regardless of properties that may be explicitly "//&
-                 "specified for the reservoir concentrations.", default=enable_bugs)
+                 "specified for the reservoir concentrations.", default=.false.)
     if (OBC_reservoir_init_bug .and. associated(tv%T) .and. is_new_run(restart_CS)) then
       ! Set up OBC%trex_x and OBC%tres_y as they have not been read from a restart file.
       ! When OBC_RESERVOIR_INIT_BUG is false, setup_OBC_tracer_reservoirs() is called from initialize_MOM
@@ -1314,7 +1287,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
   call get_param(PF, mdl, "FRAC_DP_AT_POS_NEGATIVE_P_BUGFIX", use_frac_dp_bugfix, &
                  "If true, use bugfix in ice shelf TRIM_IC initialization. "//&
                  "Otherwise, pressure input to density EOS is negative.", &
-                 default=.false., do_not_log=just_read)
+                 default=.true., do_not_log=just_read)
   call get_param(PF, mdl, "TRIMMING_USES_REMAPPING", use_remapping, &
                  'When trimming the column, also remap T and S.', &
                  default=.false., do_not_log=just_read)
@@ -2642,10 +2615,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                                   ! been rearranged for rotational invariance.
   logical :: pre_gridded
   logical :: separate_mixed_layer  ! If true, handle the mixed layers differently.
-  logical :: density_extrap_bug    ! If true use an expression with a vertical indexing bug for
-                                   ! extrapolating the densities at the bottom of unstable profiles
-                                   ! from data when finding the initial interface locations in
-                                   ! layered mode from a dataset of T and S.
   character(len=64) :: remappingScheme
   logical :: om4_remap_via_sub_cells ! If true, use the OM4 remapping algorithm (only used if useALEremapping)
   logical :: do_conv_adj, ignore
@@ -2782,11 +2751,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "A small density tolerance used when finding depths in a density profile.", &
                  units="kg m-3", default=1.0e-10, scale=US%kg_m3_to_R, &
                  do_not_log=useALEremapping.or.just_read)
-    call get_param(PF, mdl, "LAYER_Z_INIT_IC_EXTRAP_BUG", density_extrap_bug, &
-                 "If true use an expression with a vertical indexing bug for extrapolating the "//&
-                 "densities at the bottom of unstable profiles from data when finding the "//&
-                 "initial interface locations in layered mode from a dataset of T and S.", &
-                 default=.false., do_not_log=just_read)
   endif
   call get_param(PF, mdl, "LAND_FILL_TEMP", temp_land_fill, &
                  "A value to use to fill in ocean temperatures on land points.", &
@@ -3003,7 +2967,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
     enddo ; enddo
 
     call find_interfaces(rho_z, z_in, kd, Rb, Z_bottom, zi, G, GV, US, nlevs, nkml, &
-                         Hmix_depth, eps_z, eps_rho, density_extrap_bug)
+                         Hmix_depth, eps_z, eps_rho)
 
     deallocate(rho_z, Rb)
 
@@ -3070,7 +3034,7 @@ end subroutine MOM_temp_salt_initialize_from_Z
 
 !> Find interface positions corresponding to interpolated depths in a density profile
 subroutine find_interfaces(rho, zin, nk_data, Rb, Z_bot, zi, G, GV, US, nlevs, nkml, hml, &
-                           eps_z, eps_rho, density_extrap_bug)
+                           eps_z, eps_rho)
   type(ocean_grid_type),      intent(in)  :: G     !< The ocean's grid structure
   type(verticalGrid_type),    intent(in)  :: GV    !< The ocean's vertical grid structure
   integer,                    intent(in)  :: nk_data !< The number of levels in the input data
@@ -3091,11 +3055,6 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, Z_bot, zi, G, GV, US, nlevs, n
   real,                       intent(in)  :: hml   !< mixed layer depth [Z ~> m].
   real,                       intent(in)  :: eps_z !< A negligibly small layer thickness [Z ~> m].
   real,                       intent(in)  :: eps_rho !< A negligibly small density difference [R ~> kg m-3].
-  logical,                    intent(in)  :: density_extrap_bug !< If true use an expression with an
-                                                   !! indexing bug for projecting the densities at
-                                                   !! the bottom of unstable profiles from data when
-                                                   !! finding the initial interface locations in
-                                                   !! layered mode from a dataset of T and S.
 
   ! Local variables
   real, dimension(nk_data) :: rho_ ! A column of densities [R ~> kg m-3]
@@ -3136,11 +3095,7 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, Z_bot, zi, G, GV, US, nlevs, n
       else
         do k=nlevs_data-1,2,-1 ;  if (rho_(k+1) - rho_(k) < 0.0) then
           if (k == nlevs_data-1) then
-            if (density_extrap_bug) then
-              rho_(k+1) = rho_(k-1) + eps_rho
-            else
-              rho_(k+1) = rho_(k) + eps_rho
-            endif
+            rho_(k+1) = rho_(k) + eps_rho
           else
             drhodz = (rho_(k+1)-rho_(k-1)) / (zin(k+1)-zin(k-1))
             if (drhodz < 0.0) unstable = .true.

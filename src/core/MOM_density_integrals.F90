@@ -1463,7 +1463,6 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
                      ! 5 sub-column locations [L2 T-2 ~> m2 s-2]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
-  logical :: massWeight_bug ! If true, use an incorrect expression to determine where to apply mass weighting
   real :: massWeightNVonlyToggle    ! A non-dimensional toggle factor for only using mass weighting
                                     ! if at least one side vanished (0 or 1) [nondim]
   real :: p_nonvanished             ! nonvanished pressure [R L2 T-2 ~> Pa]
@@ -1479,11 +1478,10 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh) ; endif
   if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh) ; endif
 
-  do_massWeight = .false. ; massWeight_bug = .false. ; top_massWeight = .false.
+  do_massWeight = .false. ; top_massWeight = .false.
   if (present(MassWghtInterp)) then
     do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
     top_massWeight = BTEST(MassWghtInterp, 1) ! True if the 2 bit is set
-    massWeight_bug = BTEST(MassWghtInterp, 3) ! True if the 8 bit is set
     if (do_massWeight .and. .not.present(bathyP)) call MOM_error(FATAL, &
         "int_spec_vol_dp_generic_pcm: bathyP must be present if near-bottom mass weighting is in use.")
     if (top_massWeight .and. .not.present(P_surf)) call MOM_error(FATAL, &
@@ -1538,9 +1536,7 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
       ! hydrostatic consistency. For large hWght we bias the interpolation of
       ! T & S along the top and bottom integrals, akin to thickness weighting.
       hWght = 0.0
-      if (do_massWeight .and. massWeight_bug) then
-        hWght = max(0., bathyP(i,j)-p_t(i+1,j), bathyP(i+1,j)-p_t(i,j))
-      elseif (do_massWeight) then
+      if (do_massWeight) then
         hWght = max(0., p_t(i+1,j)-bathyP(i,j), p_t(i,j)-bathyP(i+1,j))
       endif
       if (top_massWeight) &
@@ -1603,9 +1599,7 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
       ! hydrostatic consistency. For large hWght we bias the interpolation of
       ! T & S along the top and bottom integrals, akin to thickness weighting.
       hWght = 0.0
-      if (do_massWeight .and. massWeight_bug) then
-        hWght = max(0., bathyP(i,j)-p_t(i,j+1), bathyP(i,j+1)-p_t(i,j))
-      elseif (do_massWeight) then
+      if (do_massWeight) then
         hWght = max(0., p_t(i,j+1)-bathyP(i,j), p_t(i,j)-bathyP(i,j+1))
       endif
       if (top_massWeight) &
@@ -1754,7 +1748,6 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
-  logical :: massWeight_bug ! If true, use an incorrect expression to determine where to apply mass weighting
   real :: massWeightNVonlyToggle    ! A non-dimensional toggle factor for only using mass weighting
                                     ! if at least one side vanished (0 or 1) [nondim]
   real :: p_nonvanished             ! nonvanished pressure [R L2 T-2 ~> Pa]
@@ -1765,11 +1758,10 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
 
   Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
 
-  do_massWeight = .false. ; massWeight_bug = .false. ; top_massWeight = .false.
+  do_massWeight = .false. ; top_massWeight = .false.
   if (present(MassWghtInterp)) then
     do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
     top_massWeight = BTEST(MassWghtInterp, 1) ! True if the 2 bit is set
-    massWeight_bug = BTEST(MassWghtInterp, 3) ! True if the 8 bit is set
     if (top_massWeight .and. .not.present(P_surf)) call MOM_error(FATAL, &
         "int_spec_vol_dp_generic_plm: P_surf must be present if near-surface mass weighting is in use.")
   endif
@@ -1823,9 +1815,7 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
       ! weighting. Note: To work in terrain following coordinates we could
       ! offset this distance by the layer thickness to replicate other models.
       hWght = 0.0
-      if (do_massWeight .and. massWeight_bug) then
-        hWght = max(0., bathyP(i,j)-p_t(i+1,j), bathyP(i+1,j)-p_t(i,j))
-      elseif (do_massWeight) then
+      if (do_massWeight) then
         hWght = max(0., p_t(i+1,j)-bathyP(i,j), p_t(i,j)-bathyP(i+1,j))
       endif
       if (top_massWeight) &
@@ -1893,9 +1883,7 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
       ! hydrostatic consistency. For large hWght we bias the interpolation
       ! of T,S along the top and bottom integrals, like thickness weighting.
       hWght = 0.0
-      if (do_massWeight .and. massWeight_bug) then
-        hWght = max(0., bathyP(i,j)-p_t(i,j+1), bathyP(i,j+1)-p_t(i,j))
-      elseif (do_massWeight) then
+      if (do_massWeight) then
         hWght = max(0., p_t(i,j+1)-bathyP(i,j), p_t(i,j)-bathyP(i,j+1))
       endif
       if (top_massWeight) &
@@ -2090,7 +2078,6 @@ subroutine diagnose_mass_weight_p(p_t, p_b, bathyP, P_surf, dP_neglect, MassWght
   real :: iDenom     ! The inverse of the denominator in the weights [T4 R-2 L-4 ~> Pa-2]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
-  logical :: massWeight_bug ! If true, use an incorrect expression to determine where to apply mass weighting
   real :: massWeightNVonlyToggle    ! A non-dimensional toggle factor for only using mass weighting
                                     ! if at least one side vanished (0 or 1) [nondim]
   real :: p_nonvanished             ! nonvanished pressure [R L2 T-2 ~> Pa]
@@ -2102,7 +2089,6 @@ subroutine diagnose_mass_weight_p(p_t, p_b, bathyP, P_surf, dP_neglect, MassWght
 
   do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
   top_massWeight = BTEST(MassWghtInterp, 1) ! True if the 2 bit is set
-  massWeight_bug = BTEST(MassWghtInterp, 3) ! True if the 8 bit is set
   massWeightNVonlyToggle = 1.
   if (present(MassWghtInterpVanOnly)) then
     if (MassWghtInterpVanOnly) massWeightNVonlyToggle = 0.
@@ -2118,9 +2104,7 @@ subroutine diagnose_mass_weight_p(p_t, p_b, bathyP, P_surf, dP_neglect, MassWght
     ! hydrostatic consistency. For large hWght we bias the interpolation
     ! of T,S along the top and bottom integrals, like thickness weighting.
     hWght = 0.0
-    if (do_massWeight .and. massWeight_bug) then
-      hWght = max(0., bathyP(i,j)-p_t(i+1,j), bathyP(i+1,j)-p_t(i,j))
-    elseif (do_massWeight) then
+    if (do_massWeight) then
       hWght = max(0., p_t(i+1,j)-bathyP(i,j), p_t(i,j)-bathyP(i+1,j))
     endif
     if (top_massWeight) &
@@ -2146,9 +2130,7 @@ subroutine diagnose_mass_weight_p(p_t, p_b, bathyP, P_surf, dP_neglect, MassWght
     ! hydrostatic consistency. For large hWght we bias the interpolation
     ! of T,S along the top and bottom integrals, like thickness weighting.
     hWght = 0.0
-    if (do_massWeight .and. massWeight_bug) then
-      hWght = max(0., bathyP(i,j)-p_t(i,j+1), bathyP(i,j+1)-p_t(i,j))
-    elseif (do_massWeight) then
+    if (do_massWeight) then
       hWght = max(0., p_t(i,j+1)-bathyP(i,j), p_t(i,j)-bathyP(i,j+1))
     endif
     if (top_massWeight) &

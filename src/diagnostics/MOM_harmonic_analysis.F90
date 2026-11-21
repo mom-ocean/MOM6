@@ -102,16 +102,16 @@ subroutine HA_init(Time, US, param_file, nc, CS)
       "If true, apply tidal momentum forcing.", default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "TIDE_USE_EQ_PHASE", use_eq_phase, &
       "If true, add the equilibrium phase argument to the specified tidal phases.", &
-      old_name="OBC_TIDE_ADD_EQ_PHASE", default=.false., do_not_log=tides)
+      default=.false., do_not_log=tides)
   call get_param(param_file, mdl, "TIDE_ADD_NODAL", add_nodal_terms, &
       "If true, include 18.6 year nodal modulation in the boundary tidal forcing.", &
-      old_name="OBC_TIDE_ADD_NODAL", default=.false., do_not_log=tides)
+      default=.false., do_not_log=tides)
   call get_param(param_file, mdl, "TIDE_REF_DATE", tide_ref_date, &
       "Reference date to use for tidal calculations and equilibrium phase.", &
-      old_name="OBC_TIDE_REF_DATE", defaults=(/0, 0, 0/), do_not_log=tides)
+      defaults=(/0, 0, 0/), do_not_log=tides)
   call get_param(param_file, mdl, "TIDE_NODAL_REF_DATE", nodal_ref_date, &
       "Fixed reference date to use for nodal modulation.", &
-      old_name="OBC_TIDE_NODAL_REF_DATE", defaults=(/0, 0, 0/), do_not_log=tides)
+      defaults=(/0, 0, 0/), do_not_log=tides)
   call get_param(param_file, mdl, "HA_CONSTITUENTS", const_name, &
       "Names of tidal constituents to be harmonically analyzed. "//&
       "They don't have to be the same as those used in MOM_tidal_forcing.", &

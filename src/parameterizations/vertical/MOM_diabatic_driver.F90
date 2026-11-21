@@ -3341,7 +3341,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   call get_param(param_file, mdl, "USE_LEGACY_DIABATIC_DRIVER", CS%use_legacy_diabatic, &
                  "If true, use a legacy version of the diabatic subroutine. "//&
                  "This is temporary and is needed to avoid change in answers.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
                  "If true, sponges may be applied anywhere in the domain. "//&
                  "The exact location and properties of those sponges are "//&
